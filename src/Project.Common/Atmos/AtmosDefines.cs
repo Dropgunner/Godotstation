@@ -23,15 +23,30 @@ namespace Project.Common.Atmos
         public const float MIN_PRESSURE_DIFFERENCE = 0.1f;
         public const float MINIMUM_HEAT_CAPACITY = 0.0003f;
 
+        // Canonical gas identifiers. Kept as string ids to match the data-driven
+        // gas registry used elsewhere in the port and to avoid an enum churn point.
+        public const string GAS_OXYGEN = "Oxygen";
+        public const string GAS_NITROGEN = "Nitrogen";
+        public const string GAS_PLASMA = "Plasma";
+        public const string GAS_CARBON_DIOXIDE = "CarbonDioxide";
+        public const string GAS_TRITIUM = "Tritium";
+        public const string GAS_WATER_VAPOR = "WaterVapor";
+        public const string GAS_HYPER_NOBLIUM = "HyperNoblium";
+
+        // Rule 6 (Reaction Oppression): a tile holding this many moles of HyperNoblium
+        // suppresses ALL chemical reactions on that tile, regardless of temperature.
+        public const float REACTION_OPPRESSION_MOLES = 5f;
+
         // Default specific heat capacities for common gases
         private static readonly Dictionary<string, float> SpecificHeats = new Dictionary<string, float>
         {
-            { "Oxygen", 20f },
-            { "Nitrogen", 20f },
-            { "Plasma", 200f },
-            { "CarbonDioxide", 30f },
-            { "Tritium", 10f },
-            { "WaterVapor", 40f }
+            { GAS_OXYGEN, 20f },
+            { GAS_NITROGEN, 20f },
+            { GAS_PLASMA, 200f },
+            { GAS_CARBON_DIOXIDE, 30f },
+            { GAS_TRITIUM, 10f },
+            { GAS_WATER_VAPOR, 40f },
+            { GAS_HYPER_NOBLIUM, 2000f }
         };
 
         public static float GetGasHeatCapacity(string gasId)
