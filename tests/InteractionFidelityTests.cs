@@ -72,6 +72,18 @@ public class InteractionFidelityTests
         public void ServerPerformInteraction(TileApply interaction) => CallCount++;
     }
 
+    private class TestOwnedHandApplyHandler : IOwnedInteractionHandler<HandApply>
+    {
+        public required IInteractable Owner { get; init; }
+        public bool IsFirstInteractable { get; init; } = false;
+        public int Priority { get; set; } = 0;
+        public bool ShouldAccept { get; set; } = true;
+        public int CallCount { get; private set; } = 0;
+
+        public bool WillInteract(HandApply interaction, NetworkSide side) => ShouldAccept;
+        public void ServerPerformInteraction(HandApply interaction) => CallCount++;
+    }
+
     // --- FC-1: Intent-Dependent Interaction Resolution ---
 
     [Theory]
@@ -278,5 +290,85 @@ public class InteractionFidelityTests
         var interaction = new MouseDrop(performer, droppedObject, targetObject);
 
         Assert.True(InteractionValidator.CanInteract(interaction, NetworkSide.Server));
+    }
+
+    // --- FC-8: Held Item Gets First Refusal ---
+
+    [Fact]
+    public void FC8_HeldItemHandler_FiresBeforeTargetHandler()
+    {
+        var heldItem = new TestInteractable();
+        var target = new TestInteractable { WorldPosition = new Vector2(1, 0) };
+        var performer = new TestPerformer { WorldPosition = new Vector2(0, 0), ActiveHandItem = heldItem };
+
+        var itemHandler = new TestOwnedHandApplyHandler { Owner = heldItem, ShouldAccept = true };
+        var targetHandler = new TestOwnedHandApplyHandler { Owner = target, ShouldAccept = true };
+
+        var dispatcher = new InteractionDispatcher();
+        dispatcher.RegisterHandler(itemHandler);
+        dispatcher.RegisterHandler(targetHandler);
+
+        dispatcher.TryResolveClick(performer, heldItem, target, target.WorldPosition, Intent.Help, false, NetworkSide.Server);
+
+        Assert.Equal(1, itemHandler.CallCount);
+        Assert.Equal(0, targetHandler.CallCount);
+    }
+
+    [Fact]
+    public void FC8_NoItemHeld_TargetHandlerFiresNormally()
+    {
+        var target = new TestInteractable { WorldPosition = new Vector2(1, 0) };
+        var performer = new TestPerformer { WorldPosition = new Vector2(0, 0), ActiveHandItem = null };
+
+        var targetHandler = new TestOwnedHandApplyHandler { Owner = target, ShouldAccept = true };
+
+        var dispatcher = new InteractionDispatcher();
+        dispatcher.RegisterHandler(targetHandler);
+
+        dispatcher.TryResolveClick(performer, null, target, target.WorldPosition, Intent.Help, false, NetworkSide.Server);
+
+        Assert.Equal(1, targetHandler.CallCount);
+    }
+
+    // --- FC-9: First-Interactable Priority Override ---
+
+    [Fact]
+    public void FC9_FirstInteractable_FiresBeforeHeldItem()
+    {
+        var heldItem = new TestInteractable();
+        var target = new TestInteractable { WorldPosition = new Vector2(1, 0) };
+        var performer = new TestPerformer { WorldPosition = new Vector2(0, 0), ActiveHandItem = heldItem };
+
+        var firstHandler = new TestOwnedHandApplyHandler { Owner = target, IsFirstInteractable = true, ShouldAccept = true };
+        var itemHandler = new TestOwnedHandApplyHandler { Owner = heldItem, ShouldAccept = true };
+
+        var dispatcher = new InteractionDispatcher();
+        dispatcher.RegisterHandler(firstHandler);
+        dispatcher.RegisterHandler(itemHandler);
+
+        dispatcher.TryResolveClick(performer, heldItem, target, target.WorldPosition, Intent.Help, false, NetworkSide.Server);
+
+        Assert.Equal(1, firstHandler.CallCount);
+        Assert.Equal(0, itemHandler.CallCount);
+    }
+
+    [Fact]
+    public void FC9_FirstInteractableDeclines_FallsThroughToHeldItem()
+    {
+        var heldItem = new TestInteractable();
+        var target = new TestInteractable { WorldPosition = new Vector2(1, 0) };
+        var performer = new TestPerformer { WorldPosition = new Vector2(0, 0), ActiveHandItem = heldItem };
+
+        var firstHandler = new TestOwnedHandApplyHandler { Owner = target, IsFirstInteractable = true, ShouldAccept = false };
+        var itemHandler = new TestOwnedHandApplyHandler { Owner = heldItem, ShouldAccept = true };
+
+        var dispatcher = new InteractionDispatcher();
+        dispatcher.RegisterHandler(firstHandler);
+        dispatcher.RegisterHandler(itemHandler);
+
+        dispatcher.TryResolveClick(performer, heldItem, target, target.WorldPosition, Intent.Help, false, NetworkSide.Server);
+
+        Assert.Equal(0, firstHandler.CallCount);
+        Assert.Equal(1, itemHandler.CallCount);
     }
 }

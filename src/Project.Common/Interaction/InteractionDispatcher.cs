@@ -55,7 +55,7 @@ public class InteractionDispatcher
         var positional = new PositionalHandApply(performer, handObject, targetObject, targetPosition, intent, isAltClick);
         if (InteractionValidator.CanInteract(positional, side))
         {
-            foreach (var handler in _positionalHandlers)
+            foreach (var handler in ResolveOrder(_positionalHandlers, handObject, targetObject))
             {
                 if (handler.WillInteract(positional, side))
                 {
@@ -69,7 +69,7 @@ public class InteractionDispatcher
         var handApply = new HandApply(performer, handObject, targetObject, intent, isAltClick);
         if (InteractionValidator.CanInteract(handApply, side))
         {
-            foreach (var handler in _handApplyHandlers)
+            foreach (var handler in ResolveOrder(_handApplyHandlers, handObject, targetObject))
             {
                 if (handler.WillInteract(handApply, side))
                 {
@@ -172,5 +172,35 @@ public class InteractionDispatcher
         int index = list.FindIndex(h => h.Priority > handler.Priority);
         if (index < 0) list.Add(handler);
         else list.Insert(index, handler);
+    }
+
+    /// <summary>
+    /// Orders handlers by ownership rather than the flat Priority list:
+    /// FIDELITY CONTRACT FC-9: the target's first-interactable handler claims the
+    /// click unconditionally, before anything else.
+    /// FIDELITY CONTRACT FC-8: the held item's handler gets first refusal over the
+    /// target's remaining handlers.
+    /// Handlers with no declared owner (the Wave 1-3 default) are checked last, in
+    /// their existing Priority order, preserving prior behavior for FC-1..FC-7.
+    /// </summary>
+    private static IEnumerable<IInteractionHandler<T>> ResolveOrder<T>(
+        List<IInteractionHandler<T>> handlers,
+        IInteractable? handObject,
+        IInteractable? targetObject) where T : Types.Interaction
+    {
+        var owned = handlers.OfType<IOwnedInteractionHandler<T>>().ToList();
+        var unowned = handlers.Except(owned);
+
+        foreach (var h in owned.Where(h => Equals(h.Owner, targetObject) && h.IsFirstInteractable))
+            yield return h;
+
+        foreach (var h in owned.Where(h => Equals(h.Owner, handObject)))
+            yield return h;
+
+        foreach (var h in owned.Where(h => Equals(h.Owner, targetObject) && !h.IsFirstInteractable))
+            yield return h;
+
+        foreach (var h in unowned)
+            yield return h;
     }
 }

@@ -57,3 +57,19 @@
 **Test**: Place dropped object at (0,0), target at (5,5), performer at (0,1). Assert MouseDrop validation fails (objects too far from each other), even though performer is adjacent to the dropped object.
 
 **Rationale**: Drag-and-drop in SS13 requires spatial proximity between the two objects. This prevents exploits like dragging items across the station into containers.
+
+## FC-8: Held Item Gets First Refusal (Wave 5)
+
+**Assertion**: Given a HandApply where the performer holds an item, and both the held item and the target object have handlers that would accept the interaction, the held item's handler must be checked — and win — before the target's handler.
+
+**Test**: Register a handler owned by the target object (Handler B, accepts) and a handler owned by the held item (Handler A, accepts). Dispatch a HandApply with that item in hand, targeting that object. Assert Handler A's ServerPerformInteraction was called and Handler B's CallCount is still 0.
+
+**Rationale**: Tools must act on their target rather than triggering the target's own default behavior — a wrench on a pipe must wrench it, not pop open the pipe's UI as if the player clicked empty-handed.
+
+## FC-9: First-Interactable Priority Override (Wave 5)
+
+**Assertion**: A target handler marked as first-interactable must fire before the held item's handler, regardless of what is held, as long as it accepts. If it declines, resolution falls through to the held item's handler, then to the target's other (non-first) handlers, per FC-8's order.
+
+**Test**: Register target Handler P (first-interactable, accepts) and held-item Handler H (accepts). Dispatch. Assert P fired and H was never called. Flip P to decline and dispatch again; assert H fired instead.
+
+**Rationale**: Some targets (airlocks, vending machines, ID scanners) must always respond to a click first, independent of what the player happens to be holding.
