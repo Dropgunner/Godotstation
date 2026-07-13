@@ -11,6 +11,30 @@ namespace Project.Common.Atmos
         private readonly GasMix _meanGasMix = new GasMix();
         private readonly List<AtmosTile> _activeNodes = new List<AtmosTile>(5);
 
+        private readonly List<IAtmosReaction> _reactions = new List<IAtmosReaction>();
+
+        /// <summary>
+        /// Creates a simulation. By default the built-in reactions (plasma fire) are
+        /// registered. Pass <paramref name="registerDefaultReactions"/> = false for a
+        /// simulation whose reaction set is composed explicitly via <see cref="RegisterReaction"/>.
+        /// </summary>
+        public AtmosSimulation(bool registerDefaultReactions = true)
+        {
+            if (registerDefaultReactions)
+            {
+                _reactions.Add(new PlasmaFireReaction());
+            }
+        }
+
+        /// <summary>Registers an additional reaction to be evaluated on every processed tile.</summary>
+        public void RegisterReaction(IAtmosReaction reaction)
+        {
+            if (reaction != null)
+            {
+                _reactions.Add(reaction);
+            }
+        }
+
         public void Enqueue(AtmosTile tile)
         {
             if (_inQueue.Add(tile))
@@ -69,7 +93,48 @@ namespace Project.Common.Atmos
             // 3. Solid Conductivity
             Conductivity(tile);
 
-            // 4. Reactions would go here
+            // 4. Chemical Reactions
+            ProcessReactions(tile);
+        }
+
+        /// <summary>
+        /// Evaluates every registered reaction against the tile's gas mix. A tile that
+        /// still holds reacting gas is re-queued so combustion continues over subsequent
+        /// steps. Honors Fidelity Contract Rule 6: a tile with
+        /// <see cref="AtmosDefines.REACTION_OPPRESSION_MOLES"/> or more moles of HyperNoblium
+        /// suppresses all reactions regardless of temperature or pressure.
+        /// </summary>
+        private void ProcessReactions(AtmosTile tile)
+        {
+            if (_reactions.Count == 0) return;
+            if (!tile.CanPassGas()) return;
+
+            var gasMix = tile.GasMix;
+
+            // Rule 6: Reaction Oppression.
+            if (gasMix.GetMoles(AtmosDefines.GAS_HYPER_NOBLIUM) >= AtmosDefines.REACTION_OPPRESSION_MOLES)
+            {
+                return;
+            }
+
+            bool reacted = false;
+            for (int i = 0; i < _reactions.Count; i++)
+            {
+                var reaction = _reactions[i];
+                if (!reaction.Satisfies(gasMix)) continue;
+
+                if (reaction.React(gasMix, tile) == ReactionResult.Reacted)
+                {
+                    reacted = true;
+                }
+            }
+
+            // Keep an actively-reacting tile alive in the simulation so the fire can
+            // propagate and burn down over multiple steps.
+            if (reacted)
+            {
+                Enqueue(tile);
+            }
         }
 
         private void Equalize()
