@@ -37,11 +37,30 @@ namespace Project.Common.Movement
         public bool IsBuckled { get; set; } = false;
         public bool IsSlipping { get; set; } = false;
 
+        // --- Momentum (Newtonian sliding), mirrors UniversalObjectPhysics.newtonianMovement ---
+        // Velocity carried independently of input, in tiles/second. Non-zero while sliding on
+        // ice / in space or after being pushed/thrown. Decays via friction each physics tick.
+        public float MomentumX { get; set; } = 0f;
+        public float MomentumY { get; set; } = 0f;
+
+        /// <summary>Squared magnitude of the current momentum vector (tiles/second)^2.</summary>
+        public float MomentumSquared => MomentumX * MomentumX + MomentumY * MomentumY;
+
+        public bool IsSliding => MomentumSquared > 0f;
+
+        public void SetMomentum(float x, float y)
+        {
+            MomentumX = x;
+            MomentumY = y;
+        }
+
         public float CurrentSpeed
         {
             get
             {
-                if (IsBuckled || IsSlipping) return 0f;
+                // A player who is buckled, slipping, or cuffed cannot self-propel.
+                // (See FidelityContract_Movement Rule 2.)
+                if (IsBuckled || IsSlipping || IsCuffed) return 0f;
 
                 float speed = CurrentType switch
                 {
