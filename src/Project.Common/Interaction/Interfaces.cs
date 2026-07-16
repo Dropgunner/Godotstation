@@ -41,6 +41,21 @@ public interface IInteractionHandler<in T> where T : Types.Interaction
 }
 
 /// <summary>
+/// An IInteractionHandler attached to a specific entity, so the dispatcher can
+/// tell whether it belongs to the interaction's target or the performer's held item.
+/// FIDELITY CONTRACT FC-8/FC-9: held-item handlers get first refusal over the
+/// target's handlers, unless the target's handler is IsFirstInteractable.
+/// </summary>
+public interface IOwnedInteractionHandler<in T> : IInteractionHandler<T> where T : Types.Interaction
+{
+    IInteractable Owner { get; }
+
+    /// <summary>If true, this handler is checked before the held item's handler,
+    /// regardless of what is held (FC-9).</summary>
+    bool IsFirstInteractable { get; }
+}
+
+/// <summary>
 /// Null performer for invalid interactions.
 /// </summary>
 public sealed class NullPerformer : IPerformer
