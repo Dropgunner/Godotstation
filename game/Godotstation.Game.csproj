@@ -1,0 +1,20 @@
+<Project Sdk="Godot.NET.Sdk/4.4.1">
+
+  <!--
+    game/ — the Godot frontend. The ONLY project allowed to say `using Godot;`.
+    Compiles headlessly via the Godot.NET.Sdk NuGet package (no editor needed
+    for CI), which is how UI code gets build-verified alongside the engine.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Godotstation.Game</RootNamespace>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../src/Godotstation.Common/Godotstation.Common.csproj" />
+  </ItemGroup>
+
+</Project>

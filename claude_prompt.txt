@@ -1,0 +1,16 @@
+**Initial Prompt for Claude Fable:**
+
+```text
+Attached is the `CLAUDE.md` project instruction file that defines your role as the "Carmack" architect for the Godotstation port (Unitystation to Godot 4 .NET).
+
+I have also attached the core `PlayerMovement.cs` and `AtmosSimulation.cs` files from the original Unitystation repository.
+
+This is Benchmark B1: The Carmack Test.
+
+Your task is to:
+1. Read the `CLAUDE.md` file to understand your architectural constraints (zero Godot dependencies, headless simulation).
+2. Port the logic from these two Unity files into idiomatic, engine-agnostic C# for the `Godotstation.Engine` namespace.
+3. Write the accompanying xUnit test class structure that we will use to enforce the Fidelity Contract via Golden Traces.
+
+Do not write Godot node code. Focus purely on the math, the state, and the deterministic tick simulation.
+```

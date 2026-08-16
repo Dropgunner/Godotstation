@@ -7,7 +7,7 @@ namespace Project.Common.Atmos
     {
         private readonly Queue<AtmosTile> _updateQueue = new Queue<AtmosTile>();
         private readonly HashSet<AtmosTile> _inQueue = new HashSet<AtmosTile>();
-        
+
         private readonly GasMix _meanGasMix = new GasMix();
         private readonly List<AtmosTile> _activeNodes = new List<AtmosTile>(5);
 
@@ -120,7 +120,7 @@ namespace Project.Common.Atmos
                 float totalMoles = _meanGasMix.Gases[key];
                 _meanGasMix.Gases[key] = totalMoles / targetCount;
             }
-            
+
             _meanGasMix.RecalculatePressure();
         }
 
@@ -182,8 +182,8 @@ namespace Project.Common.Atmos
         {
             if (!tile.StartingSuperConduct && !tile.AllowedToSuperConduct) return;
 
-            if (tile.ConductivityTemperature < (tile.StartingSuperConduct ? 
-                AtmosDefines.MINIMUM_TEMPERATURE_START_SUPERCONDUCTION : 
+            if (tile.ConductivityTemperature < (tile.StartingSuperConduct ?
+                AtmosDefines.MINIMUM_TEMPERATURE_START_SUPERCONDUCTION :
                 AtmosDefines.MINIMUM_TEMPERATURE_FOR_SUPERCONDUCTION))
             {
                 tile.AllowedToSuperConduct = false;
@@ -200,11 +200,11 @@ namespace Project.Common.Atmos
                 {
                     if (tile.ConductivityTemperature <= 273.15f) continue;
                     tempDelta -= AtmosDefines.SPACE_TEMPERATURE;
-                    
-                    float heat = neighbor.ThermalConductivity * tempDelta * 
-                        (tile.HeatCapacity * AtmosDefines.SPACE_HEAT_CAPACITY / 
+
+                    float heat = neighbor.ThermalConductivity * tempDelta *
+                        (tile.HeatCapacity * AtmosDefines.SPACE_HEAT_CAPACITY /
                         (tile.HeatCapacity + AtmosDefines.SPACE_HEAT_CAPACITY));
-                        
+
                     tile.ConductivityTemperature -= heat / tile.HeatCapacity;
                 }
                 else
@@ -212,8 +212,8 @@ namespace Project.Common.Atmos
                     tempDelta -= neighbor.ConductivityTemperature;
                     if (Math.Abs(tempDelta) <= AtmosDefines.MINIMUM_TEMPERATURE_DELTA_TO_CONSIDER) continue;
 
-                    float heat = neighbor.ThermalConductivity * tempDelta * 
-                        (tile.HeatCapacity * neighbor.HeatCapacity / 
+                    float heat = neighbor.ThermalConductivity * tempDelta *
+                        (tile.HeatCapacity * neighbor.HeatCapacity /
                         (tile.HeatCapacity + neighbor.HeatCapacity));
 
                     tile.ConductivityTemperature -= heat / tile.HeatCapacity;

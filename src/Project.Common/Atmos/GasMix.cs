@@ -6,7 +6,7 @@ namespace Project.Common.Atmos
     public class GasMix
     {
         public Dictionary<string, float> Gases { get; } = new Dictionary<string, float>();
-        
+
         private float _pressure;
         public float Pressure
         {
@@ -166,9 +166,9 @@ namespace Project.Common.Atmos
             if (molesToTransfer <= 0 || source.Moles <= 0) return;
 
             float transferRatio = Math.Min(1.0f, molesToTransfer / source.Moles);
-            
+
             float heatCapacityTransfer = 0;
-            
+
             List<KeyValuePair<string, float>> toTransfer = new List<KeyValuePair<string, float>>();
             foreach (var kvp in source.Gases)
             {
@@ -182,7 +182,7 @@ namespace Project.Common.Atmos
             foreach (var kvp in toTransfer)
             {
                 source.RemoveGas(kvp.Key, kvp.Value);
-                
+
                 // Add directly without recalculating pressure yet
                 float current = target.GetMoles(kvp.Key);
                 target.Gases[kvp.Key] = current + kvp.Value;

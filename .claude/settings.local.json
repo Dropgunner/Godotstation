@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet --version)",
+      "Bash(dotnet --list-runtimes)",
+      "Bash(mkdir -p /Users/arianjafari/Godotstation/src/Godotstation.Engine/Physics /Users/arianjafari/Godotstation/src/Godotstation.Engine/Atmos /Users/arianjafari/Godotstation/tests/Godotstation.Tests/Physics /Users/arianjafari/Godotstation/tests/Godotstation.Tests/Atmos)",
+      "Bash(dotnet new *)",
+      "Bash(dotnet sln *)",
+      "Bash(dotnet build *)",
+      "Bash(dotnet test *)"
+    ]
+  }
+}

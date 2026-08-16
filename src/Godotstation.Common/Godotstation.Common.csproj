@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Godotstation.Common — gameplay contracts and protocol types.
+    Same rule as Engine: BCL only. The game/ frontend references this;
+    this references nothing.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RootNamespace>Godotstation.Common</RootNamespace>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/game/">
+    <Project Path="game/Godotstation.Game.csproj">
+      <BuildType Project="Debug" />
+    </Project>
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Godotstation.Common/Godotstation.Common.csproj" />
+    <Project Path="src/Godotstation.Engine/Godotstation.Engine.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Godotstation.Tests/Godotstation.Tests.csproj" />
+  </Folder>
+</Solution>

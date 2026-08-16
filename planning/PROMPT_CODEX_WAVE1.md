@@ -3,7 +3,7 @@
 ```text
 Please read the CODEX.md file in this repository to understand your role as the Builder.
 
-We are completing Wave 1 of the Godotstation port. Claude has already built the pure C# backend for the Interaction System. 
+We are completing Wave 1 of the Godotstation port. Claude has already built the pure C# backend for the Interaction System.
 
 Here is Claude's backend code:
 [ATTACH the C# files Claude generated]

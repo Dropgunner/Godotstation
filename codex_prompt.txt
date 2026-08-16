@@ -1,0 +1,17 @@
+**Initial Prompt for OpenAI Codex (Sol):**
+
+```text
+Attached is the `CODEX.md` project instruction file that defines your role as the "Sweeney" systems integrator for the Godotstation port (Unitystation to Godot 4 .NET).
+
+I have also attached the `InventoryUI.cs`, `MainMenu.cs`, and their associated prefab layout data from the original Unitystation repository.
+
+This is Benchmark B2: The Sweeney Test.
+
+Your task is to:
+1. Read the `CODEX.md` file to understand your architectural boundaries (you own the Godot frontend, you consume the backend interfaces).
+2. Translate these Unity uGUI scripts into idiomatic Godot 4 C# scripts extending `Control`.
+3. Map out the required Godot node hierarchy (VBoxContainer, HBoxContainer, TextureRect, etc.) to replicate the original layout.
+4. Show how you would wire the frontend button clicks to a generic backend `IInteractionService`.
+
+Focus on speed, visual parity, and clean Godot integration.
+```

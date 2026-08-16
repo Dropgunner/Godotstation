@@ -1,6 +1,6 @@
 # The Godotstation Operational Playbook: Carmack & Sweeney in Tandem
 
-Based on our empirical benchmark (where Claude produced abstract architectural contracts and Codex immediately generated 7 UI files with zero compile errors), we have confirmed the **VortexArena Dual-Agent Methodology**. 
+Based on our empirical benchmark (where Claude produced abstract architectural contracts and Codex immediately generated 7 UI files with zero compile errors), we have confirmed the **VortexArena Dual-Agent Methodology**.
 
 Here is exactly how you use them together to port Unitystation to Godot.
 
@@ -29,7 +29,7 @@ Unitystation's core logic (Atmospherics, Power, Interaction, Chemistry) is heavi
 
 ## Phase 2: The Godot Frontend (Codex's Domain)
 
-Once Claude has built the pure C# logic, you need to connect it to the screen. This means UI, input handling, sprites, and Godot `_Process()` loops. **Do not give this to Claude.** Claude will over-engineer the UI architecture. 
+Once Claude has built the pure C# logic, you need to connect it to the screen. This means UI, input handling, sprites, and Godot `_Process()` loops. **Do not give this to Claude.** Claude will over-engineer the UI architecture.
 
 **Your Workflow with Codex:**
 
@@ -90,6 +90,6 @@ Godotstation/
 
 ## Summary
 
-By separating concerns, you bypass the weaknesses of both models. Claude never gets bogged down trying to guess Godot UI node names. Codex never accidentally breaks the math of the Atmos system because it's safely locked behind Claude's tests. 
+By separating concerns, you bypass the weaknesses of both models. Claude never gets bogged down trying to guess Godot UI node names. Codex never accidentally breaks the math of the Atmos system because it's safely locked behind Claude's tests.
 
 You act as the **Director**, moving the pure logic from Claude's desk to Codex's desk.

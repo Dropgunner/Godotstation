@@ -24,7 +24,7 @@ namespace Project.Common.Movement
     public class PlayerMovementState
     {
         public MovementType CurrentType { get; set; } = MovementType.Running;
-        
+
         // Base speeds per limb (summed across 2 legs)
         // From Limb.cs: walking=1.5, running=3.0, crawling=0.5
         // Total for 2 legs: Walk=3.0, Run=6.0, Crawl=1.0

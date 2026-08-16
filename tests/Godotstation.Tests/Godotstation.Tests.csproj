@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Runs headless, no Godot editor, no Unity player. Targets net10.0 (the
+    runtime installed on CI/dev machines) while the engine library itself
+    stays a net8.0 class library per the B1 contract.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>12</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Godotstation.Engine/Godotstation.Engine.csproj" />
+    <ProjectReference Include="../../src/Godotstation.Common/Godotstation.Common.csproj" />
+  </ItemGroup>
+
+</Project>
