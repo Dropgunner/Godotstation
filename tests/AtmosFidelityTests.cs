@@ -110,5 +110,131 @@ namespace Tests
             Assert.Equal(50f, tile1.GasMix.GetMoles("Oxygen"), 2);
             Assert.Equal(0f, space.GasMix.GetMoles("Oxygen"));
         }
+
+        // ---------------------------------------------------------------------
+        // Chemical reactions (Wave 2)
+        // ---------------------------------------------------------------------
+
+        private static AtmosTile MakeHotPlasmaTile(float temperature, float plasma = 50f, float oxygen = 200f)
+        {
+            var tile = new AtmosTile(0, 0);
+            tile.GasMix.AddGas("Plasma", plasma);
+            tile.GasMix.AddGas("Oxygen", oxygen);
+            tile.GasMix.SetTemperature(temperature);
+            return tile;
+        }
+
+        [Fact]
+        public void PlasmaFire_Ignites_BurnsPlasmaAndOxygen_ProducesCO2_AndHeat()
+        {
+            var sim = new AtmosSimulation();
+            var tile = MakeHotPlasmaTile(temperature: 500f);
+
+            float plasmaBefore = tile.GasMix.GetMoles("Plasma");
+            float oxygenBefore = tile.GasMix.GetMoles("Oxygen");
+            float tempBefore = tile.GasMix.Temperature;
+
+            sim.Enqueue(tile);
+            sim.RunStep();
+
+            // Fuel and oxidizer are consumed, carbon dioxide is produced.
+            Assert.True(tile.GasMix.GetMoles("Plasma") < plasmaBefore, "plasma should be consumed");
+            Assert.True(tile.GasMix.GetMoles("Oxygen") < oxygenBefore, "oxygen should be consumed");
+            Assert.True(tile.GasMix.GetMoles("CarbonDioxide") > 0f, "CO2 should be produced");
+
+            // Combustion releases energy, so the mix gets hotter.
+            Assert.True(tile.GasMix.Temperature > tempBefore, "fire should raise temperature");
+        }
+
+        [Fact]
+        public void PlasmaFire_BelowIgnitionTemperature_DoesNotBurn()
+        {
+            var sim = new AtmosSimulation();
+            // 300 K is below FIRE_MINIMUM_TEMPERATURE_TO_EXIST (373.15 K).
+            var tile = MakeHotPlasmaTile(temperature: 300f);
+
+            float plasmaBefore = tile.GasMix.GetMoles("Plasma");
+            float oxygenBefore = tile.GasMix.GetMoles("Oxygen");
+
+            sim.Enqueue(tile);
+            sim.RunStep();
+
+            Assert.Equal(plasmaBefore, tile.GasMix.GetMoles("Plasma"));
+            Assert.Equal(oxygenBefore, tile.GasMix.GetMoles("Oxygen"));
+            Assert.Equal(0f, tile.GasMix.GetMoles("CarbonDioxide"));
+        }
+
+        [Fact]
+        public void PlasmaFire_MassConservation_CarbonMatchesPlasmaBurned()
+        {
+            var sim = new AtmosSimulation();
+            var tile = MakeHotPlasmaTile(temperature: 800f);
+
+            float plasmaBefore = tile.GasMix.GetMoles("Plasma");
+
+            sim.Enqueue(tile);
+            sim.RunStep();
+
+            float plasmaBurned = plasmaBefore - tile.GasMix.GetMoles("Plasma");
+            // Each mole of plasma burned yields exactly one mole of CO2.
+            Assert.Equal(plasmaBurned, tile.GasMix.GetMoles("CarbonDioxide"), 4);
+        }
+
+        [Fact]
+        public void PlasmaFire_HyperNobliumSuppressesReaction_Rule6()
+        {
+            var sim = new AtmosSimulation();
+            var tile = MakeHotPlasmaTile(temperature: 500f);
+            // 5+ moles of HyperNoblium must suppress ALL reactions.
+            tile.GasMix.AddGas("HyperNoblium", 5f);
+
+            float plasmaBefore = tile.GasMix.GetMoles("Plasma");
+            float oxygenBefore = tile.GasMix.GetMoles("Oxygen");
+
+            sim.Enqueue(tile);
+            sim.RunStep();
+
+            Assert.Equal(plasmaBefore, tile.GasMix.GetMoles("Plasma"));
+            Assert.Equal(oxygenBefore, tile.GasMix.GetMoles("Oxygen"));
+            Assert.Equal(0f, tile.GasMix.GetMoles("CarbonDioxide"));
+        }
+
+        [Fact]
+        public void PlasmaFire_SubOppressionNobliumStillAllowsReaction()
+        {
+            var sim = new AtmosSimulation();
+            var tile = MakeHotPlasmaTile(temperature: 500f);
+            // Below the 5-mole threshold, reactions proceed normally.
+            tile.GasMix.AddGas("HyperNoblium", 4.9f);
+
+            float plasmaBefore = tile.GasMix.GetMoles("Plasma");
+
+            sim.Enqueue(tile);
+            sim.RunStep();
+
+            Assert.True(tile.GasMix.GetMoles("Plasma") < plasmaBefore, "reaction should not be suppressed below threshold");
+        }
+
+        [Fact]
+        public void PlasmaFire_SelfSustains_ContinuesOverMultipleSteps()
+        {
+            var sim = new AtmosSimulation();
+            var tile = MakeHotPlasmaTile(temperature: 500f);
+
+            sim.Enqueue(tile);
+
+            // The reaction re-queues the tile each step; running several steps should
+            // keep burning plasma down toward exhaustion.
+            float previous = tile.GasMix.GetMoles("Plasma");
+            for (int i = 0; i < 5; i++)
+            {
+                sim.RunStep();
+                float now = tile.GasMix.GetMoles("Plasma");
+                Assert.True(now <= previous, "plasma should be non-increasing while burning");
+                previous = now;
+            }
+
+            Assert.True(tile.GasMix.GetMoles("Plasma") < 50f, "plasma should have burned down across steps");
+        }
     }
 }
