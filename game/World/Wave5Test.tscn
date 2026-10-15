@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://Player/PlayerCharacter.cs" id="1_player"]
 [ext_resource type="Script" path="res://World/InteractableNode2D.cs" id="2_interactable"]
+[ext_resource type="Script" path="res://Inventory/InventoryItemNode2D.cs" id="7_inventory_item"]
 [ext_resource type="Script" path="res://Items/WrenchHandler.cs" id="3_wrench"]
 [ext_resource type="Script" path="res://World/AirlockHandler.cs" id="4_airlock"]
 [ext_resource type="Script" path="res://Input/InteractionInputController.cs" id="5_input"]
@@ -28,8 +29,9 @@ polygon = PackedVector2Array(-0.25, -0.25, 0.25, -0.25, 0.25, 0.25, -0.25, 0.25)
 
 [node name="Wrench" type="Node2D" parent="Player"]
 position = Vector2(0.3, 0.2)
-script = ExtResource("2_interactable")
+script = ExtResource("7_inventory_item")
 Id = "demo-wrench"
+ItemName = "Wrench"
 
 [node name="WrenchView" type="Polygon2D" parent="Player/Wrench"]
 color = Color(0.8, 0.8, 0.8, 1)
@@ -68,6 +70,21 @@ shape = SubResource("RectangleShape2D_target")
 
 [node name="AirlockHandler" type="Node" parent="Airlock"]
 script = ExtResource("4_airlock")
+
+[node name="Toolbox" type="Node2D" parent="."]
+position = Vector2(0, 1.2)
+script = ExtResource("7_inventory_item")
+Id = "demo-toolbox"
+ItemName = "Toolbox"
+
+[node name="ToolboxView" type="Polygon2D" parent="Toolbox"]
+color = Color(0.7, 0.5, 0.2, 1)
+polygon = PackedVector2Array(-0.3, -0.2, 0.3, -0.2, 0.3, 0.2, -0.3, 0.2)
+
+[node name="ToolboxArea" type="Area2D" parent="Toolbox"]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Toolbox/ToolboxArea"]
+shape = SubResource("RectangleShape2D_target")
 
 [node name="Wall" type="Node2D" parent="." groups=["solid"]]
 position = Vector2(2, 0)

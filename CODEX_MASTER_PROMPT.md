@@ -92,33 +92,31 @@ Rules for the loop:
 
 ---
 
-## 6. Current task — Wave 6: inventory backend
+## 6. Current task — Wave 6: local inventory frontend bridge
 
-Prerequisite: Phase 0 and Wave 5 are merged to `main`. Start from `main` on branch
-`wave6/inventory-engine`. PR #5 (`wave6/inventory-core`) is a behavior reference only: its
-`src/Project.Common/` and root `tests/` paths are legacy and MUST NOT be restored.
+Prerequisite: Wave 6 backend PR #8 is merged to `main`. Work from `main` on
+`wave6/inventory-frontend`. Keep the engine's `ItemStorage` and `InventorySystem` authoritative;
+the Godot game adapts nodes and presents requests through existing Common interfaces.
 
-Cited clauses: **FC-1 through FC-7** in `planning/FidelityContract_Inventory.md`.
+Cited clauses: frontend boundary statements and **FC-1, FC-2, FC-3, FC-5, FC-6** in
+`planning/FidelityContract_Inventory.md`.
 
 Deliver:
-1. Port the inventory backend to `src/Godotstation.Engine/Inventory/` under
-   `Godotstation.Engine.Inventory`. Keep it BCL-only and Godot-free; use the canonical
-   `Godotstation.Engine.Movement.MovementProcessor.DEFAULT_FRICTION` for throw calculations.
-2. Preserve the existing backend API and behavior while adding the explicit usings and
-   nullability fixes required by the Engine project. Keep its `NamedSlot` separate from the
-   presentation enum in `Godotstation.Common.Interactions` so existing UI signatures stay
-   intact.
-3. Port the headless fidelity tests to
-   `tests/Godotstation.Tests/Inventory/InventoryFidelityTests.cs`. Pin the serialized slot
-   ordinals, ordered validation and side effects, locks, hierarchy limits, stack precedence,
-   throw/container behavior, deterministic slot order, and bookkeeping hooks.
-4. Keep inventory UI nodes, Godot item components, networking, prediction, spawning,
-   blacklists, and sound integration for follow-up tasks. Do not implement frontend world
-   effects in the engine.
+1. `game/Inventory/InventoryItemNode2D.cs` implements the engine pickupable seam and
+   registers world pickups with the interaction dispatcher.
+2. `game/Inventory/InventoryServiceNode.cs` implements `IInventoryProvider` and the local
+   `IInteractionService` bridge. Slot IDs remain stable for each backend `ItemSlot`; changes
+   publish `OnSlotChanged`; transfer, drop, and pickup requests call `InventorySystem`.
+3. `game/Inventory/GodotInventoryWorld.cs` adapts hide, despawn, drop, throw, vanish, and
+   container storage effects. Convert `System.Numerics.Vector2` only at this boundary.
+4. Register the service as an autoload, register the local player, and put one pickupable
+   world item in the Wave 5 interaction test scene.
+5. Keep multiplayer transport, nested-container HUD layout, stacks, storage policy,
+   animation, and body-part-specific throw effects deferred. The local service is a
+   single-player bridge, not a network-authority implementation.
 
-Gate: `bash tools/preflight.sh` must report `ok:true`, with build and tests passing. Verify
-each cited FC has a regression test. Do not add a package or change existing public
-signatures to fit the port.
+Gate: `bash tools/preflight.sh` and a headless Godot project startup must both pass. Do not
+add a package or reimplement backend validation in `game/`.
 
 ---
 
@@ -126,14 +124,14 @@ signatures to fit the port.
 
 ```json
 {
-  "task": "wave6/inventory-engine",
-  "branch": "wave6/inventory-engine",
+  "task": "wave6/inventory-frontend",
+  "branch": "wave6/inventory-frontend",
   "commits": ["<sha> <message>"],
-  "route": "engine",
+  "route": "game",
   "preflight": { "ok": true, "build": "pass", "test": "pass", "test_summary": "Passed! 174 passed, 8 skipped" },
-  "contract": { "FC-1": "tests/.../InventoryFidelityTests.cs::<test>", "FC-2": "...", "FC-3": "...", "FC-4": "...", "FC-5": "...", "FC-6": "...", "FC-7": "..." },
+  "contract": { "FC-1": "stable slot-ID map", "FC-2": "InventorySystem request path", "FC-3": "InventorySystem request path", "FC-5": "InventorySystem request path", "FC-6": "GodotInventoryWorld" },
   "handoffs": [],
-  "fidelity_todos": [],
+  "fidelity_todos": ["Container ancestry is group-driven; nested HUD and stack behavior remain deferred."],
   "blocked": null
 }
 ```

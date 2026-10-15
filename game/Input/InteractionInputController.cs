@@ -39,7 +39,7 @@ public partial class InteractionInputController : Node
 		}
 
 		var position = new NumericsVector2(mouse.X, mouse.Y);
-		dispatcher.TryResolveClick(player, player.ActiveHandItem, target, position,
+		dispatcher.TryResolveClick(player, player.ActiveItemForInteractions, target, position,
 			player.CurrentIntent, Godot.Input.IsKeyPressed(Key.Alt), NetworkSide.Server);
 		GetViewport().SetInputAsHandled();
 	}
