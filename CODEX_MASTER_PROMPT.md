@@ -92,31 +92,30 @@ Rules for the loop:
 
 ---
 
-## 6. Current task — Wave 6: local inventory frontend bridge
+## 6. Current task — Wave 6 follow-up: playable inventory HUD
 
-Prerequisite: Wave 6 backend PR #8 is merged to `main`. Work from `main` on
-`wave6/inventory-frontend`. Keep the engine's `ItemStorage` and `InventorySystem` authoritative;
-the Godot game adapts nodes and presents requests through existing Common interfaces.
-
-Cited clauses: frontend boundary statements and **FC-1, FC-2, FC-3, FC-5, FC-6** in
-`planning/FidelityContract_Inventory.md`.
+Prerequisite: inventory backend PR #8 and frontend bridge PR #9 are merged to `main`.
+Work from `main` on `wave6/inventory-ui`. Keep the engine's `ItemStorage` and
+`InventorySystem` authoritative; the Godot game adapts nodes and presents requests through
+existing Common interfaces.
 
 Deliver:
-1. `game/Inventory/InventoryItemNode2D.cs` implements the engine pickupable seam and
-   registers world pickups with the interaction dispatcher.
-2. `game/Inventory/InventoryServiceNode.cs` implements `IInventoryProvider` and the local
-   `IInteractionService` bridge. Slot IDs remain stable for each backend `ItemSlot`; changes
-   publish `OnSlotChanged`; transfer, drop, and pickup requests call `InventorySystem`.
-3. `game/Inventory/GodotInventoryWorld.cs` adapts hide, despawn, drop, throw, vanish, and
-   container storage effects. Convert `System.Numerics.Vector2` only at this boundary.
-4. Register the service as an autoload, register the local player, and put one pickupable
-   world item in the Wave 5 interaction test scene.
-5. Keep multiplayer transport, nested-container HUD layout, stacks, storage policy,
-   animation, and body-part-specific throw effects deferred. The local service is a
-   single-player bridge, not a network-authority implementation.
+1. Create real `InventoryUI.tscn` and `ItemSlotUI.tscn` scenes for the existing UI scripts.
+2. Mount the inventory HUD on a `CanvasLayer` in `game/World/Wave5Test.tscn`, showing all
+   player slots and both hands while keeping it fixed to the viewport.
+3. Keep drop, transfer, examine, and hand selection behavior routed through the existing UI
+   service interfaces and `InventorySystem` requests.
+4. Keep this PR limited to the playable top-level HUD. Nested storage UI, stack presentation,
+   storage policy, multiplayer authority, animation, and aimed throw effects remain follow-up
+   work.
 
-Gate: `bash tools/preflight.sh` and a headless Godot project startup must both pass. Do not
-add a package or reimplement backend validation in `game/`.
+Authorized follow-up order, one PR at a time:
+1. Expose and render nested backpack/belt storage slots in their expandable HUD panels.
+2. Add stackable item presentation and stack-aware item behavior through the existing backend.
+
+Gate: `bash tools/preflight.sh`, a headless Godot project startup, and a smoke check that
+verifies visible inventory slots and pickup interaction must pass. Do not add a package or
+reimplement backend validation in `game/`.
 
 ---
 
@@ -124,12 +123,12 @@ add a package or reimplement backend validation in `game/`.
 
 ```json
 {
-  "task": "wave6/inventory-frontend",
-  "branch": "wave6/inventory-frontend",
+  "task": "wave6/inventory-ui",
+  "branch": "wave6/inventory-ui",
   "commits": ["<sha> <message>"],
   "route": "game",
   "preflight": { "ok": true, "build": "pass", "test": "pass", "test_summary": "Passed! 174 passed, 8 skipped" },
-  "contract": { "FC-1": "stable slot-ID map", "FC-2": "InventorySystem request path", "FC-3": "InventorySystem request path", "FC-5": "InventorySystem request path", "FC-6": "GodotInventoryWorld" },
+  "contract": { "UI": "InventoryUI.tscn renders IInventoryProvider slots and sends IInteractionService requests" },
   "handoffs": [],
   "fidelity_todos": ["Container ancestry is group-driven; nested HUD and stack behavior remain deferred."],
   "blocked": null

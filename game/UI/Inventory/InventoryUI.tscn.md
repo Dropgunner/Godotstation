@@ -1,9 +1,9 @@
-# InventoryUI.tscn — scene tree
+# Inventory HUD scenes
 
-The HUD inventory. `%` nodes are unique-named (script contract). ItemSlotUI
-instances are NOT in the scene — they are instantiated by code from
-`ItemSlotUI.tscn`, because DynamicItemStorage slots are dynamic (clothing adds
-and removes slots at runtime). Only the containers live in the scene.
+The playable inventory HUD is mounted in `Wave5Test.tscn` under a `CanvasLayer`.
+It stays fixed to the lower-left corner while the world camera moves. ItemSlotUI
+instances are created from `ItemSlotUI.tscn`, because clothing may add or remove
+slots at runtime.
 
 ```
 InventoryUI (Control, anchored bottom-left)          [script: InventoryUI.cs]
@@ -27,7 +27,7 @@ ItemSlotUI (PanelContainer, min 44×44)               [script: ItemSlotUI.cs]
 │   theme override: StyleBoxFlat, dark translucent, 1px border
 ├── %Icon (TextureRect, full rect, keep aspect centered)
 └── %SlotLabel (Label, centered, small, 50% alpha)   — slot name when empty
-    (PopupMenu context menu is added by code in _Ready)
+└── ContextMenu (PopupMenu)                          — Drop / Examine
 ```
 
 ## Behaviour parity notes
@@ -41,8 +41,8 @@ ItemSlotUI (PanelContainer, min 44×44)               [script: ItemSlotUI.cs]
 - **Drag & drop**: Godot-native (`_GetDragData` → `DragPreview.For(texture)` at
   70% alpha as the ghost, `_DropData` → `RequestInventoryTransfer`). Cancelled
   drags need no code — the engine drops the preview.
-- **Right-click** on an occupied slot opens a PopupMenu (Drop / Examine) at the
-  cursor, routed to `RequestDrop` / `RequestHandApply(alt)`.
+- **Right-click** on an occupied slot opens the scene-owned PopupMenu
+  (Drop / Examine) at the cursor, routed to `RequestDrop` / `RequestHandApply(alt)`.
 - **Expandable storage**: clicking an occupied Back/Belt slot toggles its panel;
   panel grids are filled via `PopulateStorage` from the provider's slot list
   for that container.

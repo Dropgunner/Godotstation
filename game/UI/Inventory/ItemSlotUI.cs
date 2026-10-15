@@ -37,14 +37,13 @@ namespace Godotstation.Game.UI.Inventory
 
 		public override void _Ready()
 		{
-			icon = GetNode<TextureRect>("%Icon");
-			slotLabel = GetNode<Label>("%SlotLabel");
+			icon = GetNode<TextureRect>("Icon");
+			slotLabel = GetNode<Label>("SlotLabel");
 
-			contextMenu = new PopupMenu();
+			contextMenu = GetNode<PopupMenu>("ContextMenu");
 			contextMenu.AddItem("Drop", (int)MenuAction.Drop);
 			contextMenu.AddItem("Examine", (int)MenuAction.Examine);
 			contextMenu.IdPressed += OnContextMenuAction;
-			AddChild(contextMenu);
 
 			GuiInput += OnGuiInput;
 			MouseFilter = MouseFilterEnum.Stop;
