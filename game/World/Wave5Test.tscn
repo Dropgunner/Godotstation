@@ -5,6 +5,7 @@
 [ext_resource type="Script" path="res://Items/WrenchHandler.cs" id="3_wrench"]
 [ext_resource type="Script" path="res://World/AirlockHandler.cs" id="4_airlock"]
 [ext_resource type="Script" path="res://Input/InteractionInputController.cs" id="5_input"]
+[ext_resource type="Script" path="res://Player/MovementInputController.cs" id="6_movement"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_target"]
 size = Vector2(0.8, 0.8)
@@ -17,6 +18,9 @@ ActiveHandItem = NodePath("Wrench")
 
 [node name="Camera2D" type="Camera2D" parent="Player"]
 zoom = Vector2(32, 32)
+
+[node name="MovementInput" type="Node" parent="Player"]
+script = ExtResource("6_movement")
 
 [node name="Body" type="Polygon2D" parent="Player"]
 color = Color(0.3, 0.6, 1, 1)
@@ -64,6 +68,13 @@ shape = SubResource("RectangleShape2D_target")
 
 [node name="AirlockHandler" type="Node" parent="Airlock"]
 script = ExtResource("4_airlock")
+
+[node name="Wall" type="Node2D" parent="." groups=["solid"]]
+position = Vector2(2, 0)
+
+[node name="WallView" type="Polygon2D" parent="Wall"]
+color = Color(0.35, 0.35, 0.4, 1)
+polygon = PackedVector2Array(-0.4, -0.4, 0.4, -0.4, 0.4, 0.4, -0.4, 0.4)
 
 [node name="InteractionInput" type="Node" parent="."]
 script = ExtResource("5_input")
