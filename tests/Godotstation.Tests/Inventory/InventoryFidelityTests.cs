@@ -168,7 +168,7 @@ public class InventoryFidelityTests
     [Fact]
     public void Rule2_AddToOccupiedSlot_CancelStrategyFails()
     {
-        var (inv, world) = MakeSystem();
+        var (inv, _) = MakeSystem();
         var storage = MakeStorage();
         var slot = storage.GetIndexedItemSlot(0)!;
         Assert.True(inv.ServerAdd(new TestItem("first"), slot));
