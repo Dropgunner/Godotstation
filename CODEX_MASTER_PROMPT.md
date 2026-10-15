@@ -92,44 +92,51 @@ Rules for the loop:
 
 ---
 
-## 6. Current task — Wave 5: interaction dispatch frontend
+## 6. Current task — Wave 6: inventory backend
 
-Prerequisite: Phase 0 merged (or on the same branch, as earlier commits). Branch: `wave5/dispatch-frontend` from `main` (or from `chore/consolidate-tree` if not merged yet).
+Prerequisite: Phase 0 and Wave 5 are merged to `main`. Start from `main` on branch
+`wave6/inventory-engine`. PR #5 (`wave6/inventory-core`) is a behavior reference only: its
+`src/Project.Common/` and root `tests/` paths are legacy and MUST NOT be restored.
 
-Cited clauses: **FC-8, FC-9** (read only those, via grep).
+Cited clauses: **FC-1 through FC-7** in `planning/FidelityContract_Inventory.md`.
 
 Deliver:
-1. `game/project.godot` — minimal Godot 4 project, C# enabled, main scene = `res://World/Wave5Test.tscn`.
-2. `game/Player/PlayerCharacter.cs` — `CharacterBody2D : IPerformer`. `WorldPosition` from `GlobalPosition`; `IsGhosting`, `HasTelekinesis`, `IsAlive`, `ActiveHandItem`, `CurrentIntent` as `[Export]` fields / stub state.
-3. `game/World/InteractableNode2D.cs` — `Node2D : IInteractable`; `Id` from an exported stable string, falling back to a GUID generated once in `_Ready`.
-4. `game/Items/WrenchHandler.cs` — `IOwnedInteractionHandler<HandApply>`, `Owner` = its `InteractableNode2D`, `IsFirstInteractable = false`. `WillInteract` true when target is in group `pipe`. `ServerPerformInteraction` emits a `Wrenched` signal.
-5. `game/World/AirlockHandler.cs` — same interface, `IsFirstInteractable = true`, `WillInteract` always true, toggles open/closed (visual only).
-6. `game/Input/InteractionInputController.cs` — holds the single shared `InteractionDispatcher` (autoload `Interaction`). On left click: performer = local `PlayerCharacter`, hand = `ActiveHandItem`, target = `InteractableNode2D` under cursor via physics point query (or `null`), position = world-space mouse, intent = UI intent, alt = Alt held, side = `NetworkSide.Server`. Calls `TryResolveClick`.
-7. Handlers register in `_Ready()` via `RegisterHandler(this)`.
-8. `game/World/Wave5Test.tscn` — player with wrench in hand, one airlock, one pipe (group `pipe`), the controller wired to the player.
-9. Headless proof in `tests/Godotstation.Tests/Interactions/DispatchOrderTests.cs` using plain C# fakes of performer/interactable (no Godot):
-   - wrench in hand + click airlock → airlock handler fires, wrench doesn't (FC-9)
-   - wrench in hand + click pipe that has a non-first handler → wrench fires first (FC-8)
-   - airlock handler declines → falls through to held item (FC-9 fallthrough)
+1. Port the inventory backend to `src/Godotstation.Engine/Inventory/` under
+   `Godotstation.Engine.Inventory`. Keep it BCL-only and Godot-free; use the canonical
+   `Godotstation.Engine.Movement.MovementProcessor.DEFAULT_FRICTION` for throw calculations.
+2. Preserve the existing backend API and behavior while adding the explicit usings and
+   nullability fixes required by the Engine project. Keep its `NamedSlot` separate from the
+   presentation enum in `Godotstation.Common.Interactions` so existing UI signatures stay
+   intact.
+3. Port the headless fidelity tests to
+   `tests/Godotstation.Tests/Inventory/InventoryFidelityTests.cs`. Pin the serialized slot
+   ordinals, ordered validation and side effects, locks, hierarchy limits, stack precedence,
+   throw/container behavior, deterministic slot order, and bookkeeping hooks.
+4. Keep inventory UI nodes, Godot item components, networking, prediction, spawning,
+   blacklists, and sound integration for follow-up tasks. Do not implement frontend world
+   effects in the engine.
 
-If the canonical `Godotstation.Common` API after Phase 0 doesn't fit any of the above, route `handoff` — don't patch `src/` from this branch.
+Gate: `bash tools/preflight.sh` must report `ok:true`, with build and tests passing. Verify
+each cited FC has a regression test. Do not add a package or change existing public
+signatures to fit the port.
 
 ---
 
-## 7. Report format (your final message, verbatim shape)
+## 7. Report format
 
 ```json
 {
-  "task": "wave5/dispatch-frontend",
-  "branch": "wave5/dispatch-frontend",
+  "task": "wave6/inventory-engine",
+  "branch": "wave6/inventory-engine",
   "commits": ["<sha> <message>"],
-  "route": "game",
-  "preflight": { "ok": true, "build": "pass", "test": "pass", "test_summary": "Passed! 31/31" },
-  "contract": { "FC-8": "tests/.../DispatchOrderTests.cs::HeldItemBeatsNonFirstTarget", "FC-9": "..." },
+  "route": "engine",
+  "preflight": { "ok": true, "build": "pass", "test": "pass", "test_summary": "Passed! 174 passed, 8 skipped" },
+  "contract": { "FC-1": "tests/.../InventoryFidelityTests.cs::<test>", "FC-2": "...", "FC-3": "...", "FC-4": "...", "FC-5": "...", "FC-6": "...", "FC-7": "..." },
   "handoffs": [],
   "fidelity_todos": [],
   "blocked": null
 }
 ```
 
-`blocked` is `null` or one sentence naming what you need from a human. No extra prose before or after the JSON.
+`blocked` is `null` or one sentence naming what you need from a human. Keep the final
+message concise and evidence-based.
