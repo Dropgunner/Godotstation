@@ -14,6 +14,11 @@ The Godot frontend MUST treat backend slot contents as authoritative. It may req
 and render slot changes, but MUST NOT directly mutate `ItemSlot.Item` or reimplement the
 backend's validation or throw calculations.
 
+Stack presentation is part of the frontend contract: occupied slot data exposes the
+authoritative stack amount, and the HUD shows a count only when the amount exceeds one.
+Stack identity and capacity remain item-owned through `IStackable`; merge, consume, split,
+source-slot bookkeeping, and despawn behavior remain owned by `InventorySystem`.
+
 ## FC-1: Slot Identity
 
 For a given `(ItemStorage, SlotIdentifier)` pair, every successful lookup MUST return the
@@ -81,8 +86,18 @@ the existing occupant MUST remain in the destination slot. An occupied slot's `C
 MUST return true only when this stack-compatibility check succeeds.
 
 **Tests:** compatible Add and Transfer merge before replacement; assert that the original
-occupant remains in the slot and that no drop or despawn was requested; incompatible and
-non-stackable items do not fit an occupied slot.
+occupant remains in the slot, the incoming object is despawned once, and no replacement drop
+occurs; incompatible and non-stackable items do not fit an occupied slot.
+
+Successful merges consume the incoming item through the world seam, clear a transferred
+source slot, and notify the surviving stack's slot observers. Consuming a partial amount
+notifies observers; consuming the final amount removes and despawns the item.
+Removing one from a stack of more than one returns and vanishes a split item while leaving
+the original item in its slot and notifying its updated amount; a one-item stack uses the
+ordinary vanish path.
+
+**Regression tests:** verify incoming-item despawn/source bookkeeping and partial/final
+consume notifications and cleanup, plus split-one bookkeeping and notification.
 
 ## FC-6: Throw Ballistics
 

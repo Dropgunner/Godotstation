@@ -28,6 +28,7 @@ ItemSlotUI (PanelContainer, min 44×44)               [script: ItemSlotUI.cs]
 ├── %Icon (TextureRect, full rect, keep aspect centered)
 └── %SlotLabel (Label, centered, small, 50% alpha)   — slot name when empty
 └── ContextMenu (PopupMenu)                          — Drop / Examine
+└── StackAmount (Label, top-right)                   — visible only above one
 ```
 
 ## Behaviour parity notes

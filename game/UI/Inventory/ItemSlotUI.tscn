@@ -54,3 +54,18 @@ vertical_alignment = 1
 autowrap_mode = 2
 
 [node name="ContextMenu" type="PopupMenu" parent="."]
+
+[node name="StackAmount" type="Label" parent="."]
+anchors_preset = 3
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -25.0
+offset_top = 2.0
+offset_right = -3.0
+offset_bottom = 17.0
+grow_horizontal = 0
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 10
+text = ""
+horizontal_alignment = 2

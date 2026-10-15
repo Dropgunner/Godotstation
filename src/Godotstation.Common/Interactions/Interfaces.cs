@@ -135,7 +135,10 @@ namespace Godotstation.Common.Interactions
 		int ItemId,
 		string ItemName,
 		string ItemIconPath,
-		string ItemDescription);
+		string ItemDescription)
+	{
+		public int StackAmount { get; init; } = 1;
+	}
 
 	/// <summary>Presentation data for an indexed slot inside an item storage.</summary>
 	public sealed record StorageSlotData(
@@ -145,7 +148,10 @@ namespace Godotstation.Common.Interactions
 		int ItemId,
 		string ItemName,
 		string ItemIconPath,
-		string ItemDescription);
+		string ItemDescription)
+	{
+		public int StackAmount { get; init; } = 1;
+	}
 
 	public sealed record JobData(
 		int JobId,

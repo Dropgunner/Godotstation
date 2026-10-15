@@ -78,7 +78,11 @@ public sealed class InventorySystem
         var stackable = fromSlot.Item.Stackable;
         if (stackable != null)
         {
-            return stackable.ServerConsume(amountToConsume);
+            if (amountToConsume <= 0 || stackable.Amount < amountToConsume) return false;
+            if (stackable.Amount == amountToConsume) return ServerDespawn(fromSlot);
+            if (!stackable.ServerConsume(amountToConsume)) return false;
+            fromSlot.ServerNotifyContentsChanged();
+            return true;
         }
 
         return ServerPerform(InventoryMove.Despawn(fromSlot));
@@ -111,11 +115,11 @@ public sealed class InventorySystem
     {
         if (fromSlot.Item == null) return null;
         var stackable = fromSlot.Item.Stackable;
-        if (stackable != null)
+        if (stackable != null && stackable.Amount > 1)
         {
             var clone = stackable.ServerRemoveOne();
-            ServerPerform(new InventoryMove(InventoryMoveType.Remove, clone, fromSlot, null,
-                InventoryRemoveType.Vanish));
+            fromSlot.ServerNotifyContentsChanged();
+            world.Vanish(clone);
             return clone;
         }
 
@@ -223,6 +227,9 @@ public sealed class InventorySystem
             if (stackableTarget != null && stackableTarget.CanAccommodate(pickupable))
             {
                 stackableTarget.ServerCombine(pickupable.Stackable!);
+                world.Despawn(pickupable);
+                toSlot.ServerNotifyContentsChanged();
+                InvokeMoveHooks(pickupable, toPerform);
                 return true;
             }
 
@@ -268,13 +275,32 @@ public sealed class InventorySystem
             // anything else, and rejects the transfer outright.
             if (toSlot.ItemNotRemovable) return false;
 
-            var stackableTarget = toSlot.Item.Stackable;
-            if (stackableTarget != null && stackableTarget.CanAccommodate(pickupable))
-            {
-                stackableTarget.ServerCombine(pickupable.Stackable!);
-                return true;
-            }
+        }
 
+        if (pickupable.ItemSlot == null) return false;
+        if (fromSlot == null) return false;
+
+        if (toSlot.CanFit(pickupable, ignoreOccupied: true) == false &&
+            toPerform.IgnoreConstraints == false)
+        {
+            return false;
+        }
+
+        if (fromSlot.ItemNotRemovable) return false;
+
+        if (toSlot.Item?.Stackable is { } stackableTarget && stackableTarget.CanAccommodate(pickupable))
+        {
+            pickupable.SetItemSlot(null);
+            fromSlot.ServerRemoveItem();
+            stackableTarget.ServerCombine(pickupable.Stackable!);
+            world.Despawn(pickupable);
+            toSlot.ServerNotifyContentsChanged();
+            InvokeMoveHooks(pickupable, toPerform);
+            return true;
+        }
+
+        if (toSlot.Item != null)
+        {
             switch (toPerform.ReplacementStrategy)
             {
                 case ReplacementStrategy.DespawnOther:
@@ -288,17 +314,6 @@ public sealed class InventorySystem
                     return false;
             }
         }
-
-        if (pickupable.ItemSlot == null) return false;
-        if (fromSlot == null) return false;
-
-        if (toSlot.CanFit(pickupable, ignoreOccupied: true) == false &&
-            toPerform.IgnoreConstraints == false)
-        {
-            return false;
-        }
-
-        if (fromSlot.ItemNotRemovable) return false;
 
         pickupable.SetItemSlot(null);
         fromSlot.ServerRemoveItem();
