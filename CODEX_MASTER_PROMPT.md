@@ -92,30 +92,27 @@ Rules for the loop:
 
 ---
 
-## 6. Current task — Wave 6 follow-up: playable inventory HUD
+## 6. Current task — Wave 6 follow-up: nested storage HUD
 
-Prerequisite: inventory backend PR #8 and frontend bridge PR #9 are merged to `main`.
-Work from `main` on `wave6/inventory-ui`. Keep the engine's `ItemStorage` and
-`InventorySystem` authoritative; the Godot game adapts nodes and presents requests through
-existing Common interfaces.
+Prerequisite: inventory backend PR #8, frontend bridge PR #9, and playable HUD PR #10.
+Continue from `wave6/inventory-ui` on branch `wave6/nested-storage-ui`. Keep the engine's
+`ItemStorage` and `InventorySystem` authoritative. Preserve existing public signatures;
+add only the Common data and provider seams needed to represent indexed storage slots.
 
 Deliver:
-1. Create real `InventoryUI.tscn` and `ItemSlotUI.tscn` scenes for the existing UI scripts.
-2. Mount the inventory HUD on a `CanvasLayer` in `game/World/Wave5Test.tscn`, showing all
-   player slots and both hands while keeping it fixed to the viewport.
-3. Keep drop, transfer, examine, and hand selection behavior routed through the existing UI
-   service interfaces and `InventorySystem` requests.
-4. Keep this PR limited to the playable top-level HUD. Nested storage UI, stack presentation,
-   storage policy, multiplayer authority, animation, and aimed throw effects remain follow-up
-   work.
+1. Add an indexed `StorageSlotData` DTO and additive `IInventoryProvider` query/change event.
+2. Give nested storage slots stable presentation IDs and publish changes through the provider.
+3. Populate backpack and belt panels when opened; support transferring between an active
+   hand and nested slots through the existing `IInteractionService` request.
+4. Keep stack behavior, storage restrictions, multiplayer authority, animation, and aimed
+   throw effects for follow-up work.
 
-Authorized follow-up order, one PR at a time:
-1. Expose and render nested backpack/belt storage slots in their expandable HUD panels.
-2. Add stackable item presentation and stack-aware item behavior through the existing backend.
+Next authorized PR after this one: stackable item behavior and presentation, first checking
+the existing fidelity contract and adding any missing acceptance criteria before code.
 
-Gate: `bash tools/preflight.sh`, a headless Godot project startup, and a smoke check that
-verifies visible inventory slots and pickup interaction must pass. Do not add a package or
-reimplement backend validation in `game/`.
+Gate: `bash tools/preflight.sh`, headless Godot startup, and a smoke check that picks up a
+four-slot bag, places it in Back, opens the panel, and transfers an item into a nested slot.
+Do not add a package or reimplement backend validation in `game/`.
 
 ---
 
@@ -123,12 +120,12 @@ reimplement backend validation in `game/`.
 
 ```json
 {
-  "task": "wave6/inventory-ui",
-  "branch": "wave6/inventory-ui",
+  "task": "wave6/nested-storage-ui",
+  "branch": "wave6/nested-storage-ui",
   "commits": ["<sha> <message>"],
-  "route": "game",
+  "route": "common",
   "preflight": { "ok": true, "build": "pass", "test": "pass", "test_summary": "Passed! 174 passed, 8 skipped" },
-  "contract": { "UI": "InventoryUI.tscn renders IInventoryProvider slots and sends IInteractionService requests" },
+  "contract": { "inventory UI": "Indexed storage slots use StorageSlotData and InventorySystem requests" },
   "handoffs": [],
   "fidelity_todos": ["Container ancestry is group-driven; nested HUD and stack behavior remain deferred."],
   "blocked": null
