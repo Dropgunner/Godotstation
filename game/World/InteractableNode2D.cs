@@ -11,6 +11,7 @@ public partial class InteractableNode2D : Node2D, IInteractable
 {
 	private static int nextEntityId;
 	private static readonly Dictionary<WorldEntity, InteractableNode2D> nodesByEntity = new();
+	private static readonly Dictionary<int, InteractableNode2D> nodesByEntityId = new();
 	private readonly WorldEntity interactionEntity = new WorldEntity { Id = Interlocked.Increment(ref nextEntityId) };
 
 	[Export] public string Id { get; set; } = string.Empty;
@@ -29,11 +30,20 @@ public partial class InteractableNode2D : Node2D, IInteractable
 	{
 		if (string.IsNullOrWhiteSpace(Id)) Id = Guid.NewGuid().ToString("N");
 		nodesByEntity.Add(interactionEntity, this);
+		nodesByEntityId.Add(interactionEntity.Id, this);
 	}
 
-	public override void _ExitTree() => nodesByEntity.Remove(interactionEntity);
+	public override void _ExitTree()
+	{
+		nodesByEntity.Remove(interactionEntity);
+		nodesByEntityId.Remove(interactionEntity.Id);
+	}
 
 	public static InteractableNode2D? FromEntity(WorldEntity? entity)
 		=> entity != null && nodesByEntity.TryGetValue(entity, out var node) && GodotObject.IsInstanceValid(node)
+			? node : null;
+
+	public static InteractableNode2D? FromEntityId(int entityId)
+		=> nodesByEntityId.TryGetValue(entityId, out var node) && GodotObject.IsInstanceValid(node)
 			? node : null;
 }
