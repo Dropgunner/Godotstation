@@ -1,0 +1,70 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://Player/PlayerCharacter.cs" id="1_player"]
+[ext_resource type="Script" path="res://World/InteractableNode2D.cs" id="2_interactable"]
+[ext_resource type="Script" path="res://Items/WrenchHandler.cs" id="3_wrench"]
+[ext_resource type="Script" path="res://World/AirlockHandler.cs" id="4_airlock"]
+[ext_resource type="Script" path="res://Input/InteractionInputController.cs" id="5_input"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_target"]
+size = Vector2(0.8, 0.8)
+
+[node name="Wave5Test" type="Node2D"]
+
+[node name="Player" type="CharacterBody2D" parent="." node_paths=PackedStringArray("ActiveHandItem")]
+script = ExtResource("1_player")
+ActiveHandItem = NodePath("Wrench")
+
+[node name="Camera2D" type="Camera2D" parent="Player"]
+zoom = Vector2(32, 32)
+
+[node name="Body" type="Polygon2D" parent="Player"]
+color = Color(0.3, 0.6, 1, 1)
+polygon = PackedVector2Array(-0.25, -0.25, 0.25, -0.25, 0.25, 0.25, -0.25, 0.25)
+
+[node name="Wrench" type="Node2D" parent="Player"]
+position = Vector2(0.3, 0.2)
+script = ExtResource("2_interactable")
+Id = "demo-wrench"
+
+[node name="WrenchView" type="Polygon2D" parent="Player/Wrench"]
+color = Color(0.8, 0.8, 0.8, 1)
+polygon = PackedVector2Array(-0.1, -0.1, 0.1, -0.1, 0.1, 0.1, -0.1, 0.1)
+
+[node name="WrenchHandler" type="Node" parent="Player/Wrench"]
+script = ExtResource("3_wrench")
+
+[node name="Pipe" type="Node2D" parent="." groups=["pipe"]]
+position = Vector2(1, 0)
+script = ExtResource("2_interactable")
+Id = "demo-pipe"
+
+[node name="PipeView" type="Polygon2D" parent="Pipe"]
+color = Color(0.6, 0.6, 0.7, 1)
+polygon = PackedVector2Array(-0.4, -0.2, 0.4, -0.2, 0.4, 0.2, -0.4, 0.2)
+
+[node name="PipeArea" type="Area2D" parent="Pipe"]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Pipe/PipeArea"]
+shape = SubResource("RectangleShape2D_target")
+
+[node name="Airlock" type="Node2D" parent="."]
+position = Vector2(-1, 0)
+script = ExtResource("2_interactable")
+Id = "demo-airlock"
+
+[node name="AirlockView" type="Polygon2D" parent="Airlock"]
+color = Color(1, 0.4, 0.2, 1)
+polygon = PackedVector2Array(-0.4, -0.4, 0.4, -0.4, 0.4, 0.4, -0.4, 0.4)
+
+[node name="AirlockArea" type="Area2D" parent="Airlock"]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Airlock/AirlockArea"]
+shape = SubResource("RectangleShape2D_target")
+
+[node name="AirlockHandler" type="Node" parent="Airlock"]
+script = ExtResource("4_airlock")
+
+[node name="InteractionInput" type="Node" parent="."]
+script = ExtResource("5_input")
+PlayerPath = NodePath("../Player")

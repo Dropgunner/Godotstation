@@ -1,9 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <RootNamespace>Godotstation.Common</RootNamespace>
-  </PropertyGroup>
-  <!-- NO Godot references allowed here. This is enforced. -->
-</Project>

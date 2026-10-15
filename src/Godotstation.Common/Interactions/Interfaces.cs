@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 
 namespace Godotstation.Common.Interactions
 {
@@ -32,6 +33,42 @@ namespace Godotstation.Common.Interactions
 		void SelectJob(int jobId);
 		void RequestSpectate();
 		event Action<LobbyState> OnLobbyStateChanged;
+	}
+
+	/// <summary>Receives one engine-agnostic interaction type.</summary>
+	public interface IInteractionHandler<in T> where T : Interaction
+	{
+		/// <summary>Lower values are checked first within a dispatch bucket.</summary>
+		int Priority { get; }
+		bool WillInteract(T interaction, NetworkSide side);
+		void ServerPerformInteraction(T interaction);
+	}
+
+	/// <summary>A handler associated with either the held item or clicked entity.</summary>
+	public interface IOwnedInteractionHandler<in T> : IInteractionHandler<T> where T : Interaction
+	{
+		WorldEntity Owner { get; }
+		bool IsFirstInteractable { get; }
+	}
+
+	/// <summary>A frontend object with a stable backend identity for its lifetime.</summary>
+	public interface IInteractable
+	{
+		string Id { get; }
+		Vector2 WorldPosition { get; }
+		WorldEntity InteractionEntity { get; }
+	}
+
+	/// <summary>A frontend player that supplies the existing headless player model at click time.</summary>
+	public interface IPerformer
+	{
+		Vector2 WorldPosition { get; }
+		bool IsGhosting { get; }
+		bool HasTelekinesis { get; }
+		bool IsAlive { get; }
+		IInteractable? ActiveHandItem { get; }
+		Intent CurrentIntent { get; }
+		PlayerEntity InteractionPlayer { get; }
 	}
 
 	// =========================================================================

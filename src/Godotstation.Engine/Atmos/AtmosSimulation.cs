@@ -108,6 +108,7 @@ namespace Godotstation.Engine.Atmos
 		private readonly List<(IAtmosNode node, bool doEqualise)> nodes = new List<(IAtmosNode, bool)>(5);
 		private readonly UniqueQueue<IAtmosNode> updateList = new UniqueQueue<IAtmosNode>();
 		private readonly IAtmosVisualService? visuals;
+		private readonly IAtmosReaction plasmaFireReaction = new PlasmaFireReaction();
 
 		public AtmosSimulation(IAtmosVisualService? visuals = null)
 		{
@@ -326,63 +327,12 @@ namespace Godotstation.Engine.Atmos
 			updateList.Enqueue(node); // temperature moved: neighbors may care next pass
 		}
 
-		/// <summary>
-		/// Gas reactions. Only plasma fire is ported in B1 — it is the
-		/// reaction that defines atmos gameplay; the rest follow the same
-		/// pattern. Branch structure and constants follow the tg-lineage
-		/// PlasmaFireReaction Unitystation uses.
-		/// </summary>
+		/// <summary>Runs gas reactions and re-queues a tile while its reaction remains active.</summary>
 		private void React(IAtmosNode node)
 		{
 			ref var mix = ref node.GasMix;
-
-			var plasma = mix.GetMoles(Gas.Plasma);
-			var oxygen = mix.GetMoles(Gas.Oxygen);
-
-			bool burning = false;
-			if (plasma > 0f && oxygen > 0f && mix.Temperature > AtmosConstants.PlasmaMinimumBurnTemperature)
-			{
-				// 0..1 throttle: barely-ignited fires smoulder, white-hot fires rage.
-				var temperatureScale = MathF.Min(1f,
-					(mix.Temperature - AtmosConstants.PlasmaMinimumBurnTemperature)
-					/ (AtmosConstants.PlasmaUpperTemperature - AtmosConstants.PlasmaMinimumBurnTemperature));
-
-				if (temperatureScale > 0f)
-				{
-					var oxygenBurnRate = AtmosConstants.OxygenBurnRateBase - temperatureScale;
-
-					// Oxygen-rich burns are limited by plasma; oxygen-starved
-					// burns are throttled by the O₂ ratio. This asymmetry is
-					// why venting a burning room actually works.
-					float plasmaBurnRate;
-					if (oxygen > plasma * AtmosConstants.PlasmaOxygenFullburn)
-					{
-						plasmaBurnRate = plasma * temperatureScale / AtmosConstants.PlasmaBurnRateDelta;
-					}
-					else
-					{
-						plasmaBurnRate = temperatureScale * (oxygen / AtmosConstants.PlasmaOxygenFullburn)
-							/ AtmosConstants.PlasmaBurnRateDelta;
-					}
-
-					if (plasmaBurnRate > AtmosConstants.MinimumHeatCapacity)
-					{
-						plasmaBurnRate = MathF.Min(plasmaBurnRate, MathF.Min(plasma, oxygen / oxygenBurnRate));
-
-						var energyBefore = mix.InternalEnergy;
-						mix.RemoveGas(Gas.Plasma, plasmaBurnRate);
-						mix.RemoveGas(Gas.Oxygen, plasmaBurnRate * oxygenBurnRate);
-						mix.AddGas(Gas.CarbonDioxide, plasmaBurnRate);
-
-						var energyReleased = AtmosConstants.FirePlasmaEnergyReleased * plasmaBurnRate;
-						mix.InternalEnergy = energyBefore + energyReleased;
-
-						burning = true;
-						updateList.Enqueue(node); // fire keeps its own tile hot in the queue
-					}
-				}
-			}
-
+			var burning = plasmaFireReaction.React(ref mix);
+			if (burning) updateList.Enqueue(node);
 			visuals?.SetFire(node, burning);
 		}
 
