@@ -1,0 +1,20 @@
+config_version=5
+
+[application]
+
+config/name="Godotstation"
+run/main_scene="res://World/Wave5Test.tscn"
+config/features=PackedStringArray("4.4", "C#", "GL Compatibility")
+
+[autoload]
+
+Interaction="*res://Input/InteractionServiceNode.cs"
+
+[dotnet]
+
+project/assembly_name="Godotstation.Game"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

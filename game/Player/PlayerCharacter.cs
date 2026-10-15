@@ -1,0 +1,30 @@
+using Godot;
+using Godotstation.Common.Interactions;
+using Godotstation.Game.World;
+using NumericsVector2 = System.Numerics.Vector2;
+
+namespace Godotstation.Game.Player;
+
+public partial class PlayerCharacter : CharacterBody2D, IPerformer
+{
+	private readonly PlayerEntity interactionPlayer = new PlayerEntity { Id = 0, IsLocalPlayer = true };
+
+	[Export] public bool IsGhosting { get; set; }
+	[Export] public bool HasTelekinesis { get; set; }
+	[Export] public bool IsAlive { get; set; } = true;
+	[Export] public InteractableNode2D? ActiveHandItem { get; set; }
+	[Export] public Intent CurrentIntent { get; set; } = Intent.Help;
+
+	IInteractable? IPerformer.ActiveHandItem => ActiveHandItem;
+	public NumericsVector2 WorldPosition => new NumericsVector2(GlobalPosition.X, GlobalPosition.Y);
+	public PlayerEntity InteractionPlayer
+	{
+		get
+		{
+			interactionPlayer.PlaceAt(WorldPosition);
+			interactionPlayer.HasTelekinesis = HasTelekinesis;
+			interactionPlayer.ConsciousState = IsAlive ? ConsciousState.Conscious : ConsciousState.Dead;
+			return interactionPlayer;
+		}
+	}
+}
