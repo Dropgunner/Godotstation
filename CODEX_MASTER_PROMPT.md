@@ -92,27 +92,32 @@ Rules for the loop:
 
 ---
 
-## 6. Current task — Wave 6 follow-up: stack support
+## 6. Roadmap — next milestone: Wave 8 playable round loop
 
-Prerequisite: inventory backend PR #8, frontend bridge PR #9, playable HUD PR #10, and
-nested storage UI PR #11. Continue from `wave6/nested-storage-ui` on branch
-`wave6/stack-support`. Keep the engine's `IStackable` and `InventorySystem` authoritative.
-Preserve existing public signatures; add only the presentation data needed for stack counts.
+Wave 6 stack support and Wave 7 presentation work are merged to `main`. The prior local
+macOS debug build is a prototype artifact, not a release. The next goal is a reproducible,
+single-player playable slice that connects the existing Godot frontend and authoritative
+headless systems into one short round. See `planning/ROADMAP.md` for milestone order and
+acceptance criteria.
 
-Deliver:
-1. Add a Godot item adapter for stack compatibility, merging, consuming, and splitting.
-2. Keep merge/consume bookkeeping, observer notification, and world despawn authoritative
-   in `InventorySystem`; extend the fidelity contract/tests where existing stack behavior
-   leaves bookkeeping unspecified.
-3. Expose stack amount as additive presentation data and show a count on occupied HUD slots
-   only when the amount exceeds one.
-4. Preserve non-stackable behavior; leave partial-stack overflow and ground merging deferred.
+Wave 8 should deliver this complete loop:
+1. Start from a clear entry screen and choose one available job.
+2. Spawn into one small station test area with movement, interaction, inventory, and HUD
+   services connected.
+3. Complete one deterministic station objective with visible progress and feedback.
+4. Reach a success or failure result, then restart into a fresh round without restarting
+   the application.
 
-No additional feature PR is authorized after this one.
+Keep this offline and single-player. Reuse the existing lobby/job UI and engine systems
+where practical. Add only the round/objective state needed for this slice; multiplayer,
+production networking, broad job selection, content expansion, and full release packaging
+remain later milestones. Define fidelity behavior in `planning/` before adding backend
+outcomes, and keep Godot presentation out of the headless simulation layer.
 
-Gate: `bash tools/preflight.sh`, headless Godot startup, and a smoke check that merges two
-compatible stacks, shows the resulting HUD count, consumes a partial stack, splits one item,
-and removes the fully consumed remainder. Do not add a package or reimplement backend validation in `game/`.
+Wave 8 gate: deterministic tests cover objective progress, terminal outcomes, and reset;
+the full preflight passes; headless Godot loads the configured entry scene; and a documented
+smoke path proves job selection through result and restart. The final milestone must be
+repeatable from a clean checkout and must state any known packaging or platform limits.
 
 ---
 
@@ -120,14 +125,14 @@ and removes the fully consumed remainder. Do not add a package or reimplement ba
 
 ```json
 {
-  "task": "wave6/stack-support",
-  "branch": "wave6/stack-support",
+  "task": "roadmap/wave8-playable-round-loop",
+  "branch": "<branch>",
   "commits": ["<sha> <message>"],
-  "route": "game",
-  "preflight": { "ok": true, "build": "pass", "test": "pass", "test_summary": "Passed! 176 passed, 8 skipped" },
-  "contract": { "inventory stack": "Stack amounts are backend-authoritative and HUD counts update on stack changes" },
+  "route": "handoff",
+  "preflight": { "ok": true, "build": "not-run-doc-only", "test": "not-run-doc-only" },
+  "contract": { "roadmap": "Wave 8 connects job selection, spawn, one objective, result, and restart into a repeatable offline single-player round" },
   "handoffs": [],
-  "fidelity_todos": ["Container ancestry is group-driven; partial-stack overflow and ground merging remain deferred."],
+  "fidelity_todos": [],
   "blocked": null
 }
 ```
