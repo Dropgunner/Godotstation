@@ -116,6 +116,12 @@ public class InventoryFidelityTests
         public void Vanish(IPickupable item) => Vanished.Add(item);
     }
 
+    private sealed class RecordingObserverTransport : IInventoryObserverTransport
+    {
+        public List<(string ObserverId, InventorySlotUpdate Update)> Updates { get; } = new();
+        public void Send(string observerId, InventorySlotUpdate update) => Updates.Add((observerId, update));
+    }
+
     private class RecordingHook : IServerInventoryMove
     {
         public List<InventoryMove> Moves { get; } = new List<InventoryMove>();
@@ -743,6 +749,77 @@ public class InventoryFidelityTests
             new InventoryPopulationContext(true, false), spawner, populator));
         Assert.Empty(storage.GetOccupiedSlots());
         Assert.Equal(new[] { "missing-item", "item" }, spawner.SpawnedIds);
+    }
+
+    [Fact]
+    public void Rule11_ObserversReceiveInitialStateAndAuthoritativeChanges()
+    {
+        var (inventory, _) = MakeSystem();
+        var transport = new RecordingObserverTransport();
+        inventory.ObserverTransport = transport;
+        var storage = MakeStorage(indexedSlots: 1);
+        var slot = storage.GetIndexedItemSlot(0)!;
+        var item = new TestItem("observed");
+
+        inventory.ServerAddObserver(slot, "client-a");
+        Assert.Single(transport.Updates);
+        Assert.Same(storage, transport.Updates[0].Update.Storage);
+        Assert.Equal(slot.SlotIdentifier, transport.Updates[0].Update.Slot);
+        Assert.Null(transport.Updates[0].Update.Item);
+
+        Assert.True(inventory.ServerAdd(item, slot));
+        slot.ItemNotRemovable = true;
+
+        Assert.Equal(3, transport.Updates.Count);
+        Assert.Same(item, transport.Updates[1].Update.Item);
+        Assert.False(transport.Updates[1].Update.ItemNotRemovable);
+        Assert.Same(item, transport.Updates[2].Update.Item);
+        Assert.True(transport.Updates[2].Update.ItemNotRemovable);
+    }
+
+    [Fact]
+    public void Rule11_RemovingObserverClearsViewAndStopsFurtherUpdates()
+    {
+        var (inventory, _) = MakeSystem();
+        var transport = new RecordingObserverTransport();
+        inventory.ObserverTransport = transport;
+        var slot = MakeStorage(indexedSlots: 1).GetIndexedItemSlot(0)!;
+        var item = new TestItem("observed");
+
+        inventory.ServerAdd(item, slot);
+        inventory.ServerAddObserver(slot, "client-a");
+        inventory.ServerAddObserver(slot, "client-b");
+        Assert.Equal(2, transport.Updates.Count);
+
+        inventory.ServerRemoveObserver(slot, "client-a");
+        var clear = Assert.Single(transport.Updates,
+            update => update.ObserverId == "client-a" && update.Update.ClearItem);
+        Assert.True(clear.Update.ClearItem);
+        Assert.Null(clear.Update.Item);
+
+        Assert.True(inventory.ServerDespawn(slot));
+        Assert.Equal(2, transport.Updates.Count(update => update.ObserverId == "client-a"));
+        Assert.Equal(2, transport.Updates.Count(update => update.ObserverId == "client-b"));
+        Assert.Null(transport.Updates.Last(update => update.ObserverId == "client-b").Update.Item);
+    }
+
+    [Fact]
+    public void Rule11_ObserverRegistrationIsIdempotentAndTransportCanBeAbsent()
+    {
+        var (inventory, _) = MakeSystem();
+        var storage = MakeStorage(indexedSlots: 1);
+        var slot = storage.GetIndexedItemSlot(0)!;
+        inventory.ServerAddObserver(slot, "client-a");
+        Assert.True(inventory.ServerAdd(new TestItem("quiet"), slot));
+
+        var transport = new RecordingObserverTransport();
+        inventory.ObserverTransport = transport;
+        inventory.ServerAddObserver(slot, "client-a");
+        inventory.ServerAddObserver(slot, "client-a");
+        Assert.Equal(2, transport.Updates.Count);
+
+        Assert.True(inventory.ServerDespawn(slot));
+        Assert.Equal(3, transport.Updates.Count);
     }
 
     private sealed class RejectBackCapacity : IItemStorageCapacity

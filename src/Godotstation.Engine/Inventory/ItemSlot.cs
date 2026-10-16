@@ -24,7 +24,18 @@ public sealed class ItemSlot
     /// <summary>
     /// Dictates whether the item can be removed by any means (Fidelity Contract Rule 3).
     /// </summary>
-    public bool ItemNotRemovable { get; set; }
+    public bool ItemNotRemovable
+    {
+        get => itemNotRemovable;
+        set
+        {
+            if (itemNotRemovable == value) return;
+            itemNotRemovable = value;
+            OnSlotContentsChangeServer?.Invoke();
+        }
+    }
+
+    private bool itemNotRemovable;
 
     /// <summary>Marks the slot as unable to take anything (used by UI).</summary>
     public bool IsEnabled { get; set; } = true;
