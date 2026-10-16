@@ -1,0 +1,121 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://UI/Inventory/InventoryUI.cs" id="1_inventory_ui"]
+[ext_resource type="PackedScene" path="res://UI/Inventory/ItemSlotUI.tscn" id="2_item_slot"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_inventory"]
+bg_color = Color(0.035, 0.045, 0.065, 0.92)
+border_color = Color(0.27, 0.33, 0.42, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+content_margin_left = 8.0
+content_margin_top = 8.0
+content_margin_right = 8.0
+content_margin_bottom = 8.0
+
+[node name="InventoryUI" type="Control"]
+anchors_preset = 1
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = -312.0
+offset_right = 280.0
+offset_bottom = -12.0
+grow_vertical = 0
+mouse_filter = 1
+script = ExtResource("1_inventory_ui")
+itemSlotScene = ExtResource("2_item_slot")
+
+[node name="Background" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_inventory")
+
+[node name="Title" type="Label" parent="."]
+layout_mode = 0
+offset_left = 10.0
+offset_top = 5.0
+offset_right = 244.0
+offset_bottom = 27.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.86, 0.9, 0.96, 1)
+theme_override_font_sizes/font_size = 12
+text = "INVENTORY"
+
+[node name="PaperDoll" type="Control" parent="." unique_name_in_owner=true]
+layout_mode = 0
+offset_left = 8.0
+offset_top = 30.0
+offset_right = 248.0
+offset_bottom = 254.0
+mouse_filter = 1
+
+[node name="BodySilhouette" type="ColorRect" parent="PaperDoll"]
+layout_mode = 0
+offset_left = 90.0
+offset_top = 52.0
+offset_right = 150.0
+offset_bottom = 168.0
+mouse_filter = 2
+color = Color(0.25, 0.31, 0.39, 0.24)
+
+[node name="HeadSilhouette" type="ColorRect" parent="PaperDoll"]
+layout_mode = 0
+offset_left = 104.0
+offset_top = 24.0
+offset_right = 136.0
+offset_bottom = 52.0
+mouse_filter = 2
+color = Color(0.25, 0.31, 0.39, 0.24)
+
+[node name="HandsRow" type="HBoxContainer" parent="." unique_name_in_owner=true]
+layout_mode = 0
+offset_left = 78.0
+offset_top = 258.0
+offset_right = 180.0
+offset_bottom = 306.0
+theme_override_constants/separation = 6
+
+[node name="BackpackPanel" type="PanelContainer" parent="." unique_name_in_owner=true]
+custom_minimum_size = Vector2(224, 196)
+layout_mode = 0
+offset_left = 272.0
+offset_top = 0.0
+offset_right = 496.0
+offset_bottom = 196.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_inventory")
+
+[node name="ScrollContainer" type="ScrollContainer" parent="BackpackPanel"]
+layout_mode = 2
+
+[node name="BackpackGrid" type="GridContainer" parent="BackpackPanel/ScrollContainer" unique_name_in_owner=true]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+columns = 4
+
+[node name="BeltPanel" type="PanelContainer" parent="." unique_name_in_owner=true]
+custom_minimum_size = Vector2(224, 100)
+layout_mode = 0
+offset_left = 272.0
+offset_top = 204.0
+offset_right = 496.0
+offset_bottom = 304.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_inventory")
+
+[node name="BeltGrid" type="GridContainer" parent="BeltPanel" unique_name_in_owner=true]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+columns = 4

@@ -57,12 +57,12 @@ namespace Godotstation.Game.UI.Inventory
 		{
 			inventory = UiServices.Inventory;
 
-			paperDoll = GetNode<Control>("%PaperDoll");
-			handsRow = GetNode<HBoxContainer>("%HandsRow");
-			backpackPanel = GetNode<PanelContainer>("%BackpackPanel");
-			backpackGrid = GetNode<GridContainer>("%BackpackGrid");
-			beltPanel = GetNode<PanelContainer>("%BeltPanel");
-			beltGrid = GetNode<GridContainer>("%BeltGrid");
+			paperDoll = GetNode<Control>("PaperDoll");
+			handsRow = GetNode<HBoxContainer>("HandsRow");
+			backpackPanel = GetNode<PanelContainer>("BackpackPanel");
+			backpackGrid = GetNode<GridContainer>("BackpackPanel/ScrollContainer/BackpackGrid");
+			beltPanel = GetNode<PanelContainer>("BeltPanel");
+			beltGrid = GetNode<GridContainer>("BeltPanel/BeltGrid");
 
 			backpackPanel.Visible = false;
 			beltPanel.Visible = false;
