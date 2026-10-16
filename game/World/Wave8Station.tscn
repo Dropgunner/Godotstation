@@ -1,0 +1,55 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="PackedScene" path="res://World/Wave5Test.tscn" id="1_systems"]
+[ext_resource type="Script" path="res://Round/RoundObjectiveHandler.cs" id="2_objective_handler"]
+[ext_resource type="Script" path="res://Round/RoundHudController.cs" id="3_round_hud"]
+[ext_resource type="Script" path="res://World/InteractableNode2D.cs" id="4_interactable"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_relay"]
+size = Vector2(0.8, 0.8)
+
+[node name="Wave8Station" type="Node2D"]
+
+[node name="Systems" parent="." instance=ExtResource("1_systems")]
+
+[node name="RelayOneHandler" type="Node" parent="Systems/Pipe"]
+script = ExtResource("2_objective_handler")
+
+[node name="RelayTwo" type="Node2D" parent="."]
+position = Vector2(0, 1)
+groups = ["pipe"]
+script = ExtResource("4_interactable")
+Id = "relay-two"
+
+[node name="RelayTwoView" type="Polygon2D" parent="RelayTwo"]
+color = Color(1, 0.48, 0.12, 1)
+polygon = PackedVector2Array(-0.35, -0.35, 0.35, -0.35, 0.35, 0.35, -0.35, 0.35)
+
+[node name="RelayTwoArea" type="Area2D" parent="RelayTwo"]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="RelayTwo/RelayTwoArea"]
+shape = SubResource("RectangleShape2D_relay")
+
+[node name="RelayTwoHandler" type="Node" parent="RelayTwo"]
+script = ExtResource("2_objective_handler")
+
+[node name="RelayThree" type="Node2D" parent="."]
+position = Vector2(-1, 1)
+groups = ["pipe"]
+script = ExtResource("4_interactable")
+Id = "relay-three"
+
+[node name="RelayThreeView" type="Polygon2D" parent="RelayThree"]
+color = Color(1, 0.48, 0.12, 1)
+polygon = PackedVector2Array(-0.35, -0.35, 0.35, -0.35, 0.35, 0.35, -0.35, 0.35)
+
+[node name="RelayThreeArea" type="Area2D" parent="RelayThree"]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="RelayThree/RelayThreeArea"]
+shape = SubResource("RectangleShape2D_relay")
+
+[node name="RelayThreeHandler" type="Node" parent="RelayThree"]
+script = ExtResource("2_objective_handler")
+
+[node name="RoundHudController" type="Node" parent="."]
+script = ExtResource("3_round_hud")

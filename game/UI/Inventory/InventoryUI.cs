@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Godot;
 using Godotstation.Common.Interactions;
@@ -30,6 +31,8 @@ namespace Godotstation.Game.UI.Inventory
 		private readonly Dictionary<int, ItemSlotUI> storageSlotViewsById = new Dictionary<int, ItemSlotUI>();
 		private readonly Dictionary<int, StorageSlotData> storageSlotsById = new Dictionary<int, StorageSlotData>();
 		private IInventoryProvider inventory = null!;
+		private Action<int, SlotData> slotChangedHandler = null!;
+		private Action<int, StorageSlotData> storageSlotChangedHandler = null!;
 
 		/// <summary>
 		/// Paper-doll anchor per named slot, in the layout of the Unity HUD:
@@ -69,12 +72,35 @@ namespace Godotstation.Game.UI.Inventory
 			backpackPanel.Visible = false;
 			beltPanel.Visible = false;
 
-			inventory.OnSlotChanged += (slotId, data) =>
-				Callable.From(() => ApplySlotChange(slotId, data)).CallDeferred();
-			inventory.OnStorageSlotChanged += (slotId, data) =>
-				Callable.From(() => ApplyStorageSlotChange(slotId, data)).CallDeferred();
+			slotChangedHandler = OnInventorySlotChanged;
+			storageSlotChangedHandler = OnInventoryStorageSlotChanged;
+			inventory.OnSlotChanged += slotChangedHandler;
+			inventory.OnStorageSlotChanged += storageSlotChangedHandler;
 
 			Rebuild();
+		}
+
+		public override void _ExitTree()
+		{
+			if (inventory == null) return;
+			if (slotChangedHandler != null) inventory.OnSlotChanged -= slotChangedHandler;
+			if (storageSlotChangedHandler != null) inventory.OnStorageSlotChanged -= storageSlotChangedHandler;
+		}
+
+		private void OnInventorySlotChanged(int slotId, SlotData data)
+		{
+			Callable.From(() =>
+			{
+				if (GodotObject.IsInstanceValid(this) && IsInsideTree()) ApplySlotChange(slotId, data);
+			}).CallDeferred();
+		}
+
+		private void OnInventoryStorageSlotChanged(int slotId, StorageSlotData data)
+		{
+			Callable.From(() =>
+			{
+				if (GodotObject.IsInstanceValid(this) && IsInsideTree()) ApplyStorageSlotChange(slotId, data);
+			}).CallDeferred();
 		}
 
 		/// <summary>Full rebuild from provider state (login, respawn, clothing change).</summary>

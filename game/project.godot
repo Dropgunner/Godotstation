@@ -3,13 +3,15 @@ config_version=5
 [application]
 
 config/name="Godotstation"
-run/main_scene="res://World/Wave5Test.tscn"
+run/main_scene="res://UI/RoundLobby.tscn"
 config/features=PackedStringArray("4.4", "C#", "GL Compatibility")
 
 [autoload]
 
 Interaction="*res://Input/InteractionServiceNode.cs"
 Inventory="*res://Inventory/InventoryServiceNode.cs"
+Lobby="*res://Round/LocalLobbyServiceNode.cs"
+Round="*res://Round/RoundSessionServiceNode.cs"
 
 [dotnet]
 
