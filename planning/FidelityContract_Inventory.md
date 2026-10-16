@@ -243,6 +243,18 @@ prediction. Overlapping predictions MUST be rejected until the earlier request i
 **Tests:** verify the predicted source/destination view, no engine mutation, accepted and
 rejected reconciliation, correlation and slot-pair mismatch handling, and overlap rejection.
 
+## FC-14: EMP propagation through carried storage
+
+EMP propagation MUST visit each reachable pickupable item once, check its EMP resistance
+before processing it or its nested storage, recurse through nested storage contents, and
+invoke every EMP behavior attached to each non-resistant item once. Contained items are
+processed before behaviors on their containing item, matching the source's depth-first
+container traversal. The engine exposes resistance and behavior interfaces; the world layer
+supplies source-specific resistance policy and EMP dispatch.
+
+**Tests:** verify nested traversal order, multiple behaviors on one item, resistant-container
+short-circuiting, duplicate/cyclic references, and delivered EMP strength.
+
 ## Deferred behavior
 
 UI slot linkage; recursive population of

@@ -100,6 +100,50 @@ public sealed class InventorySystem
         return ServerTransfer(fromSlot, toSlot);
     }
 
+    /// <summary>
+    /// Propagates an EMP through nested storage. The caller owns world targeting and server
+    /// authority; resistant items shield their contained contents.
+    /// </summary>
+    public int ServerPropagateEmp(IPickupable? rootItem, int empStrength,
+        IEmpResistancePolicy resistancePolicy)
+    {
+        if (rootItem == null) return 0;
+
+        var visitedItems = new HashSet<IPickupable>(ReferenceEqualityComparer.Instance);
+        var visitedStorages = new HashSet<ItemStorage>(ReferenceEqualityComparer.Instance);
+        var visitedBehaviors = new HashSet<IEmpAble>(ReferenceEqualityComparer.Instance);
+        var behaviorCount = 0;
+
+        void Visit(IPickupable? item)
+        {
+            if (item == null || !visitedItems.Add(item) || resistancePolicy.IsEmpResistant(item)) return;
+
+            foreach (var storage in item.ItemStorages)
+            {
+                if (storage == null || !visitedStorages.Add(storage)) continue;
+                foreach (var slot in storage.GetItemSlots())
+                    Visit(slot.Item);
+            }
+
+            void Apply(IEmpAble behavior)
+            {
+                if (!visitedBehaviors.Add(behavior)) return;
+                behavior.OnEmp(empStrength);
+                behaviorCount++;
+            }
+
+            if (item is IEmpAble directBehavior) Apply(directBehavior);
+            if (item is IEmpAbleProvider provider)
+            {
+                foreach (var behavior in provider.EmpBehaviors)
+                    if (behavior != null) Apply(behavior);
+            }
+        }
+
+        Visit(rootItem);
+        return behaviorCount;
+    }
+
     private void NotifyObservers(ItemSlot slot)
     {
         if (ObserverTransport == null || slotObservers.TryGetValue(slot, out var observers) == false)

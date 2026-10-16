@@ -144,6 +144,34 @@ public class InventoryFidelityTests
         }
     }
 
+    private sealed class EmpTestItem : TestItem, IEmpAble, IEmpAbleProvider
+    {
+        private readonly List<string>? calls;
+
+        public EmpTestItem(string name, List<string>? calls = null) : base(name) => this.calls = calls;
+
+        public List<IEmpAble> Behaviors { get; } = new();
+        public IEnumerable<IEmpAble> EmpBehaviors => Behaviors;
+        public List<int> ReceivedStrengths { get; } = new();
+        public void OnEmp(int empStrength)
+        {
+            ReceivedStrengths.Add(empStrength);
+            calls?.Add($"{Name}-direct:{empStrength}");
+        }
+    }
+
+    private sealed class RecordingEmpBehavior(string label, List<string> calls) : IEmpAble
+    {
+        public void OnEmp(int empStrength) => calls.Add($"{label}:{empStrength}");
+    }
+
+    private sealed class EmpResistancePolicy : IEmpResistancePolicy
+    {
+        private readonly HashSet<IPickupable> resistantItems = new(ReferenceEqualityComparer.Instance);
+        public void Add(IPickupable item) => resistantItems.Add(item);
+        public bool IsEmpResistant(IPickupable item) => resistantItems.Contains(item);
+    }
+
     private class RecordingHook : IServerInventoryMove
     {
         public List<InventoryMove> Moves { get; } = new List<InventoryMove>();
@@ -919,6 +947,107 @@ public class InventoryFidelityTests
         Assert.Null(from.Item);
         Assert.Same(item, to.Item);
         Assert.Same(to, item.ItemSlot);
+    }
+
+    [Fact]
+    public void Rule14_EmpVisitsNestedContentsBeforeAllItemBehaviors()
+    {
+        var (inventory, _) = MakeSystem();
+        var calls = new List<string>();
+        var root = new EmpTestItem("root", calls);
+        var child = new EmpTestItem("child", calls);
+        var grandchild = new EmpTestItem("grandchild", calls);
+        var rootStorage = MakeStorage(indexedSlots: 1, asPickupable: root);
+        var childStorage = MakeStorage(indexedSlots: 1, asPickupable: child);
+        root.Storages.Add(rootStorage);
+        child.Storages.Add(childStorage);
+        root.Behaviors.Add(new RecordingEmpBehavior("root-component", calls));
+        child.Behaviors.Add(new RecordingEmpBehavior("child-component-a", calls));
+        child.Behaviors.Add(new RecordingEmpBehavior("child-component-b", calls));
+        grandchild.Behaviors.Add(new RecordingEmpBehavior("grandchild-component", calls));
+        Assert.True(inventory.ServerAdd(child, rootStorage.GetIndexedItemSlot(0)!));
+        Assert.True(inventory.ServerAdd(grandchild, childStorage.GetIndexedItemSlot(0)!));
+
+        var affectedBehaviors = inventory.ServerPropagateEmp(root, 7, new EmpResistancePolicy());
+
+        Assert.Equal(7, affectedBehaviors);
+        Assert.Equal(new[]
+        {
+            "grandchild-direct:7", "grandchild-component:7", "child-direct:7", "child-component-a:7",
+            "child-component-b:7", "root-direct:7", "root-component:7",
+        }, calls);
+        Assert.Equal(new[] { 7 }, root.ReceivedStrengths);
+        Assert.Equal(new[] { 7 }, child.ReceivedStrengths);
+        Assert.Equal(new[] { 7 }, grandchild.ReceivedStrengths);
+    }
+
+    [Fact]
+    public void Rule14_ResistantContainerShieldsItselfAndItsContents()
+    {
+        var (inventory, _) = MakeSystem();
+        var calls = new List<string>();
+        var root = new EmpTestItem("root", calls);
+        var shielded = new EmpTestItem("shielded-container", calls);
+        var contents = new EmpTestItem("contents", calls);
+        var rootStorage = MakeStorage(indexedSlots: 1, asPickupable: root);
+        var childStorage = MakeStorage(indexedSlots: 1, asPickupable: shielded);
+        root.Storages.Add(rootStorage);
+        shielded.Storages.Add(childStorage);
+        root.Behaviors.Add(new RecordingEmpBehavior("root", calls));
+        shielded.Behaviors.Add(new RecordingEmpBehavior("shielded", calls));
+        contents.Behaviors.Add(new RecordingEmpBehavior("contents", calls));
+        Assert.True(inventory.ServerAdd(shielded, rootStorage.GetIndexedItemSlot(0)!));
+        Assert.True(inventory.ServerAdd(contents, childStorage.GetIndexedItemSlot(0)!));
+        var resistance = new EmpResistancePolicy();
+        resistance.Add(shielded);
+
+        Assert.Equal(2, inventory.ServerPropagateEmp(root, 3, resistance));
+
+        Assert.Equal(new[] { "root-direct:3", "root:3" }, calls);
+        Assert.Empty(shielded.ReceivedStrengths);
+        Assert.Empty(contents.ReceivedStrengths);
+    }
+
+    [Fact]
+    public void Rule14_CyclicStorageReferencesDoNotApplyBehaviorsMoreThanOnce()
+    {
+        var (inventory, _) = MakeSystem();
+        var calls = new List<string>();
+        var root = new EmpTestItem("root", calls);
+        var child = new EmpTestItem("child", calls);
+        root.Behaviors.Add(new RecordingEmpBehavior("component", calls));
+        var rootStorage = MakeStorage(indexedSlots: 1, asPickupable: root);
+        root.Storages.Add(rootStorage);
+        child.Storages.Add(rootStorage);
+        child.Behaviors.Add(new RecordingEmpBehavior("child-component", calls));
+        Assert.True(inventory.ServerAdd(child, rootStorage.GetIndexedItemSlot(0)!));
+
+        Assert.Equal(4, inventory.ServerPropagateEmp(root, 11, new EmpResistancePolicy()));
+
+        Assert.Equal(new[] { "child-direct:11", "child-component:11", "root-direct:11", "component:11" }, calls);
+        Assert.Equal(new[] { 11 }, root.ReceivedStrengths);
+        Assert.Equal(new[] { 11 }, child.ReceivedStrengths);
+    }
+
+    [Fact]
+    public void Rule14_RepeatedItemReferencesReceiveEmpOnlyOnce()
+    {
+        var (inventory, _) = MakeSystem();
+        var calls = new List<string>();
+        var root = new EmpTestItem("root");
+        var shared = new EmpTestItem("shared", calls);
+        shared.Behaviors.Add(new RecordingEmpBehavior("shared-component", calls));
+        var firstStorage = MakeStorage(indexedSlots: 1);
+        var secondStorage = MakeStorage(indexedSlots: 1);
+        firstStorage.GetIndexedItemSlot(0)!.ServerSetItem(shared);
+        secondStorage.GetIndexedItemSlot(0)!.ServerSetItem(shared);
+        root.Storages.Add(firstStorage);
+        root.Storages.Add(secondStorage);
+
+        Assert.Equal(3, inventory.ServerPropagateEmp(root, 5, new EmpResistancePolicy()));
+
+        Assert.Equal(new[] { "shared-direct:5", "shared-component:5" }, calls);
+        Assert.Equal(new[] { 5 }, shared.ReceivedStrengths);
     }
 
     private sealed class RejectBackCapacity : IItemStorageCapacity
