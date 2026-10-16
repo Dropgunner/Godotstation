@@ -266,6 +266,19 @@ does not depend on an audio engine.
 **Tests:** verify sound requests on successful Transfer and Remove, the original source slot
 is supplied, and Add, rejected moves, and missing sound identifiers remain silent.
 
+## FC-16: Ground stack merging
+
+After an item is dropped or thrown into the world, the inventory system MAY ask an optional
+ground-stack world seam for compatible candidates at its position. It MUST honor the source
+item's auto-stack policy, skip itself and uninitialized or non-stackable candidates, and merge only
+when `IStackable.CanAccommodate` allows it. Merge capacity remains owned by the stackable
+item. Fully consumed candidates MUST be despawned through `IInventoryWorld`; partial
+candidates remain in the world with their remainder. The world seam owns position and
+candidate discovery.
+
+**Tests:** verify disabled auto-stack, candidate filtering, compatible multi-stack merging,
+capacity limits, partial remainder preservation, and despawn of fully consumed candidates.
+
 ## Deferred behavior
 
 UI slot linkage; recursive population of

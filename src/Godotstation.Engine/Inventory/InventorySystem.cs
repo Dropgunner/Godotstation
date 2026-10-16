@@ -27,6 +27,9 @@ public sealed class InventorySystem
     /// <summary>Optional frontend transport for source-slot inventory sounds.</summary>
     public IInventorySoundTransport? SoundTransport { get; set; }
 
+    /// <summary>Optional world query used to auto-merge stacks after they reach the world.</summary>
+    public IGroundStackWorld? GroundStackWorld { get; set; }
+
     /// <summary>Raised after any move performs successfully (sound/UI hook for the frontend).</summary>
     public event Action<InventoryMove>? OnMovePerformed;
 
@@ -383,6 +386,10 @@ public sealed class InventorySystem
         };
         if (performed == false) return false;
 
+        if (toPerform.InventoryMoveType == InventoryMoveType.Remove &&
+            toPerform.RemoveType is InventoryRemoveType.Drop or InventoryRemoveType.Throw)
+            ServerStackOnGround(pickupable);
+
         OnMovePerformed?.Invoke(toPerform);
         if (toPerform.FromSlot is { } sourceSlot &&
             pickupable is IInventorySoundProvider soundProvider &&
@@ -392,6 +399,35 @@ public sealed class InventorySystem
         }
 
         return true;
+    }
+
+    /// <summary>Merges this ground stack into compatible nearby stacks without exceeding capacity.</summary>
+    public int ServerStackOnGround(IPickupable? item)
+    {
+        var ground = GroundStackWorld;
+        var target = item?.Stackable;
+        if (item == null || target == null || ground == null || !ground.CanAutoStack(item)) return 0;
+
+        var mergedAmount = 0;
+        foreach (var candidate in ground.GetGroundStacks(item).ToList())
+        {
+            if (candidate == null || ReferenceEquals(candidate, item) ||
+                !ground.IsStackInitialized(candidate) || candidate.Stackable is not { } other ||
+                !target.CanAccommodate(candidate))
+            {
+                continue;
+            }
+
+            var targetAmountBefore = target.Amount;
+            var candidateAmountBefore = other.Amount;
+            target.ServerCombine(other);
+            mergedAmount += Math.Max(0, target.Amount - targetAmountBefore);
+
+            if (candidateAmountBefore > 0 && other.Amount <= 0)
+                world.Despawn(candidate);
+        }
+
+        return mergedAmount;
     }
 
     private bool ServerPerformAdd(InventoryMove toPerform, IPickupable pickupable)
