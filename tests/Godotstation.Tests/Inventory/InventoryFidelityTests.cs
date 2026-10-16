@@ -859,7 +859,10 @@ public class InventoryFidelityTests
 
         Assert.True(inventory.ClientRequestTransfer(31, 47, resolver, transport));
 
-        Assert.Equal(new InventoryTransferRequest(31, 47), Assert.Single(transport.Requests));
+        var request = Assert.Single(transport.Requests);
+        Assert.Equal(31, request.FromSlotId);
+        Assert.Equal(47, request.ToSlotId);
+        Assert.True(request.RequestId > 0);
         Assert.Same(item, from.Item);
         Assert.Null(to.Item);
         Assert.Same(from, item.ItemSlot);
@@ -895,19 +898,23 @@ public class InventoryFidelityTests
         resolver.Slots.Add(20, to);
 
         var denied = new TransferAuthorization(allowed: false);
-        Assert.False(inventory.ServerHandleTransferRequest("unauthorized", new(10, 20), resolver, denied));
+        Assert.False(inventory.ServerHandleTransferRequest("unauthorized",
+            new InventoryTransferRequest(10, 20) { RequestId = 1 }, resolver, denied));
         Assert.Same(item, from.Item);
         Assert.Null(to.Item);
         Assert.Equal("unauthorized", Assert.Single(denied.Actors));
 
         var allowed = new TransferAuthorization(allowed: true);
-        Assert.False(inventory.ServerHandleTransferRequest("player", new(99, 20), resolver, allowed));
-        Assert.False(inventory.ServerHandleTransferRequest("player", new(10, 99), resolver, allowed));
+        Assert.False(inventory.ServerHandleTransferRequest("player",
+            new InventoryTransferRequest(99, 20) { RequestId = 2 }, resolver, allowed));
+        Assert.False(inventory.ServerHandleTransferRequest("player",
+            new InventoryTransferRequest(10, 99) { RequestId = 3 }, resolver, allowed));
         Assert.Empty(allowed.Actors);
         Assert.Same(item, from.Item);
         Assert.Null(to.Item);
         Assert.Same(from, item.ItemSlot);
-        Assert.True(inventory.ServerHandleTransferRequest("player", new(10, 20), resolver, allowed));
+        Assert.True(inventory.ServerHandleTransferRequest("player",
+            new InventoryTransferRequest(10, 20) { RequestId = 4 }, resolver, allowed));
         Assert.Equal("player", Assert.Single(allowed.Actors));
         Assert.Null(from.Item);
         Assert.Same(item, to.Item);

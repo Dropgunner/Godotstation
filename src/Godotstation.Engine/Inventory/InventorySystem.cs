@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Threading;
 using Godotstation.Engine.Movement;
 
 namespace Godotstation.Engine.Inventory;
@@ -18,6 +19,7 @@ public sealed class InventorySystem
 {
     private readonly IInventoryWorld world;
     private readonly Dictionary<ItemSlot, SlotObservers> slotObservers = new();
+    private long nextTransferRequestId;
 
     /// <summary>Optional transport used for authoritative observer updates.</summary>
     public IInventoryObserverTransport? ObserverTransport { get; set; }
@@ -65,14 +67,20 @@ public sealed class InventorySystem
     /// <summary>Sends an identified client transfer request without changing local state.</summary>
     public bool ClientRequestTransfer(int fromSlotId, int toSlotId,
         IInventoryTransferSlotResolver slotResolver, IInventoryTransferRequestTransport transport)
+        => ClientRequestTransfer(Interlocked.Increment(ref nextTransferRequestId),
+            fromSlotId, toSlotId, slotResolver, transport);
+
+    /// <summary>Sends a transfer request with a caller-provided prediction correlation id.</summary>
+    public bool ClientRequestTransfer(long requestId, int fromSlotId, int toSlotId,
+        IInventoryTransferSlotResolver slotResolver, IInventoryTransferRequestTransport transport)
     {
-        if (!slotResolver.TryResolve(fromSlotId, out var fromSlot) || fromSlot?.Item == null ||
+        if (requestId <= 0 || !slotResolver.TryResolve(fromSlotId, out var fromSlot) || fromSlot?.Item == null ||
             !slotResolver.TryResolve(toSlotId, out var toSlot) || toSlot == null)
         {
             return false;
         }
 
-        transport.Send(new InventoryTransferRequest(fromSlotId, toSlotId));
+        transport.Send(new InventoryTransferRequest(fromSlotId, toSlotId) { RequestId = requestId });
         return true;
     }
 
@@ -81,7 +89,8 @@ public sealed class InventorySystem
         IInventoryTransferSlotResolver slotResolver,
         IInventoryTransferRequestAuthorization authorization)
     {
-        if (!slotResolver.TryResolve(request.FromSlotId, out var fromSlot) || fromSlot?.Item == null ||
+        if (request.RequestId <= 0 ||
+            !slotResolver.TryResolve(request.FromSlotId, out var fromSlot) || fromSlot?.Item == null ||
             !slotResolver.TryResolve(request.ToSlotId, out var toSlot) || toSlot == null ||
             !authorization.CanTransfer(actorId, fromSlot, toSlot))
         {
