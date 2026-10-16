@@ -133,6 +133,10 @@ public sealed class ItemStorage
     /// <summary>First defined slot with no item, null if all occupied.</summary>
     public ItemSlot? GetNextEmptySlot() => GetItemSlots().FirstOrDefault(slot => slot.Item == null);
 
+    /// <summary>Returns the preferred fitting slot selected by the supplied trait policy.</summary>
+    public ItemSlot? GetBestSlotFor(IPickupable? item, BestSlotForTrait traitPolicy) =>
+        traitPolicy.GetBestSlot(item, this);
+
     /// <summary>First free indexed slot, null if none.</summary>
     public ItemSlot? GetNextFreeIndexedSlot() => GetIndexedSlots().FirstOrDefault(its => its.Item == null);
 

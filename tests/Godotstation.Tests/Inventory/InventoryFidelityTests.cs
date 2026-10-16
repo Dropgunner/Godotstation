@@ -40,6 +40,16 @@ public class InventoryFidelityTests
         public StorageItemName StorageItemName { get; }
     }
 
+    private sealed class TraitTestItem : TestItem, IItemTraitProvider
+    {
+        private readonly HashSet<string> traits;
+
+        public TraitTestItem(string name, params string[] traits) : base(name) =>
+            this.traits = new HashSet<string>(traits, StringComparer.Ordinal);
+
+        public bool HasTrait(string traitId) => traits.Contains(traitId);
+    }
+
     private class TestStack : IStackable
     {
         public TestStack(int amount) { Amount = amount; }
@@ -570,6 +580,109 @@ public class InventoryFidelityTests
 
         Assert.True(inv.ServerAdd(backpack, storage.GetIndexedItemSlot(0)!,
             ignoreRestraints: true));
+    }
+
+    [Fact]
+    public void Rule9_BestSlotUsesOrderedMatchingTraitPreferences()
+    {
+        var orderedStorage = new ItemStorage(new[]
+        {
+            SlotIdentifier.Named(NamedSlot.belt), SlotIdentifier.Named(NamedSlot.back)
+        }, new AcceptAllCapacity());
+        var item = new TraitTestItem("tools", "tool");
+        var policy = new BestSlotForTrait(new[]
+        {
+            new TraitSlotMapping("medical", NamedSlot.back),
+            new TraitSlotMapping("tool", NamedSlot.back),
+            new TraitSlotMapping("tool", NamedSlot.belt),
+        });
+
+        Assert.Same(orderedStorage.GetNamedItemSlot(NamedSlot.back), orderedStorage.GetBestSlotFor(item, policy));
+    }
+
+    [Fact]
+    public void Rule9_BestSlotContinuesWhenPreferredSlotCannotFit()
+    {
+        var back = SlotIdentifier.Named(NamedSlot.back);
+        var belt = SlotIdentifier.Named(NamedSlot.belt);
+        var storage = new ItemStorage(new[] { back, SlotIdentifier.Indexed(0), belt }, new RejectBackCapacity());
+        var item = new TraitTestItem("medical kit", "medical");
+        var policy = new BestSlotForTrait(new[]
+        {
+            new TraitSlotMapping("medical", NamedSlot.back),
+            new TraitSlotMapping("medical", NamedSlot.belt),
+        });
+
+        Assert.Same(storage.GetNamedItemSlot(NamedSlot.belt), policy.GetBestSlot(item, storage));
+    }
+
+    [Fact]
+    public void Rule9_BestSlotFallbackUsesDeclaredOrderAndSkipsHandSlots()
+    {
+        var identifiers = new[]
+        {
+            SlotIdentifier.Named(NamedSlot.leftHand),
+            SlotIdentifier.Indexed(0),
+            SlotIdentifier.Named(NamedSlot.rightHand),
+            SlotIdentifier.Named(NamedSlot.back),
+        };
+        var storage = new ItemStorage(identifiers, new AcceptAllCapacity());
+        var item = new TestItem("ordinary item");
+        var policy = new BestSlotForTrait(new[]
+        {
+            new TraitSlotMapping("tool", NamedSlot.belt),
+        });
+
+        Assert.Same(storage.GetIndexedItemSlot(0), policy.GetBestSlot(item, storage));
+    }
+
+    [Fact]
+    public void Rule9_BestSlotDoesNotApplyPreferencesWithoutTraitProvider()
+    {
+        var storage = new ItemStorage(new[]
+        {
+            SlotIdentifier.Named(NamedSlot.back), SlotIdentifier.Named(NamedSlot.belt)
+        }, new AcceptAllCapacity());
+        var item = new TestItem("ordinary item");
+        var policy = new BestSlotForTrait(new[]
+        {
+            new TraitSlotMapping(null, NamedSlot.belt),
+        });
+
+        Assert.Same(storage.GetNamedItemSlot(NamedSlot.back), policy.GetBestSlot(item, storage));
+    }
+
+    [Fact]
+    public void Rule9_CatchAllMappingMatchesItemsWithTraitData()
+    {
+        var storage = new ItemStorage(new[]
+        {
+            SlotIdentifier.Named(NamedSlot.back), SlotIdentifier.Named(NamedSlot.belt)
+        }, new AcceptAllCapacity());
+        var item = new TraitTestItem("unclassified item");
+        var policy = new BestSlotForTrait(new[]
+        {
+            new TraitSlotMapping(null, NamedSlot.belt),
+        });
+
+        Assert.Same(storage.GetNamedItemSlot(NamedSlot.belt), policy.GetBestSlot(item, storage));
+    }
+
+    [Fact]
+    public void Rule9_BestSlotReturnsNullWhenNothingCanFit()
+    {
+        var storage = new ItemStorage(new[] { SlotIdentifier.Named(NamedSlot.back) }, new RejectAllCapacity());
+        var policy = new BestSlotForTrait(new[] { new TraitSlotMapping(null, NamedSlot.back) });
+
+        Assert.Null(policy.GetBestSlot(new TestItem("item"), storage));
+        Assert.Null(policy.GetBestSlot(null, storage));
+        Assert.Null(policy.GetBestSlot(new TestItem("item"), null));
+    }
+
+    private sealed class RejectBackCapacity : IItemStorageCapacity
+    {
+        public bool CanFit(IPickupable toCheck, SlotIdentifier inSlot) =>
+            inSlot.NamedSlot != NamedSlot.back;
     }
 
     // --- Rule 6: Throw Ballistics ---
