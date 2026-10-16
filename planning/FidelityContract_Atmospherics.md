@@ -28,3 +28,17 @@ If a tile contains 5 or more moles of HyperNoblium, ALL chemical reactions on th
 ## Implementation Boundary
 - `Project.Common` MUST implement the pure math of `GasMix`, `AtmosTile`, and `AtmosSimulation`.
 - `game/` (Godot) MUST implement the TileMap overlay system, reading the `GasMix` from `Project.Common` to display the correct color overlays and ice effects.
+
+## Godot Frontend Visualization
+
+The Godot frontend MUST adapt each rendered tile to `IAtmosNode` and expose its `GasMix` by
+reference so `AtmosSimulation` remains authoritative. Neighbor registration MUST be
+deterministic in north, east, south, west order. The frontend MUST call the simulation on a
+fixed interval and render oxygen and plasma overlays from their current mole amounts. Fire
+and ice visuals MUST follow the simulation's `IAtmosVisualService` callbacks. Clicking a tile
+MUST print its pressure, temperature, total moles, and every tracked gas amount without
+mutating the mix.
+
+**Verification:** compile the Godot game project and launch the configured main scene in
+headless mode; inspect the frontend implementation for stable neighbor order and read-only
+debug output.
