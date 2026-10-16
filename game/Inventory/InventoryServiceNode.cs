@@ -189,6 +189,23 @@ public partial class InventoryServiceNode : Node, IInventoryProvider, IInteracti
 		UpdateActiveHandItem();
 	}
 
+	public bool RequestConsume(int slotId, int amount)
+	{
+		if (inventory == null || !slotsById.TryGetValue(slotId, out var slot)) return false;
+		var consumed = inventory.ServerConsume(slot, amount);
+		UpdateActiveHandItem();
+		return consumed;
+	}
+
+	public bool RequestVanishOne(int slotId)
+	{
+		if (inventory == null || !slotsById.TryGetValue(slotId, out var slot)) return false;
+		var removed = inventory.ServerVanishStackable(slot);
+		if (removed is Node node) node.QueueFree();
+		UpdateActiveHandItem();
+		return removed != null;
+	}
+
 	public void RequestPickup(int itemId)
 	{
 		if (inventory == null || playerStorage == null) return;
@@ -251,7 +268,10 @@ public partial class InventoryServiceNode : Node, IInventoryProvider, IInteracti
 			item is InteractableNode2D interactable ? interactable.InteractionEntity.Id : 0,
 			item?.Name ?? string.Empty,
 			itemNode?.ItemIconPath ?? string.Empty,
-			itemNode?.ItemDescription ?? string.Empty);
+			itemNode?.ItemDescription ?? string.Empty)
+		{
+			StackAmount = (item as IPickupable)?.Stackable?.Amount ?? 0,
+		};
 	}
 
 	private SlotData ToSlotData(ItemSlot slot)
@@ -271,7 +291,10 @@ public partial class InventoryServiceNode : Node, IInventoryProvider, IInteracti
 			item is InteractableNode2D interactable ? interactable.InteractionEntity.Id : 0,
 			item?.Name ?? string.Empty,
 			itemNode?.ItemIconPath ?? string.Empty,
-			itemNode?.ItemDescription ?? string.Empty);
+			itemNode?.ItemDescription ?? string.Empty)
+		{
+			StackAmount = (item as IPickupable)?.Stackable?.Amount ?? 0,
+		};
 	}
 
 	private void UpdateActiveHandItem()

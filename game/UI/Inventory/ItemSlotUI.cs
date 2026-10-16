@@ -25,6 +25,7 @@ namespace Godotstation.Game.UI.Inventory
 
 		private TextureRect icon = null!;
 		private Label slotLabel = null!;
+		private Label stackAmountLabel = null!;
 		private PopupMenu contextMenu = null!;
 
 		private bool isOccupied;
@@ -40,6 +41,7 @@ namespace Godotstation.Game.UI.Inventory
 		{
 			icon = GetNode<TextureRect>("Icon");
 			slotLabel = GetNode<Label>("SlotLabel");
+			stackAmountLabel = GetNode<Label>("StackAmount");
 
 			contextMenu = GetNode<PopupMenu>("ContextMenu");
 			contextMenu.AddItem("Drop", (int)MenuAction.Drop);
@@ -55,24 +57,26 @@ namespace Godotstation.Game.UI.Inventory
 		{
 			SlotId = data.SlotId;
 			SetSlotContents(data.Named.ToString(), data.IsOccupied, data.ItemId, data.ItemName,
-				data.ItemIconPath, data.ItemDescription);
+				data.ItemIconPath, data.ItemDescription, data.StackAmount);
 		}
 
 		public void SetStorageSlot(StorageSlotData data)
 		{
 			SlotId = data.SlotId;
 			SetSlotContents((data.Index + 1).ToString(), data.IsOccupied, data.ItemId, data.ItemName,
-				data.ItemIconPath, data.ItemDescription);
+				data.ItemIconPath, data.ItemDescription, data.StackAmount);
 		}
 
 		private void SetSlotContents(string displayName, bool occupied, int itemId, string itemName,
-			string itemIconPath, string itemDescription)
+			string itemIconPath, string itemDescription, int stackAmount)
 		{
 			isOccupied = occupied;
 			currentItemId = itemId;
 
 			slotLabel.Text = displayName;
 			slotLabel.Visible = occupied == false;
+			stackAmountLabel.Text = stackAmount.ToString();
+			stackAmountLabel.Visible = occupied && stackAmount > 1;
 
 			if (occupied
 			    && string.IsNullOrEmpty(itemIconPath) == false

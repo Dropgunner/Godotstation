@@ -371,7 +371,7 @@ public class InventoryFidelityTests
     [Fact]
     public void Rule5_TransferOntoCompatibleStackMerges()
     {
-        var (inv, _) = MakeSystem();
+        var (inv, world) = MakeSystem();
         var storage = MakeStorage();
         var from = storage.GetIndexedItemSlot(0)!;
         var to = storage.GetIndexedItemSlot(1)!;
@@ -388,6 +388,9 @@ public class InventoryFidelityTests
         Assert.Equal(15, targetStack.Amount);
         // target keeps its slot identity — no replacement happened
         Assert.Same(target, to.Item);
+        Assert.Null(from.Item);
+        Assert.Null(incoming.ItemSlot);
+        Assert.Contains(incoming, world.Despawned);
     }
 
     [Fact]
@@ -408,6 +411,49 @@ public class InventoryFidelityTests
         Assert.Null(incoming.ItemSlot);
         Assert.DoesNotContain(incoming, world.DisappearedFromWorld);
         Assert.Empty(world.Dropped);
+        Assert.Contains(incoming, world.Despawned);
+    }
+
+    [Fact]
+    public void Rule5_ConsumeUpdatesSlotAndDespawnsWhenStackIsEmpty()
+    {
+        var (inv, world) = MakeSystem();
+        var slot = MakeStorage().GetIndexedItemSlot(0)!;
+        var stack = new TestStack(3);
+        var item = new TestItem("metal") { Stackable = stack };
+        inv.ServerAdd(item, slot);
+        var updates = 0;
+        slot.OnSlotContentsChangeServer += () => updates++;
+
+        Assert.True(inv.ServerConsume(slot, 2));
+        Assert.Equal(1, stack.Amount);
+        Assert.Same(item, slot.Item);
+        Assert.Equal(1, updates);
+        Assert.True(inv.ServerConsume(slot, 1));
+        Assert.Null(slot.Item);
+        Assert.Null(item.ItemSlot);
+        Assert.Contains(item, world.Despawned);
+    }
+
+    [Fact]
+    public void VanishStackable_SplitsOneAndNotifiesRemainingStack()
+    {
+        var (inv, world) = MakeSystem();
+        var slot = MakeStorage().GetIndexedItemSlot(0)!;
+        var stack = new TestStack(3);
+        var item = new TestItem("metal") { Stackable = stack };
+        inv.ServerAdd(item, slot);
+        var updates = 0;
+        slot.OnSlotContentsChangeServer += () => updates++;
+
+        var removed = inv.ServerVanishStackable(slot);
+
+        Assert.NotNull(removed);
+        Assert.NotSame(item, removed);
+        Assert.Equal(2, stack.Amount);
+        Assert.Same(item, slot.Item);
+        Assert.Equal(1, updates);
+        Assert.Contains(removed, world.Vanished);
     }
 
     [Fact]

@@ -92,27 +92,27 @@ Rules for the loop:
 
 ---
 
-## 6. Current task — Wave 6 follow-up: nested storage HUD
+## 6. Current task — Wave 6 follow-up: stack support
 
-Prerequisite: inventory backend PR #8, frontend bridge PR #9, and playable HUD PR #10.
-Continue from `wave6/inventory-ui` on branch `wave6/nested-storage-ui`. Keep the engine's
-`ItemStorage` and `InventorySystem` authoritative. Preserve existing public signatures;
-add only the Common data and provider seams needed to represent indexed storage slots.
+Prerequisite: inventory backend PR #8, frontend bridge PR #9, playable HUD PR #10, and
+nested storage UI PR #11. Continue from `wave6/nested-storage-ui` on branch
+`wave6/stack-support`. Keep the engine's `IStackable` and `InventorySystem` authoritative.
+Preserve existing public signatures; add only the presentation data needed for stack counts.
 
 Deliver:
-1. Add an indexed `StorageSlotData` DTO and additive `IInventoryProvider` query/change event.
-2. Give nested storage slots stable presentation IDs and publish changes through the provider.
-3. Populate backpack and belt panels when opened; support transferring between an active
-   hand and nested slots through the existing `IInteractionService` request.
-4. Keep stack behavior, storage restrictions, multiplayer authority, animation, and aimed
-   throw effects for follow-up work.
+1. Add a Godot item adapter for stack compatibility, merging, consuming, and splitting.
+2. Keep merge/consume bookkeeping, observer notification, and world despawn authoritative
+   in `InventorySystem`; extend the fidelity contract/tests where existing stack behavior
+   leaves bookkeeping unspecified.
+3. Expose stack amount as additive presentation data and show a count on occupied HUD slots
+   only when the amount exceeds one.
+4. Preserve non-stackable behavior; leave partial-stack overflow and ground merging deferred.
 
-Next authorized PR after this one: stackable item behavior and presentation, first checking
-the existing fidelity contract and adding any missing acceptance criteria before code.
+No additional feature PR is authorized after this one.
 
-Gate: `bash tools/preflight.sh`, headless Godot startup, and a smoke check that picks up a
-four-slot bag, places it in Back, opens the panel, and transfers an item into a nested slot.
-Do not add a package or reimplement backend validation in `game/`.
+Gate: `bash tools/preflight.sh`, headless Godot startup, and a smoke check that merges two
+compatible stacks, shows the resulting HUD count, consumes a partial stack, splits one item,
+and removes the fully consumed remainder. Do not add a package or reimplement backend validation in `game/`.
 
 ---
 
@@ -120,14 +120,14 @@ Do not add a package or reimplement backend validation in `game/`.
 
 ```json
 {
-  "task": "wave6/nested-storage-ui",
-  "branch": "wave6/nested-storage-ui",
+  "task": "wave6/stack-support",
+  "branch": "wave6/stack-support",
   "commits": ["<sha> <message>"],
-  "route": "common",
-  "preflight": { "ok": true, "build": "pass", "test": "pass", "test_summary": "Passed! 174 passed, 8 skipped" },
-  "contract": { "inventory UI": "Indexed storage slots use StorageSlotData and InventorySystem requests" },
+  "route": "game",
+  "preflight": { "ok": true, "build": "pass", "test": "pass", "test_summary": "Passed! 176 passed, 8 skipped" },
+  "contract": { "inventory stack": "Stack amounts are backend-authoritative and HUD counts update on stack changes" },
   "handoffs": [],
-  "fidelity_todos": ["Container ancestry is group-driven; nested HUD and stack behavior remain deferred."],
+  "fidelity_todos": ["Container ancestry is group-driven; partial-stack overflow and ground merging remain deferred."],
   "blocked": null
 }
 ```
