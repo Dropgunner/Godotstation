@@ -10,7 +10,7 @@ Record the game commit, operating system, Godot version, whether this is an edit
 
 1. Ask the player: “Start a round and restore the station.”
 2. Observe whether they find the available job and understand how to start. Record the time and any hesitation.
-3. In the station, observe whether they can locate the inventory, equip the wrench, identify the relay panels, and understand how to interact. Record the first point where they pause or ask for help.
+3. In the station, ask the player to use W/A/S/D to approach the panels and left-click them. The wrench should start in the highlighted left-hand slot; note whether this is clear and whether each panel responds. Record the first point where they pause or ask for help.
 4. Let them complete the objective. Note whether each interaction produces clear progress feedback and whether the success result is understood.
 5. Ask them to return to job selection and start another round. Confirm whether they can restart without help and whether progress returns to 0/3 and time to 90 seconds.
 
