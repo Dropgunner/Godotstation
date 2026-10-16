@@ -183,6 +183,47 @@ public class InventoryFidelityTests
         public void PlayAtSource(string soundId, ItemSlot sourceSlot) => Requests.Add((soundId, sourceSlot));
     }
 
+    private sealed class GroundTestStack(int amount, int maxAmount) : IStackable
+    {
+        public int Amount { get; private set; } = amount;
+        public int MaxAmount { get; } = maxAmount;
+
+        public bool CanAccommodate(IPickupable other) =>
+            other.Stackable is GroundTestStack && Amount < MaxAmount;
+
+        public void ServerCombine(IStackable other)
+        {
+            var consumed = Math.Min(other.Amount, MaxAmount - Amount);
+            Amount += consumed;
+            other.ServerConsume(consumed);
+        }
+
+        public bool ServerConsume(int amountToConsume)
+        {
+            if (amountToConsume < 0 || amountToConsume > Amount) return false;
+            Amount -= amountToConsume;
+            return true;
+        }
+
+        public IPickupable ServerRemoveOne()
+        {
+            if (Amount <= 0) throw new InvalidOperationException("Cannot split an empty test stack.");
+            Amount--;
+            return new TestItem("split-ground-stack");
+        }
+    }
+
+    private sealed class TestGroundStackWorld : IGroundStackWorld
+    {
+        private readonly HashSet<IPickupable> uninitialized = new(ReferenceEqualityComparer.Instance);
+        public bool AutoStackEnabled { get; set; } = true;
+        public List<IPickupable> Candidates { get; } = new();
+        public bool CanAutoStack(IPickupable item) => AutoStackEnabled;
+        public IEnumerable<IPickupable> GetGroundStacks(IPickupable item) => Candidates;
+        public bool IsStackInitialized(IPickupable item) => !uninitialized.Contains(item);
+        public void MarkUninitialized(IPickupable item) => uninitialized.Add(item);
+    }
+
     private class RecordingHook : IServerInventoryMove
     {
         public List<InventoryMove> Moves { get; } = new List<InventoryMove>();
@@ -1113,6 +1154,62 @@ public class InventoryFidelityTests
         Assert.True(inventory.ServerAdd(new SoundTestItem("empty sound id", "  "), emptyIdSlot));
         Assert.True(inventory.ServerDespawn(emptyIdSlot));
         Assert.Single(transport.Requests);
+    }
+
+    [Fact]
+    public void Rule16_DropMergesGroundStacksWithinCapacityAndDespawnsOnlyEmptyCandidates()
+    {
+        var (inventory, world) = MakeSystem();
+        var ground = new TestGroundStackWorld();
+        inventory.GroundStackWorld = ground;
+        var source = MakeStorage(indexedSlots: 1).GetIndexedItemSlot(0)!;
+        var targetStack = new GroundTestStack(8, 10);
+        var target = new TestItem("dropped target") { Stackable = targetStack };
+        var consumed = new TestItem("fully consumed") { Stackable = new GroundTestStack(1, 10) };
+        var remainderStack = new GroundTestStack(4, 10);
+        var remainder = new TestItem("partial remainder") { Stackable = remainderStack };
+        Assert.True(inventory.ServerAdd(target, source));
+        ground.Candidates.Add(target);
+        ground.Candidates.Add(consumed);
+        ground.Candidates.Add(remainder);
+
+        Assert.True(inventory.ServerDrop(source));
+
+        Assert.Equal(10, targetStack.Amount);
+        Assert.Equal(0, consumed.Stackable!.Amount);
+        Assert.Equal(3, remainderStack.Amount);
+        Assert.Equal(new[] { consumed }, world.Despawned);
+        Assert.Contains(target, world.Dropped);
+    }
+
+    [Fact]
+    public void Rule16_AutoStackGateSkipsSelfUninitializedAndNonStackableCandidates()
+    {
+        var (inventory, world) = MakeSystem();
+        var ground = new TestGroundStackWorld();
+        inventory.GroundStackWorld = ground;
+        var targetStack = new GroundTestStack(1, 5);
+        var target = new TestItem("target") { Stackable = targetStack };
+        var pending = new TestItem("uninitialized") { Stackable = new GroundTestStack(2, 5) };
+        var plain = new TestItem("not stackable");
+        var readyStack = new GroundTestStack(1, 5);
+        var ready = new TestItem("ready") { Stackable = readyStack };
+        ground.Candidates.Add(target);
+        ground.Candidates.Add(pending);
+        ground.Candidates.Add(plain);
+        ground.Candidates.Add(ready);
+        ground.MarkUninitialized(pending);
+
+        ground.AutoStackEnabled = false;
+        Assert.Equal(0, inventory.ServerStackOnGround(target));
+        Assert.Equal(1, targetStack.Amount);
+
+        ground.AutoStackEnabled = true;
+        Assert.Equal(1, inventory.ServerStackOnGround(target));
+        Assert.Equal(2, targetStack.Amount);
+        Assert.Equal(2, pending.Stackable!.Amount);
+        Assert.Equal(0, readyStack.Amount);
+        Assert.Equal(new[] { ready }, world.Despawned);
     }
 
     private sealed class RejectBackCapacity : IItemStorageCapacity
