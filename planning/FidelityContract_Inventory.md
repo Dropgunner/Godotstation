@@ -148,6 +148,24 @@ denied items cannot merge into occupied stacks; allowed and unidentified items s
 parent storage's deny flags do not affect nested storage; enum ordinals match the source;
 `ignoreRestraints` bypasses the deny rule.
 
+## FC-9: Trait-Based Best Slot Selection
+
+`BestSlotForTrait` MUST examine configured mappings in declaration order. A mapping with a
+trait applies only when the item implements `IItemTraitProvider` and has that trait; a mapping
+without a trait matches any item that provides trait data. The first matching named slot that
+passes `ItemSlot.CanFit` MUST be returned. If no preference fits, fallback MUST select the
+first fitting slot in storage declaration order, excluding the named left and right hand
+slots. Items without trait data skip preference mappings and use fallback. Null item/storage
+inputs and storages with no eligible fitting slot return null. UI slot linkage is not part of
+this engine contract.
+
+Trait ids are ordinal, case-sensitive strings at this engine boundary; the Godot/content layer
+is responsible for assigning stable ids to source traits.
+
+**Tests:** verify mapping order and trait matching, continuation when a preferred slot cannot
+fit, declaration-order fallback, hand-slot exclusion, missing trait data fallback, and null
+when no slot fits.
+
 ## Additional move bookkeeping assertions
 
 Successful moves MUST keep `ItemSlot.Item` and `IPickupable.ItemSlot` consistent, notify
@@ -177,5 +195,5 @@ world effect without reading the source slot after it has been emptied.
 
 Observer players and `UpdateItemNSlotMessage` network messages; client prediction and
 `ClientRequestTransfer`; UI slot linkage; populators and spawning; trait-based
-`GetBestSlotFor` (`BestSlotForTrait`); EMP propagation; inventory sounds; and
-`Stackable.ServerStackOnGround` ground merging are outside this contract.
+EMP propagation; inventory sounds; and `Stackable.ServerStackOnGround` ground merging are
+outside this contract.
