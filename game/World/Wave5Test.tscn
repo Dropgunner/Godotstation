@@ -8,6 +8,7 @@
 [ext_resource type="Script" path="res://Input/InteractionInputController.cs" id="5_input"]
 [ext_resource type="Script" path="res://Player/MovementInputController.cs" id="6_movement"]
 [ext_resource type="PackedScene" path="res://UI/Inventory/InventoryUI.tscn" id="8_inventory_ui"]
+[ext_resource type="Script" path="res://Atmos/AtmosGridNode2D.cs" id="9_atmos_grid"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_target"]
 size = Vector2(0.8, 0.8)
@@ -130,6 +131,10 @@ position = Vector2(2, 0)
 [node name="WallView" type="Polygon2D" parent="Wall"]
 color = Color(0.35, 0.35, 0.4, 1)
 polygon = PackedVector2Array(-0.4, -0.4, 0.4, -0.4, 0.4, 0.4, -0.4, 0.4)
+
+[node name="AtmosGrid" type="Node2D" parent="."]
+position = Vector2(-6, -6)
+script = ExtResource("9_atmos_grid")
 
 [node name="InteractionInput" type="Node" parent="."]
 script = ExtResource("5_input")
