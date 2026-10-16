@@ -48,4 +48,13 @@ public partial class PlayerCharacter : CharacterBody2D, IPerformer
 	{
 		GetNodeOrNull<InventoryServiceNode>("/root/Inventory")?.UnregisterPlayer(this);
 	}
+
+	/// <summary>Routes a selected world target through the shared interaction dispatcher.</summary>
+	public bool TryInteractWith(InteractableNode2D target, Vector2 targetPosition, bool isAltClick = false)
+	{
+		var dispatcher = GetNode<Godotstation.Game.Input.InteractionServiceNode>("/root/Interaction").Dispatcher;
+		var worldPosition = new NumericsVector2(targetPosition.X, targetPosition.Y);
+		return dispatcher.TryResolveClick(this, ActiveItemForInteractions, target, worldPosition,
+			CurrentIntent, isAltClick, NetworkSide.Server);
+	}
 }

@@ -1,8 +1,6 @@
 using Godot;
-using Godotstation.Common.Interactions;
 using Godotstation.Game.Player;
 using Godotstation.Game.World;
-using NumericsVector2 = System.Numerics.Vector2;
 
 namespace Godotstation.Game.Input;
 
@@ -10,12 +8,10 @@ public partial class InteractionInputController : Node
 {
 	[Export] public NodePath PlayerPath { get; set; } = null!;
 	private PlayerCharacter player = null!;
-	private InteractionDispatcher dispatcher = null!;
 
 	public override void _Ready()
 	{
 		player = GetNode<PlayerCharacter>(PlayerPath);
-		dispatcher = GetNode<InteractionServiceNode>("/root/Interaction").Dispatcher;
 	}
 
 	public override void _UnhandledInput(InputEvent @event)
@@ -38,9 +34,8 @@ public partial class InteractionInputController : Node
 			if (target != null) break;
 		}
 
-		var position = new NumericsVector2(mouse.X, mouse.Y);
-		dispatcher.TryResolveClick(player, player.ActiveItemForInteractions, target, position,
-			player.CurrentIntent, Godot.Input.IsKeyPressed(Key.Alt), NetworkSide.Server);
+		if (target != null)
+			player.TryInteractWith(target, mouse, Godot.Input.IsKeyPressed(Key.Alt));
 		GetViewport().SetInputAsHandled();
 	}
 }
