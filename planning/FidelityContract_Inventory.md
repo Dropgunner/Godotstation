@@ -255,6 +255,17 @@ supplies source-specific resistance policy and EMP dispatch.
 **Tests:** verify nested traversal order, multiple behaviors on one item, resistant-container
 short-circuiting, duplicate/cyclic references, and delivered EMP strength.
 
+## FC-15: Inventory removal sounds
+
+After a successful inventory move, the engine MUST request the moved item's inventory-remove
+sound at the source slot when the item supplies a non-empty sound identifier and the move has
+a source slot. Adds with no source slot and rejected moves MUST NOT request a sound. The
+frontend transport resolves source storage position and performs playback; simulation code
+does not depend on an audio engine.
+
+**Tests:** verify sound requests on successful Transfer and Remove, the original source slot
+is supplied, and Add, rejected moves, and missing sound identifiers remain silent.
+
 ## Deferred behavior
 
 UI slot linkage; recursive population of
