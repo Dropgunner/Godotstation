@@ -21,9 +21,12 @@ namespace Godotstation.Common.Interactions
 	{
 		IReadOnlyList<SlotData> GetPlayerSlots(int playerId);
 		SlotData GetSlot(int slotId);
+		IReadOnlyList<StorageSlotData> GetStorageSlots(int itemId);
 
 		/// <summary>Fired when a slot's content changes. May fire from the net thread — UI must marshal.</summary>
 		event Action<int, SlotData> OnSlotChanged;
+		/// <summary>Fired when an indexed storage slot changes. UI must marshal before touching nodes.</summary>
+		event Action<int, StorageSlotData> OnStorageSlotChanged;
 	}
 
 	public interface ILobbyService
@@ -132,7 +135,23 @@ namespace Godotstation.Common.Interactions
 		int ItemId,
 		string ItemName,
 		string ItemIconPath,
-		string ItemDescription);
+		string ItemDescription)
+	{
+		public int StackAmount { get; init; } = 1;
+	}
+
+	/// <summary>Presentation data for an indexed slot inside an item storage.</summary>
+	public sealed record StorageSlotData(
+		int SlotId,
+		int Index,
+		bool IsOccupied,
+		int ItemId,
+		string ItemName,
+		string ItemIconPath,
+		string ItemDescription)
+	{
+		public int StackAmount { get; init; } = 1;
+	}
 
 	public sealed record JobData(
 		int JobId,

@@ -44,12 +44,14 @@ public partial class InventoryServiceNode : Node, IInventoryProvider, IInteracti
 	private readonly Dictionary<ItemSlot, int> idsBySlot = new();
 	private readonly Dictionary<int, ItemSlot> slotsById = new();
 	private readonly Dictionary<ItemStorage, Node2D> holdersByStorage = new();
+	private readonly Dictionary<int, List<ItemStorage>> storagesByItemId = new();
 	private PlayerCharacter? player;
 	private ItemStorage? playerStorage;
 	private InventorySystem? inventory;
 	private int nextSlotId = 1;
 
 	public event Action<int, SlotData>? OnSlotChanged;
+	public event Action<int, StorageSlotData>? OnStorageSlotChanged;
 
 	public override void _Ready()
 	{
@@ -105,6 +107,7 @@ public partial class InventoryServiceNode : Node, IInventoryProvider, IInteracti
 		idsBySlot.Clear();
 		slotsById.Clear();
 		holdersByStorage.Clear();
+		storagesByItemId.Clear();
 		nextSlotId = 1;
 		UiServices.ActiveHandSlotId = -1;
 	}
@@ -133,6 +136,12 @@ public partial class InventoryServiceNode : Node, IInventoryProvider, IInteracti
 		}
 
 		return ToSlotData(slot);
+	}
+
+	public IReadOnlyList<StorageSlotData> GetStorageSlots(int itemId)
+	{
+		if (!storagesByItemId.TryGetValue(itemId, out var storages)) return Array.Empty<StorageSlotData>();
+		return storages.SelectMany(storage => storage.GetItemSlots()).Select(ToStorageSlotData).ToArray();
 	}
 
 	public void RequestHandApply(int performerId, int targetId, BodyPart targetPart, bool isAltClick)
@@ -180,6 +189,23 @@ public partial class InventoryServiceNode : Node, IInventoryProvider, IInteracti
 		UpdateActiveHandItem();
 	}
 
+	public bool RequestConsume(int slotId, int amount)
+	{
+		if (inventory == null || !slotsById.TryGetValue(slotId, out var slot)) return false;
+		var consumed = inventory.ServerConsume(slot, amount);
+		UpdateActiveHandItem();
+		return consumed;
+	}
+
+	public bool RequestVanishOne(int slotId)
+	{
+		if (inventory == null || !slotsById.TryGetValue(slotId, out var slot)) return false;
+		var removed = inventory.ServerVanishStackable(slot);
+		if (removed is Node node) node.QueueFree();
+		UpdateActiveHandItem();
+		return removed != null;
+	}
+
 	public void RequestPickup(int itemId)
 	{
 		if (inventory == null || playerStorage == null) return;
@@ -193,20 +219,25 @@ public partial class InventoryServiceNode : Node, IInventoryProvider, IInteracti
 	{
 		foreach (var slot in storage.GetItemSlots())
 		{
-			if (idsBySlot.ContainsKey(slot)) continue;
-			var id = nextSlotId++;
-			idsBySlot.Add(slot, id);
-			slotsById.Add(id, slot);
-			slot.OnSlotContentsChangeServer += () => OnSlotChanged?.Invoke(id, ToSlotData(slot));
+			GetSlotId(slot);
 		}
 	}
 
 	private void RegisterNestedStorages(IPickupable item)
 	{
-		if (item is not Node2D itemNode) return;
+		if (item is not Node2D itemNode || item is not InteractableNode2D interactableItem) return;
+		if (!storagesByItemId.TryGetValue(interactableItem.InteractionEntity.Id, out var itemStorages))
+		{
+			itemStorages = new List<ItemStorage>();
+			storagesByItemId.Add(interactableItem.InteractionEntity.Id, itemStorages);
+		}
+
 		foreach (var storage in item.ItemStorages)
 		{
-			if (!holdersByStorage.ContainsKey(storage)) holdersByStorage.Add(storage, itemNode);
+			if (itemStorages.Contains(storage)) continue;
+			itemStorages.Add(storage);
+			holdersByStorage[storage] = itemNode;
+			TrackStorage(storage);
 		}
 	}
 
@@ -216,8 +247,31 @@ public partial class InventoryServiceNode : Node, IInventoryProvider, IInteracti
 		id = nextSlotId++;
 		idsBySlot.Add(slot, id);
 		slotsById.Add(id, slot);
-		slot.OnSlotContentsChangeServer += () => OnSlotChanged?.Invoke(id, ToSlotData(slot));
+		slot.OnSlotContentsChangeServer += () =>
+		{
+			if (slot.NamedSlot is null)
+				OnStorageSlotChanged?.Invoke(id, ToStorageSlotData(slot));
+			else
+				OnSlotChanged?.Invoke(id, ToSlotData(slot));
+		};
 		return id;
+	}
+
+	private StorageSlotData ToStorageSlotData(ItemSlot slot)
+	{
+		var item = slot.Item;
+		var itemNode = item as InventoryItemNode2D;
+		return new StorageSlotData(
+			GetSlotId(slot),
+			slot.SlotIdentifier.SlotIndex,
+			item != null,
+			item is InteractableNode2D interactable ? interactable.InteractionEntity.Id : 0,
+			item?.Name ?? string.Empty,
+			itemNode?.ItemIconPath ?? string.Empty,
+			itemNode?.ItemDescription ?? string.Empty)
+		{
+			StackAmount = (item as IPickupable)?.Stackable?.Amount ?? 0,
+		};
 	}
 
 	private SlotData ToSlotData(ItemSlot slot)
@@ -237,7 +291,10 @@ public partial class InventoryServiceNode : Node, IInventoryProvider, IInteracti
 			item is InteractableNode2D interactable ? interactable.InteractionEntity.Id : 0,
 			item?.Name ?? string.Empty,
 			itemNode?.ItemIconPath ?? string.Empty,
-			itemNode?.ItemDescription ?? string.Empty);
+			itemNode?.ItemDescription ?? string.Empty)
+		{
+			StackAmount = (item as IPickupable)?.Stackable?.Amount ?? 0,
+		};
 	}
 
 	private void UpdateActiveHandItem()

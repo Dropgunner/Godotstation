@@ -98,6 +98,9 @@ public sealed class ItemSlot
     /// </summary>
     public void ServerRemoveItem() => ServerSetItem(null);
 
+    /// <summary>Notifies observers when item state changes without changing slot membership.</summary>
+    internal void ServerNotifyContentsChanged() => OnSlotContentsChangeServer?.Invoke();
+
     /// <summary>
     /// Checks if the indicated item can fit in this slot: slot enabled, no inventory
     /// hierarchy loop (Rule 4), stacking rules when occupied (Rule 5), and the storage's

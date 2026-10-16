@@ -77,6 +77,7 @@ position = Vector2(0, 1.2)
 script = ExtResource("7_inventory_item")
 Id = "demo-toolbox"
 ItemName = "Toolbox"
+IndexedStorageSlots = 4
 
 [node name="ToolboxView" type="Polygon2D" parent="Toolbox"]
 color = Color(0.7, 0.5, 0.2, 1)
@@ -85,6 +86,42 @@ polygon = PackedVector2Array(-0.3, -0.2, 0.3, -0.2, 0.3, 0.2, -0.3, 0.2)
 [node name="ToolboxArea" type="Area2D" parent="Toolbox"]
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Toolbox/ToolboxArea"]
+shape = SubResource("RectangleShape2D_target")
+
+[node name="MetalA" type="Node2D" parent="."]
+position = Vector2(-1.2, 1.2)
+script = ExtResource("7_inventory_item")
+Id = "demo-metal-a"
+ItemName = "Metal"
+StackTypeId = "metal-sheet"
+StackAmount = 4
+MaxStackAmount = 10
+
+[node name="MetalAView" type="Polygon2D" parent="MetalA"]
+color = Color(0.7, 0.75, 0.82, 1)
+polygon = PackedVector2Array(-0.25, -0.2, 0.25, -0.2, 0.25, 0.2, -0.25, 0.2)
+
+[node name="MetalAArea" type="Area2D" parent="MetalA"]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="MetalA/MetalAArea"]
+shape = SubResource("RectangleShape2D_target")
+
+[node name="MetalB" type="Node2D" parent="."]
+position = Vector2(1.2, 1.2)
+script = ExtResource("7_inventory_item")
+Id = "demo-metal-b"
+ItemName = "Metal"
+StackTypeId = "metal-sheet"
+StackAmount = 3
+MaxStackAmount = 10
+
+[node name="MetalBView" type="Polygon2D" parent="MetalB"]
+color = Color(0.7, 0.75, 0.82, 1)
+polygon = PackedVector2Array(-0.25, -0.2, 0.25, -0.2, 0.25, 0.2, -0.25, 0.2)
+
+[node name="MetalBArea" type="Area2D" parent="MetalB"]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="MetalB/MetalBArea"]
 shape = SubResource("RectangleShape2D_target")
 
 [node name="Wall" type="Node2D" parent="." groups=["solid"]]

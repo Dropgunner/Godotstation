@@ -25,9 +25,11 @@ namespace Godotstation.Game.UI.Inventory
 
 		private TextureRect icon = null!;
 		private Label slotLabel = null!;
+		private Label stackAmountLabel = null!;
 		private PopupMenu contextMenu = null!;
 
-		private SlotData? current;
+		private bool isOccupied;
+		private int currentItemId;
 
 		private enum MenuAction
 		{
@@ -39,6 +41,7 @@ namespace Godotstation.Game.UI.Inventory
 		{
 			icon = GetNode<TextureRect>("Icon");
 			slotLabel = GetNode<Label>("SlotLabel");
+			stackAmountLabel = GetNode<Label>("StackAmount");
 
 			contextMenu = GetNode<PopupMenu>("ContextMenu");
 			contextMenu.AddItem("Drop", (int)MenuAction.Drop);
@@ -52,17 +55,34 @@ namespace Godotstation.Game.UI.Inventory
 		/// <summary>Render the slot's current content. Called by InventoryUI on OnSlotChanged.</summary>
 		public void SetSlot(SlotData data)
 		{
-			current = data;
 			SlotId = data.SlotId;
+			SetSlotContents(data.Named.ToString(), data.IsOccupied, data.ItemId, data.ItemName,
+				data.ItemIconPath, data.ItemDescription, data.StackAmount);
+		}
 
-			slotLabel.Text = data.Named.ToString();
-			slotLabel.Visible = data.IsOccupied == false;
+		public void SetStorageSlot(StorageSlotData data)
+		{
+			SlotId = data.SlotId;
+			SetSlotContents((data.Index + 1).ToString(), data.IsOccupied, data.ItemId, data.ItemName,
+				data.ItemIconPath, data.ItemDescription, data.StackAmount);
+		}
 
-			if (data.IsOccupied
-			    && string.IsNullOrEmpty(data.ItemIconPath) == false
-			    && ResourceLoader.Exists(data.ItemIconPath))
+		private void SetSlotContents(string displayName, bool occupied, int itemId, string itemName,
+			string itemIconPath, string itemDescription, int stackAmount)
+		{
+			isOccupied = occupied;
+			currentItemId = itemId;
+
+			slotLabel.Text = displayName;
+			slotLabel.Visible = occupied == false;
+			stackAmountLabel.Text = stackAmount.ToString();
+			stackAmountLabel.Visible = occupied && stackAmount > 1;
+
+			if (occupied
+			    && string.IsNullOrEmpty(itemIconPath) == false
+			    && ResourceLoader.Exists(itemIconPath))
 			{
-				icon.Texture = ResourceLoader.Load<Texture2D>(data.ItemIconPath);
+				icon.Texture = ResourceLoader.Load<Texture2D>(itemIconPath);
 			}
 			else
 			{
@@ -70,9 +90,9 @@ namespace Godotstation.Game.UI.Inventory
 			}
 
 			// Hover tooltip: item name + flavor text, or the slot's own name.
-			TooltipText = data.IsOccupied
-				? $"{data.ItemName}\n{data.ItemDescription}"
-				: data.Named.ToString();
+			TooltipText = occupied
+				? $"{itemName}\n{itemDescription}"
+				: displayName;
 		}
 
 		/// <summary>Active-hand highlight (only meaningful for hand slots).</summary>
@@ -94,7 +114,7 @@ namespace Godotstation.Game.UI.Inventory
 					EmitSignal(SignalName.SlotClicked, SlotId, click.AltPressed);
 					break;
 
-				case MouseButton.Right when current is { IsOccupied: true }:
+				case MouseButton.Right when isOccupied:
 					contextMenu.Position = (Vector2I)GetScreenPosition() + (Vector2I)click.Position;
 					contextMenu.Popup();
 					break;
@@ -109,10 +129,10 @@ namespace Godotstation.Game.UI.Inventory
 					UiServices.Interactions.RequestDrop(SlotId);
 					break;
 
-				case MenuAction.Examine when current is { IsOccupied: true }:
+				case MenuAction.Examine when isOccupied:
 					// Examine is a hand-apply on the item with alt semantics.
 					UiServices.Interactions.RequestHandApply(
-						UiServices.LocalPlayerId, current.ItemId, BodyPart.Chest, isAltClick: true);
+						UiServices.LocalPlayerId, currentItemId, BodyPart.Chest, isAltClick: true);
 					break;
 			}
 		}
@@ -121,7 +141,7 @@ namespace Godotstation.Game.UI.Inventory
 
 		public override Variant _GetDragData(Vector2 atPosition)
 		{
-			if (current is not { IsOccupied: true })
+			if (!isOccupied)
 			{
 				return default;
 			}

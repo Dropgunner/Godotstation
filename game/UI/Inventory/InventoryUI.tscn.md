@@ -28,6 +28,7 @@ ItemSlotUI (PanelContainer, min 44×44)               [script: ItemSlotUI.cs]
 ├── %Icon (TextureRect, full rect, keep aspect centered)
 └── %SlotLabel (Label, centered, small, 50% alpha)   — slot name when empty
 └── ContextMenu (PopupMenu)                          — Drop / Examine
+└── StackAmount (Label, top-right)                   — visible only above one
 ```
 
 ## Behaviour parity notes
@@ -36,8 +37,8 @@ ItemSlotUI (PanelContainer, min 44×44)               [script: ItemSlotUI.cs]
   the Unity HUD arrangement: head column center-top, eyes/mask/ear row, suit
   row, bottom bar Back/Belt/Pocket1/Pocket2/ID. Offsets are per-slot constants,
   not a container, because the doll is not a grid.
-- **Active hand**: gold `SelfModulate` tint on the active hand slot; clicking an
-  empty hand slot switches hands locally (no server round-trip — matches Unity).
+- **Active hand**: gold `SelfModulate` tint on the active hand slot; clicking
+  either hand switches hands locally (no server round-trip).
 - **Drag & drop**: Godot-native (`_GetDragData` → `DragPreview.For(texture)` at
   70% alpha as the ghost, `_DropData` → `RequestInventoryTransfer`). Cancelled
   drags need no code — the engine drops the preview.

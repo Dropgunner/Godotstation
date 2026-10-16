@@ -27,6 +27,8 @@ namespace Godotstation.Game.UI.Inventory
 		private PanelContainer beltPanel = null!;
 
 		private readonly Dictionary<int, ItemSlotUI> slotsById = new Dictionary<int, ItemSlotUI>();
+		private readonly Dictionary<int, ItemSlotUI> storageSlotViewsById = new Dictionary<int, ItemSlotUI>();
+		private readonly Dictionary<int, StorageSlotData> storageSlotsById = new Dictionary<int, StorageSlotData>();
 		private IInventoryProvider inventory = null!;
 
 		/// <summary>
@@ -69,6 +71,8 @@ namespace Godotstation.Game.UI.Inventory
 
 			inventory.OnSlotChanged += (slotId, data) =>
 				Callable.From(() => ApplySlotChange(slotId, data)).CallDeferred();
+			inventory.OnStorageSlotChanged += (slotId, data) =>
+				Callable.From(() => ApplyStorageSlotChange(slotId, data)).CallDeferred();
 
 			Rebuild();
 		}
@@ -132,6 +136,10 @@ namespace Godotstation.Game.UI.Inventory
 			if (slotsById.TryGetValue(slotId, out ItemSlotUI? slot))
 			{
 				slot.SetSlot(data);
+				if (data.Named == NamedSlot.Back && backpackPanel.Visible)
+					PopulateStorage(backpackGrid, inventory.GetStorageSlots(data.ItemId));
+				if (data.Named == NamedSlot.Belt && beltPanel.Visible)
+					PopulateStorage(beltGrid, inventory.GetStorageSlots(data.ItemId));
 			}
 			else
 			{
@@ -143,13 +151,23 @@ namespace Godotstation.Game.UI.Inventory
 
 		private void OnSlotClicked(int slotId, bool isAltClick)
 		{
+			if (storageSlotsById.TryGetValue(slotId, out StorageSlotData? storageSlot))
+			{
+				if (UiServices.ActiveHandSlotId >= 0 && slotId != UiServices.ActiveHandSlotId)
+				{
+					UiServices.Interactions.RequestInventoryTransfer(
+						storageSlot.IsOccupied ? slotId : UiServices.ActiveHandSlotId,
+						storageSlot.IsOccupied ? UiServices.ActiveHandSlotId : slotId);
+				}
+
+				return;
+			}
+
 			SlotData clicked = inventory.GetSlot(slotId);
 
-			// Clicking a hand selects it as the active hand (empty click),
-			// mirroring the original's hand-swap behaviour.
+			// Clicking either hand selects it as the active hand.
 			if (clicked.Named is NamedSlot.LeftHand or NamedSlot.RightHand
-			    && slotId != UiServices.ActiveHandSlotId
-			    && clicked.IsOccupied == false)
+			    && slotId != UiServices.ActiveHandSlotId)
 			{
 				UiServices.ActiveHandSlotId = slotId;
 				UpdateActiveHandHighlight();
@@ -159,13 +177,17 @@ namespace Godotstation.Game.UI.Inventory
 			// Expandable storage: clicking an occupied back/belt slot toggles its panel.
 			if (clicked.Named == NamedSlot.Back && clicked.IsOccupied)
 			{
-				backpackPanel.Visible = backpackPanel.Visible == false;
+				backpackPanel.Visible = !backpackPanel.Visible;
+				if (backpackPanel.Visible)
+					PopulateStorage(backpackGrid, inventory.GetStorageSlots(clicked.ItemId));
 				return;
 			}
 
 			if (clicked.Named == NamedSlot.Belt && clicked.IsOccupied)
 			{
-				beltPanel.Visible = beltPanel.Visible == false;
+				beltPanel.Visible = !beltPanel.Visible;
+				if (beltPanel.Visible)
+					PopulateStorage(beltGrid, inventory.GetStorageSlots(clicked.ItemId));
 				return;
 			}
 
@@ -202,6 +224,37 @@ namespace Godotstation.Game.UI.Inventory
 			{
 				grid.AddChild(MakeSlot(data));
 			}
+		}
+
+		public void PopulateStorage(GridContainer grid, IReadOnlyList<StorageSlotData> contents)
+		{
+			foreach (Node child in grid.GetChildren())
+			{
+				if (child is ItemSlotUI oldSlot)
+				{
+					storageSlotViewsById.Remove(oldSlot.SlotId);
+					storageSlotsById.Remove(oldSlot.SlotId);
+				}
+
+				child.QueueFree();
+			}
+
+			foreach (StorageSlotData data in contents)
+			{
+				var slot = itemSlotScene.Instantiate<ItemSlotUI>();
+				storageSlotsById[data.SlotId] = data;
+				storageSlotViewsById[data.SlotId] = slot;
+				slot.SlotClicked += OnSlotClicked;
+				slot.Ready += () => slot.SetStorageSlot(data);
+				grid.AddChild(slot);
+			}
+		}
+
+		private void ApplyStorageSlotChange(int slotId, StorageSlotData data)
+		{
+			storageSlotsById[slotId] = data;
+			if (storageSlotViewsById.TryGetValue(slotId, out ItemSlotUI? slot))
+				slot.SetStorageSlot(data);
 		}
 	}
 }
