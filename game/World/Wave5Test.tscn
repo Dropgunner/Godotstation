@@ -77,6 +77,7 @@ position = Vector2(0, 1.2)
 script = ExtResource("7_inventory_item")
 Id = "demo-toolbox"
 ItemName = "Toolbox"
+IndexedStorageSlots = 4
 
 [node name="ToolboxView" type="Polygon2D" parent="Toolbox"]
 color = Color(0.7, 0.5, 0.2, 1)
