@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Collections.Generic;
 using System.Numerics;
 using Godotstation.Engine.Movement;
 
@@ -16,6 +17,10 @@ namespace Godotstation.Engine.Inventory;
 public sealed class InventorySystem
 {
     private readonly IInventoryWorld world;
+    private readonly Dictionary<ItemSlot, SlotObservers> slotObservers = new();
+
+    /// <summary>Optional transport used for authoritative observer updates.</summary>
+    public IInventoryObserverTransport? ObserverTransport { get; set; }
 
     /// <summary>Raised after any move performs successfully (sound/UI hook for the frontend).</summary>
     public event Action<InventoryMove>? OnMovePerformed;
@@ -23,6 +28,58 @@ public sealed class InventorySystem
     public InventorySystem(IInventoryWorld world)
     {
         this.world = world;
+    }
+
+    /// <summary>Adds a slot observer and immediately sends its current state.</summary>
+    public void ServerAddObserver(ItemSlot slot, string observerId)
+    {
+        if (ObserverTransport == null) return;
+
+        if (slotObservers.TryGetValue(slot, out var observers) == false)
+        {
+            observers = new SlotObservers(() => NotifyObservers(slot));
+            slotObservers.Add(slot, observers);
+            slot.OnSlotContentsChangeServer += observers.OnContentsChanged;
+        }
+
+        observers.ObserverIds.Add(observerId);
+        ObserverTransport.Send(observerId, CreateUpdate(slot));
+    }
+
+    /// <summary>Removes a slot observer and sends the empty-slot update used to clear its view.</summary>
+    public void ServerRemoveObserver(ItemSlot slot, string observerId)
+    {
+        if (slotObservers.TryGetValue(slot, out var observers) == false ||
+            observers.ObserverIds.Remove(observerId) == false)
+        {
+            return;
+        }
+
+        ObserverTransport?.Send(observerId, CreateUpdate(slot, clearItem: true));
+        if (observers.ObserverIds.Count != 0) return;
+
+        slot.OnSlotContentsChangeServer -= observers.OnContentsChanged;
+        slotObservers.Remove(slot);
+    }
+
+    private void NotifyObservers(ItemSlot slot)
+    {
+        if (ObserverTransport == null || slotObservers.TryGetValue(slot, out var observers) == false)
+            return;
+
+        var update = CreateUpdate(slot);
+        foreach (var observerId in observers.ObserverIds)
+            ObserverTransport.Send(observerId, update);
+    }
+
+    private static InventorySlotUpdate CreateUpdate(ItemSlot slot, bool clearItem = false) =>
+        new(slot.ItemStorage, slot.SlotIdentifier, clearItem ? null : slot.Item,
+            slot.ItemNotRemovable, clearItem);
+
+    private sealed class SlotObservers(Action onContentsChanged)
+    {
+        public HashSet<string> ObserverIds { get; } = new(StringComparer.Ordinal);
+        public Action OnContentsChanged { get; } = onContentsChanged;
     }
 
     /// <summary>

@@ -206,9 +206,20 @@ world effect without reading the source slot after it has been emptied.
 - Server-authority checks (`CustomNetworkManager.IsServer`) belong to the caller in the
   headless engine and are not implemented by the inventory backend.
 
+## Slot observer updates
+
+The inventory system MUST support registering an observer for a slot, immediately sending
+its current item and removal-lock state, and sending authoritative updates after item or
+lock changes. Removing an observer MUST send a clear-item update and stop later updates to
+that observer. Registration of the same observer more than once MUST NOT duplicate change
+notifications. The backend exposes an update DTO and transport interface; serialization and
+network delivery remain frontend responsibilities.
+
+**Tests:** verify initial snapshots, item and lock updates, per-observer removal and clear,
+duplicate registration, and operation without a configured transport.
+
 ## Deferred behavior
 
-Observer players and `UpdateItemNSlotMessage` network messages; client prediction and
-`ClientRequestTransfer`; UI slot linkage; recursive population of nested storage; EMP
-propagation; inventory sounds; and `Stackable.ServerStackOnGround` ground merging are
-outside this contract.
+Client prediction and `ClientRequestTransfer`; UI slot linkage; recursive population of
+nested storage; EMP propagation; inventory sounds; and `Stackable.ServerStackOnGround`
+ground merging are outside this contract.
