@@ -111,6 +111,7 @@ public sealed class ItemSlot
     {
         if (toStore == null) return false;
         if (IsEnabled == false) return false;
+        if (DeniesStorageItem(toStore)) return false;
 
         // Walk this slot's ancestors and make sure none of them ARE toStore, as that would
         // create a loop in the inventory hierarchy (putting the storage inside itself).
@@ -141,6 +142,11 @@ public sealed class ItemSlot
         // specific capacity logic.
         return ItemStorage.Capacity.CanFit(toStore, SlotIdentifier);
     }
+
+    internal bool DeniesStorageItem(IPickupable item) =>
+        item is IStorageIdentifier identifier &&
+        identifier.StorageItemName != StorageItemName.None &&
+        ItemStorage.DenyStorageOfStorageItems.HasFlag(identifier.StorageItemName);
 
     public override string ToString() =>
         $"storage {ItemStorage.Name}, slot {SlotIdentifier}, contains " + (Item?.Name ?? "nothing");

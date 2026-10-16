@@ -23,6 +23,11 @@ public sealed class ItemStorage
     public IItemStorageCapacity Capacity { get; }
 
     /// <summary>
+    /// Storage item categories this container refuses to hold. Defaults to none.
+    /// </summary>
+    public StorageItemName DenyStorageOfStorageItems { get; set; }
+
+    /// <summary>
     /// The pickupable identity of this storage if it is itself an item (a backpack),
     /// null if it can never sit in a slot (a player, a wall locker). Used for root
     /// resolution and hierarchy-loop detection.
