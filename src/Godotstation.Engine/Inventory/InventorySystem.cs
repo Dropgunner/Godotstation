@@ -46,6 +46,39 @@ public sealed class InventorySystem
         ServerPerform(InventoryMove.Transfer(fromSlot, toSlot, replacementStrategy, ignoreRestraints));
 
     /// <summary>
+    /// Spawns and adds configured initial contents once. Caller owns server authority;
+    /// initial contents bypass capacity constraints but still pass the ordinary Add gates.
+    /// </summary>
+    public int ServerPopulate(ItemStorage storage, InventoryPopulationContext context,
+        IInventoryItemSpawner spawner, params IItemStoragePopulator[] populators)
+    {
+        if (storage.TryBeginContentsPopulation() == false) return 0;
+        if (context.SpawnItems == false) return 0;
+        if (storage.ManuallySpawnContent && context.SpawnManualContents == false) return 0;
+
+        var addedCount = 0;
+        foreach (var populator in populators)
+        {
+            if (populator == null) continue;
+            foreach (var entry in populator.Populate(context))
+            {
+                var item = spawner.Spawn(entry.ItemId, context);
+                if (item == null) continue;
+
+                var slot = entry.Slot.HasValue
+                    ? storage.GetItemSlot(entry.Slot.Value)
+                    : storage.GetNextEmptySlot();
+                if (slot == null) continue;
+
+                if (ServerAdd(item, slot, entry.ReplacementStrategy, ignoreRestraints: true))
+                    addedCount++;
+            }
+        }
+
+        return addedCount;
+    }
+
+    /// <summary>
     /// Swaps the items in two slots, via a drop-and-re-add round trip through the world
     /// (mirrors upstream ServerSwap). No-op if either slot's item is not removable.
     /// </summary>

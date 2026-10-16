@@ -166,6 +166,21 @@ is responsible for assigning stable ids to source traits.
 fit, declaration-order fallback, hand-slot exclusion, missing trait data fallback, and null
 when no slot fits.
 
+## FC-10: One-Shot Storage Population
+
+`InventorySystem.ServerPopulate` MUST attempt population at most once per `ItemStorage`,
+including when spawn flags suppress the work. It MUST do nothing when `SpawnItems` is false,
+or when `ManuallySpawnContent` is true and the context does not allow manual contents.
+Otherwise it MUST invoke populators in declaration order and spawn each entry through
+`IInventoryItemSpawner`. An entry without a target slot uses the next empty declared slot; an
+explicit target uses its defined slot. A spawned item is added through `InventorySystem`
+with capacity constraints bypassed, while the existing Add rejection gates still apply.
+Failed spawns, undefined targets, and rejected Adds do not count as added items.
+
+**Tests:** verify ordered spawning and slot assignment, initial-capacity bypass through the
+ordinary Add path, spawn/manual flag gating, one-shot behavior, failed spawns, and undefined
+target handling. Recursive population of nested storage is deferred.
+
 ## Additional move bookkeeping assertions
 
 Successful moves MUST keep `ItemSlot.Item` and `IPickupable.ItemSlot` consistent, notify
@@ -194,6 +209,6 @@ world effect without reading the source slot after it has been emptied.
 ## Deferred behavior
 
 Observer players and `UpdateItemNSlotMessage` network messages; client prediction and
-`ClientRequestTransfer`; UI slot linkage; populators and spawning; trait-based
-EMP propagation; inventory sounds; and `Stackable.ServerStackOnGround` ground merging are
+`ClientRequestTransfer`; UI slot linkage; recursive population of nested storage; EMP
+propagation; inventory sounds; and `Stackable.ServerStackOnGround` ground merging are
 outside this contract.

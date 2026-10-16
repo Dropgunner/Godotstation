@@ -27,6 +27,12 @@ public sealed class ItemStorage
     /// </summary>
     public StorageItemName DenyStorageOfStorageItems { get; set; }
 
+    /// <summary>True when this storage only spawns configured contents on a manual request.</summary>
+    public bool ManuallySpawnContent { get; set; }
+
+    /// <summary>True after this storage has had its one population attempt.</summary>
+    public bool ContentsPopulated { get; private set; }
+
     /// <summary>
     /// The pickupable identity of this storage if it is itself an item (a backpack),
     /// null if it can never sit in a slot (a player, a wall locker). Used for root
@@ -64,6 +70,13 @@ public sealed class ItemStorage
 
     internal void OnInventorySlotSet(IPickupable? prevItem, IPickupable? newItem) =>
         ServerInventoryItemSlotSet?.Invoke(prevItem, newItem);
+
+    internal bool TryBeginContentsPopulation()
+    {
+        if (ContentsPopulated) return false;
+        ContentsPopulated = true;
+        return true;
+    }
 
     /// <summary>Number of slots this storage defines.</summary>
     public int StorageSize() => definedSlots.Count;

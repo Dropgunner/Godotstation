@@ -679,10 +679,100 @@ public class InventoryFidelityTests
         Assert.Null(policy.GetBestSlot(new TestItem("item"), null));
     }
 
+    [Fact]
+    public void Rule10_ServerPopulateSpawnsInOrderAndUsesInventoryAdd()
+    {
+        var (inventory, world) = MakeSystem();
+        var storage = MakeStorage(indexedSlots: 2, capacity: new RejectAllCapacity());
+        var first = new TestItem("first");
+        var second = new TestItem("second");
+        var populator = new TestPopulator();
+        populator.Entries.Add(new InventorySpawnEntry("first"));
+        populator.Entries.Add(new InventorySpawnEntry("second", SlotIdentifier.Indexed(1)));
+        var spawner = new TestSpawner();
+        spawner.Items.Add("first", first);
+        spawner.Items.Add("second", second);
+
+        var added = inventory.ServerPopulate(storage, new InventoryPopulationContext(true, false),
+            spawner, populator);
+
+        Assert.Equal(2, added);
+        Assert.Equal(new[] { "first", "second" }, spawner.SpawnedIds);
+        Assert.Same(first, storage.GetIndexedItemSlot(0)!.Item);
+        Assert.Same(second, storage.GetIndexedItemSlot(1)!.Item);
+        Assert.Equal(new IPickupable[] { first, second }, world.DisappearedFromWorld);
+        Assert.True(storage.ContentsPopulated);
+    }
+
+    [Fact]
+    public void Rule10_ServerPopulateHonorsSpawnAndManualFlagsAndRunsOnlyOnce()
+    {
+        var (inventory, _) = MakeSystem();
+        var storage = MakeStorage(indexedSlots: 1);
+        storage.ManuallySpawnContent = true;
+        var populator = new TestPopulator();
+        populator.Entries.Add(new InventorySpawnEntry("item"));
+        var spawner = new TestSpawner();
+        spawner.Items.Add("item", new TestItem("item"));
+
+        Assert.Equal(0, inventory.ServerPopulate(storage,
+            new InventoryPopulationContext(false, true), spawner, populator));
+        Assert.Equal(0, inventory.ServerPopulate(storage,
+            new InventoryPopulationContext(true, true), spawner, populator));
+        var manualStorage = MakeStorage(indexedSlots: 1);
+        manualStorage.ManuallySpawnContent = true;
+        Assert.Equal(0, inventory.ServerPopulate(manualStorage,
+            new InventoryPopulationContext(true, false), spawner, populator));
+
+        Assert.Equal(0, populator.CallCount);
+        Assert.Empty(spawner.SpawnedIds);
+    }
+
+    [Fact]
+    public void Rule10_ServerPopulateSkipsMissingTargetsAndFailedSpawns()
+    {
+        var (inventory, _) = MakeSystem();
+        var storage = MakeStorage(indexedSlots: 1);
+        var populator = new TestPopulator();
+        populator.Entries.Add(new InventorySpawnEntry("missing-item"));
+        populator.Entries.Add(new InventorySpawnEntry("item", SlotIdentifier.Indexed(5)));
+        var spawner = new TestSpawner();
+        spawner.Items.Add("item", new TestItem("item"));
+
+        Assert.Equal(0, inventory.ServerPopulate(storage,
+            new InventoryPopulationContext(true, false), spawner, populator));
+        Assert.Empty(storage.GetOccupiedSlots());
+        Assert.Equal(new[] { "missing-item", "item" }, spawner.SpawnedIds);
+    }
+
     private sealed class RejectBackCapacity : IItemStorageCapacity
     {
         public bool CanFit(IPickupable toCheck, SlotIdentifier inSlot) =>
             inSlot.NamedSlot != NamedSlot.back;
+    }
+
+    private sealed class TestPopulator : IItemStoragePopulator
+    {
+        public List<InventorySpawnEntry> Entries { get; } = new();
+        public int CallCount { get; private set; }
+
+        public IEnumerable<InventorySpawnEntry> Populate(InventoryPopulationContext context)
+        {
+            CallCount++;
+            return Entries;
+        }
+    }
+
+    private sealed class TestSpawner : IInventoryItemSpawner
+    {
+        public Dictionary<string, IPickupable> Items { get; } = new(StringComparer.Ordinal);
+        public List<string> SpawnedIds { get; } = new();
+
+        public IPickupable? Spawn(string itemId, InventoryPopulationContext context)
+        {
+            SpawnedIds.Add(itemId);
+            return Items.GetValueOrDefault(itemId);
+        }
     }
 
     // --- Rule 6: Throw Ballistics ---
