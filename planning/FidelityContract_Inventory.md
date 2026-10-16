@@ -231,8 +231,20 @@ unchanged. Existing server transfer validation remains authoritative.
 send, server authorization and resolution failures do not change inventory, and an accepted
 request delegates to the existing transfer path.
 
+## FC-13: Transfer prediction and reconciliation
+
+Client prediction MUST be presentation-only. It may predict moving an occupied source slot
+into an empty destination, while leaving authoritative engine state unchanged. A request
+correlation ID MUST bind the prediction to its server reply. Reconciliation MUST replace both
+predicted slot views with the authoritative snapshots on acceptance or rejection, and a
+reply for an unknown request or mismatched slot pair MUST NOT clear another pending
+prediction. Overlapping predictions MUST be rejected until the earlier request is resolved.
+
+**Tests:** verify the predicted source/destination view, no engine mutation, accepted and
+rejected reconciliation, correlation and slot-pair mismatch handling, and overlap rejection.
+
 ## Deferred behavior
 
-Client-side prediction/reconciliation; UI slot linkage; recursive population of
+UI slot linkage; recursive population of
 nested storage; EMP propagation; inventory sounds; and `Stackable.ServerStackOnGround`
 ground merging are outside this contract.

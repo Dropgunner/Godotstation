@@ -1,7 +1,11 @@
 namespace Godotstation.Engine.Inventory;
 
 /// <summary>Network-neutral request to transfer from one registered slot to another.</summary>
-public readonly record struct InventoryTransferRequest(int FromSlotId, int ToSlotId);
+public readonly record struct InventoryTransferRequest(int FromSlotId, int ToSlotId)
+{
+    /// <summary>Client-generated correlation id used to reconcile prediction.</summary>
+    public long RequestId { get; init; }
+}
 
 /// <summary>Resolves transport slot identifiers to this server's authoritative slots.</summary>
 public interface IInventoryTransferSlotResolver
