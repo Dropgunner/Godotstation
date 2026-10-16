@@ -24,6 +24,9 @@ public sealed class InventorySystem
     /// <summary>Optional transport used for authoritative observer updates.</summary>
     public IInventoryObserverTransport? ObserverTransport { get; set; }
 
+    /// <summary>Optional frontend transport for source-slot inventory sounds.</summary>
+    public IInventorySoundTransport? SoundTransport { get; set; }
+
     /// <summary>Raised after any move performs successfully (sound/UI hook for the frontend).</summary>
     public event Action<InventoryMove>? OnMovePerformed;
 
@@ -381,6 +384,13 @@ public sealed class InventorySystem
         if (performed == false) return false;
 
         OnMovePerformed?.Invoke(toPerform);
+        if (toPerform.FromSlot is { } sourceSlot &&
+            pickupable is IInventorySoundProvider soundProvider &&
+            !string.IsNullOrWhiteSpace(soundProvider.InventoryRemoveSoundId))
+        {
+            SoundTransport?.PlayAtSource(soundProvider.InventoryRemoveSoundId, sourceSlot);
+        }
+
         return true;
     }
 

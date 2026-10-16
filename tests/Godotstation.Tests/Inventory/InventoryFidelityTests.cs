@@ -172,6 +172,17 @@ public class InventoryFidelityTests
         public bool IsEmpResistant(IPickupable item) => resistantItems.Contains(item);
     }
 
+    private sealed class SoundTestItem(string name, string? soundId) : TestItem(name), IInventorySoundProvider
+    {
+        public string? InventoryRemoveSoundId { get; } = soundId;
+    }
+
+    private sealed class RecordingSoundTransport : IInventorySoundTransport
+    {
+        public List<(string SoundId, ItemSlot SourceSlot)> Requests { get; } = new();
+        public void PlayAtSource(string soundId, ItemSlot sourceSlot) => Requests.Add((soundId, sourceSlot));
+    }
+
     private class RecordingHook : IServerInventoryMove
     {
         public List<InventoryMove> Moves { get; } = new List<InventoryMove>();
@@ -1048,6 +1059,60 @@ public class InventoryFidelityTests
 
         Assert.Equal(new[] { "shared-direct:5", "shared-component:5" }, calls);
         Assert.Equal(new[] { 5 }, shared.ReceivedStrengths);
+    }
+
+    [Fact]
+    public void Rule15_SuccessfulTransferAndRemoveRequestSoundAtTheirSourceSlots()
+    {
+        var (inventory, _) = MakeSystem();
+        var transport = new RecordingSoundTransport();
+        inventory.SoundTransport = transport;
+        var source = MakeStorage(indexedSlots: 1).GetIndexedItemSlot(0)!;
+        var destination = MakeStorage(indexedSlots: 1).GetIndexedItemSlot(0)!;
+        var item = new SoundTestItem("sounding item", "sounds/inventory/remove");
+        Assert.True(inventory.ServerAdd(item, source));
+        Assert.Empty(transport.Requests);
+
+        Assert.True(inventory.ServerTransfer(source, destination));
+        var transferSound = Assert.Single(transport.Requests);
+        Assert.Equal("sounds/inventory/remove", transferSound.SoundId);
+        Assert.Same(source, transferSound.SourceSlot);
+
+        Assert.True(inventory.ServerDespawn(destination));
+        Assert.Equal(2, transport.Requests.Count);
+        Assert.Same(destination, transport.Requests[1].SourceSlot);
+    }
+
+    [Fact]
+    public void Rule15_AddRejectedMovesAndMissingSoundIdentifiersStaySilent()
+    {
+        var (inventory, _) = MakeSystem();
+        var transport = new RecordingSoundTransport();
+        inventory.SoundTransport = transport;
+        var source = MakeStorage(indexedSlots: 1).GetIndexedItemSlot(0)!;
+        var destination = MakeStorage(indexedSlots: 1).GetIndexedItemSlot(0)!;
+        Assert.True(inventory.ServerAdd(new TestItem("occupant"), destination));
+        var item = new SoundTestItem("sounding item", "sounds/inventory/remove");
+        Assert.True(inventory.ServerAdd(item, source));
+
+        Assert.False(inventory.ServerTransfer(source, destination));
+        Assert.Empty(transport.Requests);
+
+        Assert.True(inventory.ServerDespawn(destination));
+        Assert.True(inventory.ServerDespawn(source));
+        var sourceSound = Assert.Single(transport.Requests);
+        Assert.Equal("sounds/inventory/remove", sourceSound.SoundId);
+        Assert.Same(source, sourceSound.SourceSlot);
+
+        var silentSlot = MakeStorage(indexedSlots: 1).GetIndexedItemSlot(0)!;
+        Assert.True(inventory.ServerAdd(new SoundTestItem("silent item", null), silentSlot));
+        Assert.True(inventory.ServerDespawn(silentSlot));
+        Assert.Single(transport.Requests);
+
+        var emptyIdSlot = MakeStorage(indexedSlots: 1).GetIndexedItemSlot(0)!;
+        Assert.True(inventory.ServerAdd(new SoundTestItem("empty sound id", "  "), emptyIdSlot));
+        Assert.True(inventory.ServerDespawn(emptyIdSlot));
+        Assert.Single(transport.Requests);
     }
 
     private sealed class RejectBackCapacity : IItemStorageCapacity
