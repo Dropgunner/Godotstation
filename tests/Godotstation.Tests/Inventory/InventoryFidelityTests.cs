@@ -122,6 +122,28 @@ public class InventoryFidelityTests
         public void Send(string observerId, InventorySlotUpdate update) => Updates.Add((observerId, update));
     }
 
+    private sealed class TestTransferSlotResolver : IInventoryTransferSlotResolver
+    {
+        public Dictionary<int, ItemSlot> Slots { get; } = new();
+        public bool TryResolve(int slotId, out ItemSlot? slot) => Slots.TryGetValue(slotId, out slot);
+    }
+
+    private sealed class RecordingTransferTransport : IInventoryTransferRequestTransport
+    {
+        public List<InventoryTransferRequest> Requests { get; } = new();
+        public void Send(InventoryTransferRequest request) => Requests.Add(request);
+    }
+
+    private sealed class TransferAuthorization(bool allowed) : IInventoryTransferRequestAuthorization
+    {
+        public List<string> Actors { get; } = new();
+        public bool CanTransfer(string actorId, ItemSlot fromSlot, ItemSlot toSlot)
+        {
+            Actors.Add(actorId);
+            return allowed;
+        }
+    }
+
     private class RecordingHook : IServerInventoryMove
     {
         public List<InventoryMove> Moves { get; } = new List<InventoryMove>();
@@ -820,6 +842,76 @@ public class InventoryFidelityTests
 
         Assert.True(inventory.ServerDespawn(slot));
         Assert.Equal(3, transport.Updates.Count);
+    }
+
+    [Fact]
+    public void Rule12_ClientRequestSendsIdentifiersWithoutMutatingInventory()
+    {
+        var (inventory, _) = MakeSystem();
+        var from = MakeStorage(indexedSlots: 1).GetIndexedItemSlot(0)!;
+        var to = MakeStorage(indexedSlots: 1).GetIndexedItemSlot(0)!;
+        var item = new TestItem("requested");
+        Assert.True(inventory.ServerAdd(item, from));
+        var resolver = new TestTransferSlotResolver();
+        resolver.Slots.Add(31, from);
+        resolver.Slots.Add(47, to);
+        var transport = new RecordingTransferTransport();
+
+        Assert.True(inventory.ClientRequestTransfer(31, 47, resolver, transport));
+
+        Assert.Equal(new InventoryTransferRequest(31, 47), Assert.Single(transport.Requests));
+        Assert.Same(item, from.Item);
+        Assert.Null(to.Item);
+        Assert.Same(from, item.ItemSlot);
+    }
+
+    [Fact]
+    public void Rule12_ClientRequestRejectsUnknownOrEmptySourceWithoutSending()
+    {
+        var (inventory, _) = MakeSystem();
+        var from = MakeStorage(indexedSlots: 1).GetIndexedItemSlot(0)!;
+        var to = MakeStorage(indexedSlots: 1).GetIndexedItemSlot(0)!;
+        var resolver = new TestTransferSlotResolver();
+        resolver.Slots.Add(1, from);
+        resolver.Slots.Add(2, to);
+        var transport = new RecordingTransferTransport();
+
+        Assert.False(inventory.ClientRequestTransfer(1, 2, resolver, transport));
+        Assert.False(inventory.ClientRequestTransfer(99, 2, resolver, transport));
+        Assert.False(inventory.ClientRequestTransfer(1, 99, resolver, transport));
+        Assert.Empty(transport.Requests);
+    }
+
+    [Fact]
+    public void Rule12_ServerRequestAuthorizesAndUsesAuthoritativeTransfer()
+    {
+        var (inventory, _) = MakeSystem();
+        var from = MakeStorage(indexedSlots: 1).GetIndexedItemSlot(0)!;
+        var to = MakeStorage(indexedSlots: 1).GetIndexedItemSlot(0)!;
+        var item = new TestItem("server-authoritative");
+        Assert.True(inventory.ServerAdd(item, from));
+        var resolver = new TestTransferSlotResolver();
+        resolver.Slots.Add(10, from);
+        resolver.Slots.Add(20, to);
+
+        var denied = new TransferAuthorization(allowed: false);
+        Assert.False(inventory.ServerHandleTransferRequest("unauthorized", new(10, 20), resolver, denied));
+        Assert.Same(item, from.Item);
+        Assert.Null(to.Item);
+        Assert.Equal("unauthorized", Assert.Single(denied.Actors));
+
+        var allowed = new TransferAuthorization(allowed: true);
+        Assert.False(inventory.ServerHandleTransferRequest("player", new(99, 20), resolver, allowed));
+        Assert.False(inventory.ServerHandleTransferRequest("player", new(10, 99), resolver, allowed));
+        Assert.Empty(allowed.Actors);
+        Assert.Same(item, from.Item);
+        Assert.Null(to.Item);
+        Assert.Same(from, item.ItemSlot);
+        Assert.True(inventory.ServerHandleTransferRequest("player", new(10, 20), resolver, allowed));
+        Assert.Equal("player", Assert.Single(allowed.Actors));
+        Assert.Null(from.Item);
+        Assert.Same(item, to.Item);
+        Assert.Same(to, item.ItemSlot);
     }
 
     private sealed class RejectBackCapacity : IItemStorageCapacity

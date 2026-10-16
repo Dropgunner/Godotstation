@@ -62,6 +62,35 @@ public sealed class InventorySystem
         slotObservers.Remove(slot);
     }
 
+    /// <summary>Sends an identified client transfer request without changing local state.</summary>
+    public bool ClientRequestTransfer(int fromSlotId, int toSlotId,
+        IInventoryTransferSlotResolver slotResolver, IInventoryTransferRequestTransport transport)
+    {
+        if (!slotResolver.TryResolve(fromSlotId, out var fromSlot) || fromSlot?.Item == null ||
+            !slotResolver.TryResolve(toSlotId, out var toSlot) || toSlot == null)
+        {
+            return false;
+        }
+
+        transport.Send(new InventoryTransferRequest(fromSlotId, toSlotId));
+        return true;
+    }
+
+    /// <summary>Authorizes and applies a client transfer request against server-owned slots.</summary>
+    public bool ServerHandleTransferRequest(string actorId, InventoryTransferRequest request,
+        IInventoryTransferSlotResolver slotResolver,
+        IInventoryTransferRequestAuthorization authorization)
+    {
+        if (!slotResolver.TryResolve(request.FromSlotId, out var fromSlot) || fromSlot?.Item == null ||
+            !slotResolver.TryResolve(request.ToSlotId, out var toSlot) || toSlot == null ||
+            !authorization.CanTransfer(actorId, fromSlot, toSlot))
+        {
+            return false;
+        }
+
+        return ServerTransfer(fromSlot, toSlot);
+    }
+
     private void NotifyObservers(ItemSlot slot)
     {
         if (ObserverTransport == null || slotObservers.TryGetValue(slot, out var observers) == false)

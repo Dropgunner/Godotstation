@@ -206,7 +206,7 @@ world effect without reading the source slot after it has been emptied.
 - Server-authority checks (`CustomNetworkManager.IsServer`) belong to the caller in the
   headless engine and are not implemented by the inventory backend.
 
-## Slot observer updates
+## FC-11: Slot observer updates
 
 The inventory system MUST support registering an observer for a slot, immediately sending
 its current item and removal-lock state, and sending authoritative updates after item or
@@ -218,8 +218,21 @@ network delivery remain frontend responsibilities.
 **Tests:** verify initial snapshots, item and lock updates, per-observer removal and clear,
 duplicate registration, and operation without a configured transport.
 
+## FC-12: Client transfer requests
+
+The client API MUST send a transfer request containing source and destination slot IDs only
+when both IDs resolve locally and the source slot contains an item. It MUST NOT mutate
+inventory state. The server MUST resolve both IDs in its authoritative slot registry,
+authorize the authenticated actor for the requested slots, and delegate to
+`InventorySystem.ServerTransfer`; failed resolution or authorization MUST leave inventory
+unchanged. Existing server transfer validation remains authoritative.
+
+**Tests:** verify request payload and no local mutation, unknown/empty client slots do not
+send, server authorization and resolution failures do not change inventory, and an accepted
+request delegates to the existing transfer path.
+
 ## Deferred behavior
 
-Client prediction and `ClientRequestTransfer`; UI slot linkage; recursive population of
+Client-side prediction/reconciliation; UI slot linkage; recursive population of
 nested storage; EMP propagation; inventory sounds; and `Stackable.ServerStackOnGround`
 ground merging are outside this contract.
