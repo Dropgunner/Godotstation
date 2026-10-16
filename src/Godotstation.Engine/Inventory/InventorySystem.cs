@@ -221,6 +221,13 @@ public sealed class InventorySystem
         var toSlot = toPerform.ToSlot;
         if (toSlot == null) return false;
 
+        // A denied storage category must not merge into an occupied stack before the
+        // ordinary CanFit check runs. ignoreRestraints bypasses capacity checks by contract.
+        if (toSlot.DeniesStorageItem(pickupable) && toPerform.IgnoreConstraints == false)
+        {
+            return false;
+        }
+
         if (toSlot.Item != null)
         {
             var stackableTarget = toSlot.Item.Stackable;

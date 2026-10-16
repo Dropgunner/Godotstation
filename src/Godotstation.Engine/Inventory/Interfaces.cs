@@ -84,6 +84,33 @@ public interface IStackable
 }
 
 /// <summary>
+/// Categories used by storage containers to deny selected kinds of nested storage.
+/// Values match Unitystation's serialized StorageItemName flags.
+/// </summary>
+[System.Flags]
+public enum StorageItemName
+{
+    None = 0,
+    CardboardBox = 1 << 0,
+    ToolBox = 1 << 1,
+    MedKit = 1 << 2,
+    Backpack = 1 << 3,
+    Dufflebag = 1 << 4,
+    Belt = 1 << 5,
+    Briefcase = 1 << 6,
+    FirefirstAidKit = 1 << 7,
+    Satchel = 1 << 8,
+}
+
+/// <summary>
+/// Optional identity implemented by storage items that participate in container deny rules.
+/// </summary>
+public interface IStorageIdentifier
+{
+    StorageItemName StorageItemName { get; }
+}
+
+/// <summary>
 /// Hook invoked server-side after an inventory move completes. Port of Unitystation's
 /// IServerInventoryMove component interface.
 /// </summary>

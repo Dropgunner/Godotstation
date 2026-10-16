@@ -32,6 +32,14 @@ public class InventoryFidelityTests
         public bool StickyMovement { get; set; }
     }
 
+    private sealed class TestStorageItem : TestItem, IStorageIdentifier
+    {
+        public TestStorageItem(string name, StorageItemName storageItemName) : base(name) =>
+            StorageItemName = storageItemName;
+
+        public StorageItemName StorageItemName { get; }
+    }
+
     private class TestStack : IStackable
     {
         public TestStack(int amount) { Amount = amount; }
@@ -465,6 +473,103 @@ public class InventoryFidelityTests
 
         Assert.False(slot.CanFit(new TestItem("plain")));
         Assert.True(slot.CanFit(new TestItem("stack") { Stackable = new TestStack(1) }));
+    }
+
+    [Fact]
+    public void Rule8_DeniedStorageCategoryCannotFitOrBeAdded()
+    {
+        var (inv, world) = MakeSystem();
+        var storage = MakeStorage(indexedSlots: 1);
+        storage.DenyStorageOfStorageItems = StorageItemName.Backpack | StorageItemName.Belt;
+        var slot = storage.GetIndexedItemSlot(0)!;
+        var backpack = new TestStorageItem("backpack", StorageItemName.Backpack);
+
+        Assert.False(slot.CanFit(backpack));
+        Assert.False(inv.ServerAdd(backpack, slot));
+        Assert.True(slot.IsEmpty);
+        Assert.Null(backpack.ItemSlot);
+        Assert.Empty(world.DisappearedFromWorld);
+    }
+
+    [Fact]
+    public void Rule8_DeniedStorageCategoryCannotMergeIntoOccupiedStack()
+    {
+        var (inv, world) = MakeSystem();
+        var storage = MakeStorage(indexedSlots: 1);
+        storage.DenyStorageOfStorageItems = StorageItemName.Backpack;
+        var slot = storage.GetIndexedItemSlot(0)!;
+        var existing = new TestItem("existing stack") { Stackable = new TestStack(2) };
+        var incoming = new TestStorageItem("backpack", StorageItemName.Backpack)
+            { Stackable = new TestStack(3) };
+        Assert.True(inv.ServerAdd(existing, slot));
+
+        Assert.False(inv.ServerAdd(incoming, slot));
+        Assert.Same(existing, slot.Item);
+        Assert.Null(incoming.ItemSlot);
+        Assert.Empty(world.Despawned);
+    }
+
+    [Fact]
+    public void Rule8_DeniedStorageCategoryCannotTransferIntoDestination()
+    {
+        var (inv, _) = MakeSystem();
+        var source = MakeStorage(indexedSlots: 1);
+        var destination = MakeStorage(indexedSlots: 1);
+        destination.DenyStorageOfStorageItems = StorageItemName.Backpack;
+        var item = new TestStorageItem("backpack", StorageItemName.Backpack);
+        var sourceSlot = source.GetIndexedItemSlot(0)!;
+        var destinationSlot = destination.GetIndexedItemSlot(0)!;
+        Assert.True(inv.ServerAdd(item, sourceSlot));
+
+        Assert.False(inv.ServerTransfer(sourceSlot, destinationSlot));
+        Assert.Same(item, sourceSlot.Item);
+        Assert.Null(destinationSlot.Item);
+        Assert.Same(sourceSlot, item.ItemSlot);
+    }
+
+    [Fact]
+    public void Rule8_StorageCategoryFlagOrdinalsMatchSource()
+    {
+        Assert.Equal(new[] { 0, 1, 2, 4, 8, 16, 32, 64, 128, 256 },
+            Enum.GetValues<StorageItemName>().Select(value => (int)value));
+    }
+
+    [Fact]
+    public void Rule8_AllowedAndUnidentifiedItemsIgnoreDenyFlags()
+    {
+        var storage = MakeStorage(indexedSlots: 3);
+        storage.DenyStorageOfStorageItems = StorageItemName.Backpack;
+
+        Assert.True(storage.GetIndexedItemSlot(0)!.CanFit(
+            new TestStorageItem("toolbox", StorageItemName.ToolBox)));
+        Assert.True(storage.GetIndexedItemSlot(1)!.CanFit(
+            new TestStorageItem("unclassified storage", StorageItemName.None)));
+        Assert.True(storage.GetIndexedItemSlot(2)!.CanFit(new TestItem("ordinary item")));
+    }
+
+    [Fact]
+    public void Rule8_DenyFlagsApplyOnlyToTheDestinationStorage()
+    {
+        var outer = MakeStorage(indexedSlots: 1);
+        var innerItem = new TestStorageItem("bag", StorageItemName.Backpack);
+        var inner = MakeStorage(indexedSlots: 1, asPickupable: innerItem);
+        innerItem.Storages.Add(inner);
+        outer.DenyStorageOfStorageItems = StorageItemName.Backpack;
+
+        Assert.True(inner.GetIndexedItemSlot(0)!.CanFit(
+            new TestStorageItem("nested-bag", StorageItemName.Backpack)));
+    }
+
+    [Fact]
+    public void Rule8_IgnoreRestraintsBypassesStorageDenyLikeOtherFitConstraints()
+    {
+        var (inv, _) = MakeSystem();
+        var storage = MakeStorage(indexedSlots: 1);
+        storage.DenyStorageOfStorageItems = StorageItemName.Backpack;
+        var backpack = new TestStorageItem("backpack", StorageItemName.Backpack);
+
+        Assert.True(inv.ServerAdd(backpack, storage.GetIndexedItemSlot(0)!,
+            ignoreRestraints: true));
     }
 
     // --- Rule 6: Throw Ballistics ---

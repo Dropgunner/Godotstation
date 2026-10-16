@@ -129,6 +129,25 @@ slot queries deterministic and replay-stable.
 
 **Tests:** next-slot selection follows a mixed named/indexed declaration sequence.
 
+## FC-8: Storage Category Deny Flags
+
+A storage item MAY expose one `StorageItemName` category through `IStorageIdentifier`.
+An `ItemStorage` MAY deny one or more categories with `DenyStorageOfStorageItems`.
+`ItemSlot.CanFit` MUST reject an identified item when its category is denied by the
+destination storage. The check applies to the direct destination storage only. Items with
+no storage identifier and identified items whose category is allowed MUST remain eligible
+under the other fit rules; an identifier with `None` has no category to deny. Denial applies
+before occupied-stack merging. `ignoreRestraints`
+MAY bypass this check as part of the existing capacity and hierarchy bypass.
+
+Category flag values MUST match Unitystation's serialized values: CardboardBox=1, ToolBox=2,
+MedKit=4, Backpack=8, Dufflebag=16, Belt=32, Briefcase=64, FirefirstAidKit=128, Satchel=256.
+
+**Tests:** denied Add and Transfer leave slot/item bookkeeping and world effects unchanged;
+denied items cannot merge into occupied stacks; allowed and unidentified items still fit; a
+parent storage's deny flags do not affect nested storage; enum ordinals match the source;
+`ignoreRestraints` bypasses the deny rule.
+
 ## Additional move bookkeeping assertions
 
 Successful moves MUST keep `ItemSlot.Item` and `IPickupable.ItemSlot` consistent, notify
@@ -158,6 +177,5 @@ world effect without reading the source slot after it has been emptied.
 
 Observer players and `UpdateItemNSlotMessage` network messages; client prediction and
 `ClientRequestTransfer`; UI slot linkage; populators and spawning; trait-based
-`GetBestSlotFor` (`BestSlotForTrait`); storage blacklists (`StorageIdentifier` deny flags);
-EMP propagation; inventory sounds; and `Stackable.ServerStackOnGround` ground merging are
-outside this contract.
+`GetBestSlotFor` (`BestSlotForTrait`); EMP propagation; inventory sounds; and
+`Stackable.ServerStackOnGround` ground merging are outside this contract.
