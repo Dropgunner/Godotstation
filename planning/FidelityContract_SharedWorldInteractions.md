@@ -1,6 +1,6 @@
 # Fidelity Contract: Shared-World Pickup and Wrench Interaction
 
-**Status:** first playable vertical slice; intentionally narrower than Unitystation inventory and construction parity.
+**Status:** first verified shared-world interaction slice; intentionally narrower than Unitystation inventory and construction parity.
 
 **Source check:** Unitystation source at commit `c911581e8354958d664b1e32087053ce43638790`, checked 2026-10-17.
 
@@ -28,4 +28,4 @@
 
 ## Regression coverage
 
-`SharedStationInteractionWorldTests` covers shared pickup ownership, held-tool use, drop and re-pickup, reach and obstruction refusal, invalid peers/targets, and state-change snapshots. Movement pushability remains covered by the existing movement fidelity tests. Runtime two-client verification is still required to establish end-to-end replication behavior.
+`SharedStationInteractionWorldTests` covers shared pickup ownership, held-tool use, drop and re-pickup, reach and obstruction refusal, invalid peers/targets, and state-change snapshots. Movement pushability remains covered by the existing movement fidelity tests. On 2026-10-17, a macOS app was exported with the official Godot 4.7.2 .NET runtime and matching templates. The app in Downloads passed both `tools/multiplayer_smoke.sh --interactions` and the standard two-client round/role/chat/movement smoke: remote RPC requests changed shared state and snapshots reached both processes. This checkout's project SDK remains pinned to 4.4.1. These checks verify this slice's runtime path, not overall Unitystation parity.

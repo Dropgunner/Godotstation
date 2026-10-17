@@ -37,6 +37,10 @@ public partial class StationPlaytestController : Node2D
     private ulong smokeMoveUntilMsec;
     private bool smokeMoveStarted;
     private bool smokeChatStarted;
+    private bool smokeInteractionPickupRequested;
+    private bool smokeInteractionUseRequested;
+    private bool smokeInteractionDropRequested;
+    private bool smokeInteractionsCompleted;
     private bool localRoundStarted;
     private string connectionStatus = "Connecting…";
     private string hostAddress = "LAN IP unavailable";
@@ -78,6 +82,7 @@ public partial class StationPlaytestController : Node2D
             smokeChatStarted = true;
             SubmitSpeech($"SMOKE_CHAT_PEER_{localPeerId}");
         }
+        DriveSmokeInteractions();
         var direction = ReadLocalInput();
 
         if (multiplayer.IsServer())
@@ -171,7 +176,7 @@ public partial class StationPlaytestController : Node2D
         startShiftButton.Disabled = false;
         GD.Print($"PLAYTEST_HOST_READY port={PlaytestLaunchOptions.Port} phase={roundLifecycle.Phase}");
         RefreshStatus();
-        if (PlaytestLaunchOptions.SmokeMove)
+        if (PlaytestLaunchOptions.SmokeMove || PlaytestLaunchOptions.SmokeInteractions)
             CallDeferred(nameof(StartShift));
     }
 
@@ -326,7 +331,9 @@ public partial class StationPlaytestController : Node2D
         }
 
         var spawnPoint = StationPlaytestLayout.Spawns[players.Count];
-        Vector2 spawn = new(spawnPoint.X, spawnPoint.Y);
+        Vector2 spawn = PlaytestLaunchOptions.SmokeInteractions
+            ? new Vector2(-1f, 1f)
+            : new Vector2(spawnPoint.X, spawnPoint.Y);
         foreach (PlayerRuntime existing in players.Values)
             RpcId(peerId, nameof(ReceiveSpawn), existing.PeerId, existing.Job.Id,
                 existing.Position.X, existing.Position.Y);
@@ -579,6 +586,44 @@ public partial class StationPlaytestController : Node2D
         sharedInteractionWorld.TryDropWrench(senderId);
     }
 
+    private void DriveSmokeInteractions()
+    {
+        if (!PlaytestLaunchOptions.SmokeInteractions || GetMultiplayer().IsServer() ||
+            smokeInteractionsCompleted || !localRoundStarted || players.Count < 2) return;
+
+        if (!smokeInteractionPickupRequested)
+        {
+            smokeInteractionPickupRequested = true;
+            RpcId(1, nameof(RequestSharedInteraction), SharedStationInteractionWorld.WrenchId,
+                (int)Intent.Help, false);
+            GD.Print("PLAYTEST_INTERACTION_REQUEST pickup");
+            return;
+        }
+
+        if (wrenchOwner == localPeerId && !smokeInteractionUseRequested)
+        {
+            smokeInteractionUseRequested = true;
+            RpcId(1, nameof(RequestSharedInteraction), SharedStationInteractionWorld.FixtureId,
+                (int)Intent.Help, false);
+            GD.Print("PLAYTEST_INTERACTION_REQUEST wrench-use");
+            return;
+        }
+
+        if (wrenchOwner == localPeerId && !fixtureAnchored && !smokeInteractionDropRequested)
+        {
+            smokeInteractionDropRequested = true;
+            RpcId(1, nameof(RequestSharedDrop));
+            GD.Print("PLAYTEST_INTERACTION_REQUEST drop");
+            return;
+        }
+
+        if (smokeInteractionDropRequested && wrenchOwner == null && !fixtureAnchored)
+        {
+            smokeInteractionsCompleted = true;
+            GD.Print("PLAYTEST_SHARED_INTERACTION_OK pickup=true wrench_use=true dropped=true replicated=true");
+        }
+    }
+
     private void ResolveSharedInteraction(int senderId, int targetId, int intentValue, bool altClick)
     {
         if (!roundLifecycle.CanRequestJob || !players.ContainsKey(senderId) ||
@@ -603,6 +648,8 @@ public partial class StationPlaytestController : Node2D
         fixtureObstacle.X = Mathf.RoundToInt(fixtureWorldPosition.X);
         fixtureObstacle.Y = Mathf.RoundToInt(fixtureWorldPosition.Y);
         stationMapView?.SetSharedObjects(wrenchOwner, wrenchWorldPosition, fixtureWorldPosition, fixtureAnchored);
+        if (PlaytestLaunchOptions.SmokeInteractions)
+            GD.Print($"PLAYTEST_INTERACTION_SERVER_STATE owner={wrenchOwner ?? 0} anchored={fixtureAnchored}");
         Rpc(nameof(ReceiveSharedState), wrenchOwner ?? 0, wrenchWorldPosition.X, wrenchWorldPosition.Y,
             fixtureWorldPosition.X, fixtureWorldPosition.Y, fixtureAnchored);
     }
