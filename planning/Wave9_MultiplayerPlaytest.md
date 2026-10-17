@@ -10,9 +10,11 @@ nearby crew member.
 Players can choose an Assistant or Engineer crew role; the server assigns the selected job
 before spawning the avatar and displays the job on both clients. This establishes role-aware
 occupancy of one shared station space, with local speech routed by hearing range and walls.
-The wrench is a single-item interaction fixture, not a general inventory. This build does not
-yet provide job duties, broader interaction intents, atmospherics, antagonist, or complete round
-systems, and it is not full Unitystation gameplay parity.
+The wrench is the only item in this slice, but pickup and drop now use the engine inventory's
+left- and right-hand slots. Press Tab to switch the active hand; the wrench can be used or dropped
+only while it is selected. This is not a general inventory screen. The build does not yet provide
+job duties, broader interaction intents, atmospherics, antagonist, or complete round systems, and
+it is not full Unitystation gameplay parity.
 
 ## Start a local two-instance playtest
 
@@ -32,9 +34,10 @@ systems, and it is not full Unitystation gameplay parity.
    wall-separated crew.
 7. For a second Mac on the same LAN, use the host Mac's local IPv4 address instead of
    `127.0.0.1`. Allow UDP port 7777 through the host firewall if macOS asks.
-8. For the interaction check, click the yellow wrench, click the cart,
-   push it with WASD, then press Q to drop the wrench. Both clients should see the cart become
-   loose and the wrench return to the floor.
+8. For the interaction check, click the yellow wrench to pick it up, press Tab to switch to the
+   empty hand, then click the cart; it should stay anchored. Press Tab to select the wrench hand,
+   click the cart, push it with WASD, then press Q to drop the wrench. Both clients should see the
+   cart become loose and the wrench return to the floor.
 9. Use **Return to lobby** to leave the playtest.
 
 Command-line smoke mode (used by the repository test script):

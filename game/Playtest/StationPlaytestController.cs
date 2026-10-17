@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using Godot;
 using Godotstation.Common.Interactions;
 using Godotstation.Engine.Chat;
+using Godotstation.Engine.Interactions;
 using Godotstation.Engine.Movement;
 using Godotstation.Engine.Rounds;
 
@@ -21,7 +22,7 @@ public partial class StationPlaytestController : Node2D
     private readonly SharedRoundLifecycle roundLifecycle = new();
     private CollisionMap collisionMap = null!;
     private MovementProcessor movementProcessor = null!;
-    private SharedStationInteractionWorld sharedInteractionWorld = null!;
+    private SharedStationInventoryWorld sharedInteractionWorld = null!;
     private StationMapView stationMapView = null!;
     private DynamicObject fixtureObstacle = null!;
     private int? wrenchOwner;
@@ -29,6 +30,7 @@ public partial class StationPlaytestController : Node2D
     private Vector2 fixtureWorldPosition = new(0, 2);
     private bool fixtureAnchored = true;
     private Label statusLabel = null!;
+    private Label activeHandLabel = null!;
     private Button startShiftButton = null!;
     private RichTextLabel chatLog = null!;
     private LineEdit chatInput = null!;
@@ -50,7 +52,7 @@ public partial class StationPlaytestController : Node2D
         SetMultiplayerAuthority(1);
         collisionMap = StationPlaytestLayout.CreateCollisionMap();
         movementProcessor = new MovementProcessor(collisionMap);
-        sharedInteractionWorld = new SharedStationInteractionWorld(new StationReachabilityMap(collisionMap));
+        sharedInteractionWorld = new SharedStationInventoryWorld(new StationReachabilityMap(collisionMap));
         sharedInteractionWorld.StateChanged += OnSharedStateChanged;
         fixtureObstacle = new DynamicObject(0, 2, isPushable: false, tag: "service-cart");
         collisionMap.AddObject(fixtureObstacle);
@@ -341,6 +343,7 @@ public partial class StationPlaytestController : Node2D
         AddPlayer(peerId, assignedJob, spawn);
         Rpc(nameof(ReceiveSpawn), peerId, assignedJob.Id, spawn.X, spawn.Y);
         SendSharedState(peerId);
+        SendActiveHand(peerId);
         GD.Print($"PLAYTEST_ROSTER peers={players.Count}");
         RefreshStatus();
     }
@@ -533,6 +536,16 @@ public partial class StationPlaytestController : Node2D
 
     public override void _UnhandledInput(InputEvent inputEvent)
     {
+        if (inputEvent is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Tab } &&
+            localRoundStarted && players.ContainsKey(GetMultiplayer().GetUniqueId()))
+        {
+            if (GetMultiplayer().IsServer())
+                ResolveActiveHandToggle(localPeerId);
+            else
+                RpcId(1, nameof(RequestActiveHandToggle));
+            return;
+        }
+
         if (inputEvent is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Q } &&
             localRoundStarted && players.ContainsKey(GetMultiplayer().GetUniqueId()))
         {
@@ -552,10 +565,10 @@ public partial class StationPlaytestController : Node2D
         if (wrenchOwner == null)
         {
             float distance = clickPosition.DistanceTo(wrenchWorldPosition);
-            if (distance < nearestDistance) { targetId = SharedStationInteractionWorld.WrenchId; nearestDistance = distance; }
+            if (distance < nearestDistance) { targetId = SharedStationInventoryWorld.WrenchId; nearestDistance = distance; }
         }
         float fixtureDistance = clickPosition.DistanceTo(fixtureWorldPosition);
-        if (fixtureDistance < nearestDistance) targetId = SharedStationInteractionWorld.FixtureId;
+        if (fixtureDistance < nearestDistance) targetId = SharedStationInventoryWorld.FixtureId;
         if (targetId < 0) return;
 
         bool altClick = click.AltPressed;
@@ -580,10 +593,50 @@ public partial class StationPlaytestController : Node2D
         ResolveSharedDrop((int)GetMultiplayer().GetRemoteSenderId());
     }
 
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestActiveHandToggle()
+    {
+        if (!GetMultiplayer().IsServer()) return;
+        ResolveActiveHandToggle((int)GetMultiplayer().GetRemoteSenderId());
+    }
+
+    private void ResolveActiveHandToggle(int senderId)
+    {
+        if (!roundLifecycle.CanRequestJob || !players.ContainsKey(senderId) ||
+            !sharedInteractionWorld.TryToggleActiveHand(senderId)) return;
+        if (senderId == 1)
+            UpdateActiveHandLabel(sharedInteractionWorld.GetActiveHand(senderId));
+        else
+            SendActiveHand(senderId);
+    }
+
+    private void SendActiveHand(int peerId)
+    {
+        var hand = sharedInteractionWorld.GetActiveHand(peerId);
+        if (hand == null) return;
+        string itemName = sharedInteractionWorld.GetHandItemName(peerId, hand.Value);
+        if (peerId == 1)
+            UpdateActiveHandLabel(hand, itemName);
+        else
+            RpcId(peerId, nameof(ReceiveActiveHand), (int)hand.Value, itemName);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceiveActiveHand(int handValue, string itemName) =>
+        UpdateActiveHandLabel((Godotstation.Engine.Inventory.NamedSlot)handValue, itemName);
+
+    private void UpdateActiveHandLabel(Godotstation.Engine.Inventory.NamedSlot? hand, string? itemName = null)
+    {
+        if (activeHandLabel == null || hand == null) return;
+        itemName ??= sharedInteractionWorld.GetHandItemName(localPeerId, hand.Value);
+        activeHandLabel.Text = $"Active hand: {hand.Value} · {(itemName.Length == 0 ? "empty" : itemName)}";
+    }
+
     private void ResolveSharedDrop(int senderId)
     {
         if (!roundLifecycle.CanRequestJob || !players.ContainsKey(senderId)) return;
-        sharedInteractionWorld.TryDropWrench(senderId);
+        if (sharedInteractionWorld.TryDropActiveHand(senderId))
+            SendActiveHand(senderId);
     }
 
     private void DriveSmokeInteractions()
@@ -594,7 +647,7 @@ public partial class StationPlaytestController : Node2D
         if (!smokeInteractionPickupRequested)
         {
             smokeInteractionPickupRequested = true;
-            RpcId(1, nameof(RequestSharedInteraction), SharedStationInteractionWorld.WrenchId,
+            RpcId(1, nameof(RequestSharedInteraction), SharedStationInventoryWorld.WrenchId,
                 (int)Intent.Help, false);
             GD.Print("PLAYTEST_INTERACTION_REQUEST pickup");
             return;
@@ -603,7 +656,7 @@ public partial class StationPlaytestController : Node2D
         if (wrenchOwner == localPeerId && !smokeInteractionUseRequested)
         {
             smokeInteractionUseRequested = true;
-            RpcId(1, nameof(RequestSharedInteraction), SharedStationInteractionWorld.FixtureId,
+            RpcId(1, nameof(RequestSharedInteraction), SharedStationInventoryWorld.FixtureId,
                 (int)Intent.Help, false);
             GD.Print("PLAYTEST_INTERACTION_REQUEST wrench-use");
             return;
@@ -648,6 +701,8 @@ public partial class StationPlaytestController : Node2D
         fixtureObstacle.X = Mathf.RoundToInt(fixtureWorldPosition.X);
         fixtureObstacle.Y = Mathf.RoundToInt(fixtureWorldPosition.Y);
         stationMapView?.SetSharedObjects(wrenchOwner, wrenchWorldPosition, fixtureWorldPosition, fixtureAnchored);
+        if (snapshot.WrenchOwner is int ownerPeerId)
+            SendActiveHand(ownerPeerId);
         if (PlaytestLaunchOptions.SmokeInteractions)
             GD.Print($"PLAYTEST_INTERACTION_SERVER_STATE owner={wrenchOwner ?? 0} anchored={fixtureAnchored}");
         Rpc(nameof(ReceiveSharedState), wrenchOwner ?? 0, wrenchWorldPosition.X, wrenchWorldPosition.Y,
@@ -694,7 +749,9 @@ public partial class StationPlaytestController : Node2D
         startShiftButton.Pressed += StartShift;
         content.AddChild(startShiftButton);
         content.AddChild(new Label { Text = $"WASD move  ·  Host shares LAN IP  ·  UDP {PlaytestLaunchOptions.Port}" });
-        content.AddChild(new Label { Text = "Click the wrench to pick it up, click the cart to unbolt it, push with WASD, and press Q to drop." });
+        activeHandLabel = new Label { Text = "Active hand: rightHand · empty" };
+        content.AddChild(activeHandLabel);
+        content.AddChild(new Label { Text = "Click the wrench to pick it up, click the cart to unbolt it, Tab switches hands, Q drops the active hand, and WASD moves." });
 
         chatLog = new RichTextLabel
         {

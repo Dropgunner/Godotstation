@@ -97,14 +97,15 @@ drop, examine/alt-click, and at least one useful station object interaction.
 ownership, reach, intent/handler ordering, and rejection of forged client state. A playtester
 can pick up and use a tool on a nearby station object.
 
-**Implemented slice in `codex/wave9-shared-interactions`:** a server-validated shared wrench
-can be picked up, dropped, and used to unanchor a pushable service cart. It reuses the common
-interaction dispatcher, authoritative peer position, reach and wall checks, and replicated
-snapshots. Headless domain tests pass, and the two-client runtime smoke verifies a remote peer
-can pick up, use, and drop the wrench while both clients receive authoritative state snapshots.
-The test ran on official Godot 4.7.2 .NET; this checkout remains pinned to SDK 4.4.1. This is an
-interaction foundation, not a job task or a playable SS13 round. General inventory, broader
-intent behavior, examine/alt-click, and full upstream anchor rules remain open.
+**Implemented slice in `codex/wave9-shared-interactions`:** the shared wrench now moves through
+the engine `InventorySystem` into real left/right hand slots. Tab switches the active hand; tool
+use and Q-drop consult that selected slot. The common interaction dispatcher, authoritative peer
+position, reach and wall checks, and replicated snapshots remain in the path. Headless domain
+tests cover slot ownership, inactive-hand rejection, drop/recovery, range, obstruction, and
+disconnect cleanup. The existing two-client runtime smoke verifies shared request and snapshot
+replication. This is an interaction foundation, not a complete inventory, job task, or playable
+SS13 round. Inventory UI/storage, broader intent behavior, examine/alt-click, and full upstream
+anchor rules remain open.
 
 ### P3 — One complete crew job loop
 
