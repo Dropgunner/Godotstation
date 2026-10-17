@@ -1,9 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using Godotstation.Common.Interactions;
+using Godotstation.Engine.Access;
 using Godotstation.Engine.Construction;
 using Godotstation.Engine.Inventory;
+using Godotstation.Engine.Movement;
+using Godotstation.Engine.Rounds;
 using InventoryBodyPartType = Godotstation.Engine.Inventory.BodyPartType;
 using InventoryNamedSlot = Godotstation.Engine.Inventory.NamedSlot;
 
@@ -19,6 +23,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
     public const int FixtureId = 9002;
     public const int MetalSheetsId = 9003;
     public const int GirderId = 9004;
+    public const int EngineeringAirlockId = 9005;
 
     private readonly Dictionary<int, CrewMember> crew = new();
     private readonly Dictionary<ItemStorage, CrewMember> crewByStorage = new();
@@ -29,6 +34,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
     private readonly SharedWorldItem metalSheets;
     private readonly SharedWorldFixture fixture;
     private readonly SharedWorldFixture girder;
+    private readonly EngineeringAccessDoor engineeringAirlock;
     private readonly GirderPlatingTask platingTask = new();
     private Vector2 girderPosition = new(2, 2);
     private bool girderPlated;
@@ -45,13 +51,19 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         metalSheets = new SharedWorldItem(this, MetalSheetsId, "metal sheets", new Vector2(1, 2), new SharedMetalStack(2));
         fixture = new SharedWorldFixture(FixtureId, "service cart", fixturePosition);
         girder = new SharedWorldFixture(GirderId, "girder", girderPosition);
+        engineeringAirlock = new EngineeringAccessDoor(EngineeringAirlockId, new Vector2(8, -4));
         dispatcher.RegisterHandler(new WrenchPickupHandler(this, wrench));
         dispatcher.RegisterHandler(new WrenchPickupHandler(this, metalSheets));
         dispatcher.RegisterHandler(new FixtureWrenchHandler(this, fixture, wrench));
         dispatcher.RegisterHandler(new GirderPlatingHandler(this, girder, metalSheets));
+        dispatcher.RegisterHandler(new EngineeringDoorHandler(this, engineeringAirlock));
     }
 
     public event Action<SharedStationWorldSnapshot>? StateChanged;
+    public event Action<bool>? EngineeringAirlockStateChanged;
+
+    public IPassable EngineeringAirlockPassability => engineeringAirlock;
+    public bool IsEngineeringAirlockOpen => engineeringAirlock.IsOpen;
 
     public SharedStationWorldSnapshot Snapshot
     {
@@ -63,19 +75,82 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         }
     }
 
-    public bool AddActor(int peerId, Vector2 position)
+    public bool AddActor(int peerId, Vector2 position) =>
+        AddActor(peerId, position, StationCrewJobCatalog.AssistantJobId);
+
+    public bool AddActor(int peerId, Vector2 position, int jobId)
     {
         if (peerId <= 0 || crew.ContainsKey(peerId) || !IsFinite(position)) return false;
-        var slots = new[]
+        CrewLoadoutProfile? profile = CrewLoadoutCatalog.GetForJob(jobId);
+        var slotNames = new List<InventoryNamedSlot>
         {
-            SlotIdentifier.Named(InventoryNamedSlot.leftHand),
-            SlotIdentifier.Named(InventoryNamedSlot.rightHand),
+            InventoryNamedSlot.leftHand,
+            InventoryNamedSlot.rightHand,
         };
+        if (profile != null)
+            foreach (CrewLoadoutItem item in profile.Equipment)
+                if (!slotNames.Contains(item.Slot)) slotNames.Add(item.Slot);
+
+        var slots = slotNames.ConvertAll(SlotIdentifier.Named);
         var storage = new ItemStorage(slots, AcceptAllCapacity.Instance, name: $"crew-{peerId}");
-        var member = new CrewMember(peerId, position, storage);
+        var member = new CrewMember(peerId, position, storage, jobId);
         crew.Add(peerId, member);
         crewByStorage.Add(storage, member);
+
+        if (profile != null)
+        {
+            foreach (CrewLoadoutItem entry in profile.Equipment)
+            {
+                var item = new CrewEquipmentItem(entry,
+                    entry.Slot == InventoryNamedSlot.id ? profile.StandardClearance : Array.Empty<StationClearance>(),
+                    entry.Slot == InventoryNamedSlot.id ? profile.LowPopulationClearance : Array.Empty<StationClearance>());
+                ItemSlot? destination = storage.GetNamedItemSlot(entry.Slot);
+                if (destination == null || !inventory.ServerAdd(item, destination))
+                    throw new InvalidOperationException($"Could not equip {entry.DisplayName} in {entry.Slot}.");
+            }
+        }
         return true;
+    }
+
+    /// <summary>Checks the clearance sources Unitystation searches: active hand, ID, belt, and suit storage.</summary>
+    public bool HasClearance(int peerId, StationClearance required, bool lowPopulation = false)
+    {
+        if (!crew.TryGetValue(peerId, out CrewMember? member)) return false;
+        InventoryNamedSlot[] sourceSlots =
+        [
+            member.ActiveHand,
+            InventoryNamedSlot.id,
+            InventoryNamedSlot.belt,
+            InventoryNamedSlot.suitStorage,
+        ];
+
+        foreach (InventoryNamedSlot slotName in sourceSlots)
+        {
+            if (member.Inventory.GetNamedItemSlot(slotName)?.Item is not CrewEquipmentItem item || item.ClearanceDisabled)
+                continue;
+            IReadOnlyList<StationClearance> issued = lowPopulation ? item.LowPopulationClearance : item.StandardClearance;
+            if (issued.Contains(required)) return true;
+        }
+        return false;
+    }
+
+    public string GetCrewLoadoutSummary(int peerId)
+    {
+        if (!crew.TryGetValue(peerId, out CrewMember? member)) return string.Empty;
+        CrewLoadoutProfile? profile = CrewLoadoutCatalog.GetForJob(member.JobId);
+        if (profile == null)
+        {
+            string roleName = StationCrewJobCatalog.Jobs.FirstOrDefault(job => job.Id == member.JobId)?.Name
+                ?? $"Unknown role {member.JobId}";
+            return $"{roleName}: no standard issue kit";
+        }
+
+        var names = new List<string>();
+        foreach (CrewLoadoutItem entry in profile.Equipment)
+            if (member.Inventory.GetNamedItemSlot(entry.Slot)?.Item is IPickupable item)
+                names.Add(item.Name);
+        string access = string.Join(", ", profile.StandardClearance);
+        return $"Engineer kit: {string.Join(" · ", names)}\nID access: {access}";
     }
 
     public bool RemoveActor(int peerId)
@@ -172,6 +247,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
             MetalSheetsId when metalSheets.ItemSlot == null && metalSheets.IsInWorld => metalSheets,
             FixtureId => fixture,
             GirderId when !girderPlated => girder,
+            EngineeringAirlockId => engineeringAirlock,
             _ => null,
         };
         if (target == null) return false;
@@ -182,6 +258,9 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         PublishConstructionState();
         return true;
     }
+
+    public bool CanCrewOpenEngineeringAirlock(int peerId) =>
+        HasClearance(peerId, StationClearance.Engine);
 
     /// <summary>Drops only the current active-hand item, as the source inventory does.</summary>
     public bool TryDropActiveHand(int senderPeerId)
@@ -253,11 +332,12 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
 
     private sealed class CrewMember : IPerformer
     {
-        public CrewMember(int peerId, Vector2 position, ItemStorage inventory)
+        public CrewMember(int peerId, Vector2 position, ItemStorage inventory, int jobId)
         {
             PeerId = peerId;
             Position = position;
             Inventory = inventory;
+            JobId = jobId;
             InteractionPlayer = new PlayerEntity { Id = peerId, Name = $"crew-{peerId}" };
             InteractionPlayer.PlaceAt(position);
         }
@@ -265,6 +345,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         public int PeerId { get; }
         public Vector2 Position { get; set; }
         public ItemStorage Inventory { get; }
+        public int JobId { get; }
         public InventoryNamedSlot ActiveHand { get; set; } = InventoryNamedSlot.rightHand;
         public ItemSlot ActiveHandSlot => Inventory.GetNamedItemSlot(ActiveHand)!;
         public Vector2 WorldPosition => Position;
@@ -340,6 +421,50 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         public WorldEntity InteractionEntity => this;
     }
 
+    private sealed class EngineeringAccessDoor : WorldEntity, IInteractable, IPassable
+    {
+        public EngineeringAccessDoor(int id, Vector2 position)
+        {
+            Id = id;
+            Name = "engineering airlock";
+            PlaceAt(position);
+        }
+
+        public bool IsOpen { get; private set; }
+        public string InteractionId => Name;
+        string IInteractable.Id => InteractionId;
+        public Vector2 WorldPosition => AssumedWorldPosServer;
+        public WorldEntity InteractionEntity => this;
+        public bool CanPass(PlayerMovementState state) => IsOpen;
+
+        public bool Toggle()
+        {
+            IsOpen = !IsOpen;
+            return IsOpen;
+        }
+    }
+
+    private sealed class CrewEquipmentItem(
+        CrewLoadoutItem definition,
+        IReadOnlyList<StationClearance> standardClearance,
+        IReadOnlyList<StationClearance> lowPopulationClearance) : IPickupable
+    {
+        public string Name => definition.DisplayName;
+        public string ItemId => definition.ItemId;
+        public ItemSlot? ItemSlot { get; private set; }
+        public bool IsBuckled => false;
+        public IStackable? Stackable => null;
+        public IEnumerable<ItemStorage> ItemStorages => Array.Empty<ItemStorage>();
+        public IEnumerable<IServerInventoryMove> MoveHooks => Array.Empty<IServerInventoryMove>();
+        public float ThrowSpeed => 6f;
+        public float ThrowRange => 7f;
+        public bool StickyMovement => false;
+        public IReadOnlyList<StationClearance> StandardClearance { get; } = standardClearance;
+        public IReadOnlyList<StationClearance> LowPopulationClearance { get; } = lowPopulationClearance;
+        public bool ClearanceDisabled { get; set; }
+        public void SetItemSlot(ItemSlot? slot) => ItemSlot = slot;
+    }
+
     private sealed class SharedMetalStack(int initialAmount) : IStackable
     {
         public int Amount { get; private set; } = initialAmount;
@@ -395,6 +520,24 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         {
             if (interaction.Performer != null && world.TryStartGirderPlating(interaction.Performer.Id))
                 world.PublishConstructionState();
+        }
+    }
+
+    private sealed class EngineeringDoorHandler(SharedStationInventoryWorld world,
+        EngineeringAccessDoor owner) : IOwnedInteractionHandler<HandApply>
+    {
+        public WorldEntity Owner { get; } = owner;
+        public bool IsFirstInteractable => true;
+        public int Priority => 0;
+
+        public bool WillInteract(HandApply interaction, NetworkSide side) =>
+            side == NetworkSide.Server && interaction.Performer != null &&
+            interaction.TargetObject == Owner && world.CanCrewOpenEngineeringAirlock(interaction.Performer.Id);
+
+        public void ServerPerformInteraction(HandApply interaction)
+        {
+            bool isOpen = owner.Toggle();
+            world.EngineeringAirlockStateChanged?.Invoke(isOpen);
         }
     }
 
