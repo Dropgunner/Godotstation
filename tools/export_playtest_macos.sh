@@ -20,7 +20,7 @@ cleanup() { rm -f "$solution_path"; }
 trap cleanup EXIT
 
 cd "$repo_root/game"
-"$dotnet_bin" new sln -n Godotstation.Game --format sln --output . >/dev/null
+"$dotnet_bin" new sln -n Godotstation.Game --output . >/dev/null
 "$dotnet_bin" sln Godotstation.Game.sln add Godotstation.Game.csproj >/dev/null
 "$godot_bin" --headless --path "$repo_root/game" --editor --quit
 "$godot_bin" --headless --path "$repo_root/game" --export-debug "macOS Debug" "$output_path"
