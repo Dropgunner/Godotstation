@@ -46,10 +46,11 @@ trace additional upstream systems it actually implements.
 - Wave 9 adds a station-shaped map, crew avatars, movement, and LAN host/join with
   server-resolved position updates.
 - The Wave 9 playtest now has networked job selection, capacity checks, and spawn gating for
-  two sourced crew roles. It still has no in-world chat, shared item pickup/use, job-specific
-  station task, or connected round lifecycle. Role assignment does not yet make the role's
-  job duties playable; the build remains useful primarily for checking the multiplayer
-  movement foundation.
+  two sourced crew roles. It now also models the authoritative PreRound → Started gate for
+  role spawn requests. It still has no in-world chat, shared item pickup/use, job-specific
+  station task, round end, or restart. Role assignment does not yet make the role's job
+  duties playable; the build remains useful primarily for checking the multiplayer movement
+  foundation.
 
 ## Dependency-ordered milestones
 
@@ -63,6 +64,10 @@ existing offline round as a separate development path until the shared path repl
 **Exit evidence:** two clients select/request roles, see server-confirmed roles and distinct
 spawns, handle a full role or not-ready rejection, and can finish/reset the same round without
 relaunching. Tests prove assignment/capacity and lifecycle transitions.
+
+**Completed slice:** host-controlled pre-round/start gate and authoritative spawn gating are
+implemented under [`FidelityContract_SharedRoundStart.md`](FidelityContract_SharedRoundStart.md).
+Round end/restart and full P0 exit evidence remain open.
 
 ### P1 — Shared-world speech and social feedback
 

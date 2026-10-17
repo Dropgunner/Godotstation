@@ -12,6 +12,7 @@ public enum CrewAssignmentResult
     UnknownJob,
     PositionFilled,
     AlreadyAssigned,
+    RoundNotStarted,
 }
 
 /// <summary>Server-owned job positions for a crew roster. This type contains no engine or UI dependencies.</summary>

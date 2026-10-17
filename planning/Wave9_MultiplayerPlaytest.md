@@ -14,9 +14,11 @@ in-world chat, shared-world interactions, inventory, atmospheric, antagonist, or
 1. Build/run the project from Godot 4.4.1 .NET or export a local debug app.
 2. Choose a **LAN crew role**. For a varied smoke test, select Engineer on the host and
    Assistant on the joining client.
-3. Open two instances. In the first, choose **Host Station**. It listens on UDP port 7777.
-4. In the second, enter `127.0.0.1` and choose **Join Station**.
-5. Each instance should show two crew characters with the same server-assigned jobs. Use WASD
+3. Open two instances. In the first, choose **Host Station**. It listens on UDP port 7777
+   and waits in pre-round with no crew spawned.
+4. In the second, enter `127.0.0.1` and choose **Join Station**. Once both are connected, the
+   host presses **Start shift**.
+5. Each instance should then show two crew characters with the server-confirmed jobs. Use WASD
    to move; walls and room
    boundaries should stop movement. Both players should see movement from the other instance.
 6. For a second Mac on the same LAN, use the host Mac's local IPv4 address instead of

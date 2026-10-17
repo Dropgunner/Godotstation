@@ -58,6 +58,8 @@ client_pid=$!
 
 for _ in $(seq 1 100); do
   if grep -q "PLAYTEST_ROSTER peers=2" "$host_log" && \
+     grep -q "PLAYTEST_HOST_READY port=7777 phase=PreRound" "$host_log" && \
+     grep -q "PLAYTEST_ROUND_STARTED host_job=20" "$host_log" && \
      grep -q "PLAYTEST_PLAYER_SPAWNED peer=1" "$client_log" && \
      grep -q "PLAYTEST_PLAYER_SPAWNED peer=1 job=20 role=Engineer" "$client_log" && \
      grep -Eq "PLAYTEST_PLAYER_SPAWNED peer=[0-9]+ job=2 role=Assistant count=2" "$client_log" && \
@@ -72,7 +74,7 @@ for _ in $(seq 1 100); do
       echo "Godot reported a runtime error. Logs: $log_dir" >&2
       exit 1
     fi
-    echo "MULTIPLAYER_SMOKE_OK: server assigned distinct sourced crew jobs, spawned both peers, and relayed movement"
+    echo "MULTIPLAYER_SMOKE_OK: host started the pre-round shift, server assigned distinct crew roles, spawned both peers, and relayed movement"
     echo "Logs: $log_dir"
     exit 0
   fi

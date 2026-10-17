@@ -16,9 +16,11 @@ public partial class StationPlaytestController : Node2D
 
     private readonly Dictionary<int, PlayerRuntime> players = new();
     private readonly CrewRoster crewRoster = StationCrewJobCatalog.CreateRoster();
+    private readonly SharedRoundLifecycle roundLifecycle = new();
     private CollisionMap collisionMap = null!;
     private MovementProcessor movementProcessor = null!;
     private Label statusLabel = null!;
+    private Button startShiftButton = null!;
     private int localPeerId;
     private float snapshotTime;
     private ulong smokeMoveUntilMsec;
@@ -134,20 +136,14 @@ public partial class StationPlaytestController : Node2D
 
         GetMultiplayer().MultiplayerPeer = peer;
         localPeerId = 1;
-        CrewAssignmentResult assignment = crewRoster.TryAssign(localPeerId, PlaytestLaunchOptions.CrewJobId);
-        if (assignment != CrewAssignmentResult.Accepted ||
-            !crewRoster.TryGetAssignment(localPeerId, out CrewJob? assignedJob) || assignedJob == null)
-        {
-            SetStatus($"Could not reserve the selected crew role: {assignment}.");
-            peer.Close();
-            return;
-        }
-        var spawn = StationPlaytestLayout.Spawns[0];
-        AddPlayer(localPeerId, assignedJob, new Vector2(spawn.X, spawn.Y));
         hostAddress = GetLocalIpv4Address();
-        SetStatus($"Hosting · join {hostAddress}:{PlaytestLaunchOptions.Port} · UDP");
-        GD.Print($"PLAYTEST_HOST_READY port={PlaytestLaunchOptions.Port} job={assignedJob.Id}");
+        SetStatus($"Pre-round · join {hostAddress}:{PlaytestLaunchOptions.Port}, then start the shift");
+        startShiftButton.Visible = true;
+        startShiftButton.Disabled = false;
+        GD.Print($"PLAYTEST_HOST_READY port={PlaytestLaunchOptions.Port} phase={roundLifecycle.Phase}");
         RefreshStatus();
+        if (PlaytestLaunchOptions.SmokeMove)
+            CallDeferred(nameof(StartShift));
     }
 
     private void JoinHost(string address)
@@ -189,8 +185,59 @@ public partial class StationPlaytestController : Node2D
     private void OnConnectedToServer()
     {
         localPeerId = GetMultiplayer().GetUniqueId();
-        SetStatus($"Connected · waiting for crew spawn (peer {localPeerId})");
+        SetStatus($"Connected · waiting for the host to start the shift (peer {localPeerId})");
         GD.Print($"PLAYTEST_CONNECTED local_peer={localPeerId}");
+        RpcId(1, nameof(RequestRoundPhase));
+    }
+
+    private void StartShift()
+    {
+        if (!GetMultiplayer().IsServer()) return;
+        RoundStartResult result = roundLifecycle.TryStart(localPeerId);
+        if (result != RoundStartResult.Started) return;
+
+        CrewAssignmentResult assignment = crewRoster.TryAssign(localPeerId, PlaytestLaunchOptions.CrewJobId);
+        if (assignment != CrewAssignmentResult.Accepted ||
+            !crewRoster.TryGetAssignment(localPeerId, out CrewJob? assignedJob) || assignedJob == null)
+        {
+            SetStatus($"Could not reserve the selected crew role: {assignment}.");
+            return;
+        }
+
+        var spawn = StationPlaytestLayout.Spawns[0];
+        AddPlayer(localPeerId, assignedJob, new Vector2(spawn.X, spawn.Y));
+        startShiftButton.Disabled = true;
+        startShiftButton.Text = "Shift started";
+        SetStatus($"Shift started · joining crew can now spawn · {hostAddress}:{PlaytestLaunchOptions.Port}");
+        GD.Print($"PLAYTEST_ROUND_STARTED host_job={assignedJob.Id}");
+        Rpc(nameof(ReceiveRoundStarted));
+        RefreshStatus();
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestRoundPhase()
+    {
+        if (!GetMultiplayer().IsServer()) return;
+        int peerId = (int)GetMultiplayer().GetRemoteSenderId();
+        RpcId(peerId, nameof(ReceiveRoundPhase), (int)roundLifecycle.Phase);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceiveRoundPhase(int phase)
+    {
+        if (phase == (int)SharedRoundPhase.Started) RequestCrewSpawnFromClient();
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceiveRoundStarted()
+    {
+        RequestCrewSpawnFromClient();
+    }
+
+    private void RequestCrewSpawnFromClient()
+    {
+        if (GetMultiplayer().IsServer()) return;
+        SetStatus("Shift started · requesting your crew role…");
         RpcId(1, nameof(RequestCrewSpawn), PlaytestLaunchOptions.CrewJobId);
     }
 
@@ -212,6 +259,11 @@ public partial class StationPlaytestController : Node2D
         if (!GetMultiplayer().IsServer()) return;
         int peerId = (int)GetMultiplayer().GetRemoteSenderId();
         if (peerId <= 1) return;
+        if (!roundLifecycle.CanRequestJob)
+        {
+            RpcId(peerId, nameof(RejectCrewRequest), jobId, (int)CrewAssignmentResult.RoundNotStarted);
+            return;
+        }
         if (players.TryGetValue(peerId, out PlayerRuntime? existingPlayer))
         {
             RpcId(peerId, nameof(ReceiveSpawn), existingPlayer.PeerId, existingPlayer.Job.Id,
@@ -278,6 +330,7 @@ public partial class StationPlaytestController : Node2D
             CrewAssignmentResult.PositionFilled => "has no positions left",
             CrewAssignmentResult.UnknownJob => "is not available in this playtest",
             CrewAssignmentResult.InvalidPeer => "could not be assigned to your connection",
+            CrewAssignmentResult.RoundNotStarted => "cannot be requested until the host starts the shift",
             _ => "could not be assigned",
         };
         SetStatus($"{jobName} {reason}. Return to the lobby and choose another role.");
@@ -368,6 +421,9 @@ public partial class StationPlaytestController : Node2D
         statusLabel = new Label { Text = connectionStatus, AutowrapMode = TextServer.AutowrapMode.WordSmart };
         statusLabel.CustomMinimumSize = new Vector2(420, 34);
         content.AddChild(statusLabel);
+        startShiftButton = new Button { Text = "Start shift", Visible = false, Disabled = true };
+        startShiftButton.Pressed += StartShift;
+        content.AddChild(startShiftButton);
         content.AddChild(new Label { Text = $"WASD move  ·  Host shares LAN IP  ·  UDP {PlaytestLaunchOptions.Port}" });
 
         var returnButton = new Button { Text = "Return to lobby" };
