@@ -103,9 +103,10 @@ use and Q-drop consult that selected slot. The common interaction dispatcher, au
 position, reach and wall checks, and replicated snapshots remain in the path. Headless domain
 tests cover slot ownership, inactive-hand rejection, drop/recovery, range, obstruction, and
 disconnect cleanup. The existing two-client runtime smoke verifies shared request and snapshot
-replication. This is an interaction foundation, not a complete inventory, job task, or playable
-SS13 round. Inventory UI/storage, broader intent behavior, examine/alt-click, and full upstream
-anchor rules remain open.
+replication. A separate construction slice now uses two shared metal sheets and four seconds of
+server progress to plate a girder. These are interaction foundations and one construction task,
+not a complete inventory or playable SS13 round. Inventory UI/storage, broader intent behavior,
+examine/alt-click, and full upstream anchor rules remain open.
 
 ### P3 — One complete crew job loop
 
@@ -117,6 +118,12 @@ the current generic wrench-relay objective as a stand-in for Unitystation gamepl
 **Exit evidence:** a selected role spawns with the right access/equipment; players use real
 station objects and the existing engine systems; shared state changes are visible and
 recoverable; tests cover the domain outcome; a two-client playtest can complete the task.
+
+**Active implementation:** the playtest now has a source-grounded girder-plating task: pick up
+two metal sheets, hold them in the active hand for a four-second server action, and replicate
+the resulting wall to both clients. This is the first construction step toward an Engineer loop.
+It does not close P3: the Engineer loadout/access, full station machinery, and broader
+construction paths remain open. See [Fidelity Contract: Girder Plating](FidelityContract_GirderPlating.md).
 
 ### P4 — Survival, incapacitation, and recovery
 

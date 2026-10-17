@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using Godotstation.Common.Interactions;
+using Godotstation.Engine.Construction;
 using Godotstation.Engine.Inventory;
 using InventoryBodyPartType = Godotstation.Engine.Inventory.BodyPartType;
 using InventoryNamedSlot = Godotstation.Engine.Inventory.NamedSlot;
@@ -16,25 +17,38 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
 {
     public const int WrenchId = 9001;
     public const int FixtureId = 9002;
+    public const int MetalSheetsId = 9003;
+    public const int GirderId = 9004;
 
     private readonly Dictionary<int, CrewMember> crew = new();
     private readonly Dictionary<ItemStorage, CrewMember> crewByStorage = new();
     private readonly InventorySystem inventory;
     private readonly InteractionDispatcher dispatcher;
+    private readonly IReachabilityMap reachabilityMap;
     private readonly SharedWorldItem wrench;
+    private readonly SharedWorldItem metalSheets;
     private readonly SharedWorldFixture fixture;
+    private readonly SharedWorldFixture girder;
+    private readonly GirderPlatingTask platingTask = new();
+    private Vector2 girderPosition = new(2, 2);
+    private bool girderPlated;
     private Vector2 fixturePosition = new(0, 2);
     private bool fixtureAnchored = true;
 
     public SharedStationInventoryWorld(IReachabilityMap? reachabilityMap = null)
     {
+        this.reachabilityMap = reachabilityMap ?? UnobstructedMap.Instance;
         inventory = new InventorySystem(this);
         inventory.OnMovePerformed += _ => Changed();
-        dispatcher = new InteractionDispatcher(reachabilityMap);
+        dispatcher = new InteractionDispatcher(this.reachabilityMap);
         wrench = new SharedWorldItem(this, WrenchId, "wrench", new Vector2(-1, 2));
+        metalSheets = new SharedWorldItem(this, MetalSheetsId, "metal sheets", new Vector2(1, 2), new SharedMetalStack(2));
         fixture = new SharedWorldFixture(FixtureId, "service cart", fixturePosition);
+        girder = new SharedWorldFixture(GirderId, "girder", girderPosition);
         dispatcher.RegisterHandler(new WrenchPickupHandler(this, wrench));
+        dispatcher.RegisterHandler(new WrenchPickupHandler(this, metalSheets));
         dispatcher.RegisterHandler(new FixtureWrenchHandler(this, fixture, wrench));
+        dispatcher.RegisterHandler(new GirderPlatingHandler(this, girder, metalSheets));
     }
 
     public event Action<SharedStationWorldSnapshot>? StateChanged;
@@ -69,8 +83,12 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         if (!crew.TryGetValue(peerId, out CrewMember? member)) return false;
         if (wrench.ItemSlot?.ItemStorage == member.Inventory)
             inventory.ServerDrop(wrench.ItemSlot);
+        if (metalSheets.ItemSlot?.ItemStorage == member.Inventory)
+            inventory.ServerDrop(metalSheets.ItemSlot);
+        platingTask.Cancel(peerId);
         crew.Remove(peerId);
         crewByStorage.Remove(member.Inventory);
+        PublishConstructionState();
         return true;
     }
 
@@ -111,6 +129,38 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         return member.Inventory.GetNamedItemSlot(hand)?.Item?.Name ?? string.Empty;
     }
 
+    public StationConstructionSnapshot ConstructionSnapshot
+    {
+        get
+        {
+            CrewMember? owner = metalSheets.ItemSlot == null ? null : GetCrewForStorage(metalSheets.ItemSlot.ItemStorage);
+            return new StationConstructionSnapshot(owner?.PeerId, owner?.Position ?? metalSheets.PositionInWorld,
+                girderPlated ? 0 : metalSheets.Stackable?.Amount ?? 0, girderPosition, girderPlated, platingTask.WorkerPeerId,
+                platingTask.ProgressSeconds);
+        }
+    }
+
+    public event Action<StationConstructionSnapshot>? ConstructionStateChanged;
+
+    /// <summary>Advance the server-owned construction action and recheck its live prerequisites.</summary>
+    public void AdvanceConstruction(int peerId, double elapsedSeconds, bool publishProgress = true)
+    {
+        if (platingTask.WorkerPeerId != peerId || !crew.TryGetValue(peerId, out CrewMember? member)) return;
+        bool stillValid = ReferenceEquals(member.ActiveHandSlot.Item, metalSheets) &&
+            Validations.IsReachableByPositions(member.Position, girderPosition, true, reachabilityMap,
+                context: girder);
+        bool completed = platingTask.Advance(peerId, elapsedSeconds, stillValid,
+            metalSheets.Stackable?.Amount ?? 0);
+        if (completed)
+        {
+            if (!inventory.ServerConsume(member.ActiveHandSlot, GirderPlatingTask.RequiredSheets))
+                throw new InvalidOperationException("Validated girder material could not be consumed.");
+            girderPlated = true;
+        }
+        if (completed || !platingTask.WorkerPeerId.HasValue || publishProgress)
+            PublishConstructionState();
+    }
+
     public bool TryInteract(int senderPeerId, int targetId, Intent intent, bool isAltClick)
     {
         if (!crew.TryGetValue(senderPeerId, out CrewMember? member) ||
@@ -119,7 +169,9 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         IInteractable? target = targetId switch
         {
             WrenchId when wrench.ItemSlot == null && wrench.IsInWorld => wrench,
+            MetalSheetsId when metalSheets.ItemSlot == null && metalSheets.IsInWorld => metalSheets,
             FixtureId => fixture,
+            GirderId when !girderPlated => girder,
             _ => null,
         };
         if (target == null) return false;
@@ -127,6 +179,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         if (!dispatcher.TryResolveClick(member, member.ActiveHandItem, target,
                 target.WorldPosition, intent, isAltClick, NetworkSide.Server)) return false;
         Changed();
+        PublishConstructionState();
         return true;
     }
 
@@ -154,7 +207,18 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
 
     private void ToggleFixture() => fixtureAnchored = !fixtureAnchored;
 
+    private bool TryStartGirderPlating(int peerId)
+    {
+        if (!crew.TryGetValue(peerId, out CrewMember? member) ||
+            !ReferenceEquals(member.ActiveHandSlot.Item, metalSheets))
+            return false;
+        return platingTask.TryStart(peerId, metalSheets.Stackable?.Amount ?? 0,
+            isReachable: Validations.IsReachableByPositions(member.Position, girderPosition, true,
+                reachabilityMap, context: girder));
+    }
+
     private void Changed() => StateChanged?.Invoke(Snapshot);
+    private void PublishConstructionState() => ConstructionStateChanged?.Invoke(ConstructionSnapshot);
 
     private static bool IsFinite(Vector2 value) => float.IsFinite(value.X) && float.IsFinite(value.Y);
 
@@ -217,26 +281,30 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         private readonly SharedStationInventoryWorld world;
         private ItemSlot? itemSlot;
 
-        public SharedWorldItem(SharedStationInventoryWorld world, int id, string name, Vector2 position)
+        public SharedWorldItem(SharedStationInventoryWorld world, int id, string name, Vector2 position,
+            IStackable? stackable = null)
         {
             this.world = world;
             Id = id;
             Name = name;
             PositionInWorld = position;
+            Stackable = stackable;
             PlaceAt(position);
         }
 
         public ItemSlot? ItemSlot => itemSlot;
         public bool IsBuckled => false;
-        public IStackable? Stackable => null;
+        public IStackable? Stackable { get; }
         public IEnumerable<ItemStorage> ItemStorages => Array.Empty<ItemStorage>();
         public IEnumerable<IServerInventoryMove> MoveHooks => Array.Empty<IServerInventoryMove>();
         public float ThrowSpeed => 6f;
         public float ThrowRange => 7f;
         public bool StickyMovement => false;
-        public string InteractionId => "wrench";
+        public string InteractionId => Name;
         string IInteractable.Id => InteractionId;
-        public Vector2 WorldPosition => itemSlot == null ? PositionInWorld : world.Snapshot.WrenchPosition;
+        public Vector2 WorldPosition => itemSlot == null
+            ? PositionInWorld
+            : world.GetCrewForStorage(itemSlot.ItemStorage)?.Position ?? PositionInWorld;
         public WorldEntity InteractionEntity => this;
         public Vector2 PositionInWorld { get; private set; }
         public bool IsInWorld { get; private set; } = true;
@@ -267,10 +335,71 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
             PlaceAt(position);
         }
 
-        string IInteractable.Id => "service-cart";
+        string IInteractable.Id => Name;
         public Vector2 WorldPosition => AssumedWorldPosServer;
         public WorldEntity InteractionEntity => this;
     }
+
+    private sealed class SharedMetalStack(int initialAmount) : IStackable
+    {
+        public int Amount { get; private set; } = initialAmount;
+        public bool CanAccommodate(IPickupable other) => other.Stackable is SharedMetalStack;
+        public void ServerCombine(IStackable other)
+        {
+            if (other is not SharedMetalStack stack) return;
+            Amount += stack.Amount;
+            stack.Amount = 0;
+        }
+        public bool ServerConsume(int amountToConsume)
+        {
+            if (amountToConsume <= 0 || amountToConsume > Amount) return false;
+            Amount -= amountToConsume;
+            return true;
+        }
+        public IPickupable ServerRemoveOne()
+        {
+            if (Amount <= 0) throw new InvalidOperationException("Cannot split an empty metal stack.");
+            Amount--;
+            return new LooseMetalSheet();
+        }
+    }
+
+    private sealed class LooseMetalSheet : IPickupable
+    {
+        public string Name => "metal sheet";
+        public ItemSlot? ItemSlot { get; private set; }
+        public bool IsBuckled => false;
+        public IStackable? Stackable => null;
+        public IEnumerable<ItemStorage> ItemStorages => Array.Empty<ItemStorage>();
+        public IEnumerable<IServerInventoryMove> MoveHooks => Array.Empty<IServerInventoryMove>();
+        public float ThrowSpeed => 6f;
+        public float ThrowRange => 7f;
+        public bool StickyMovement => false;
+        public void SetItemSlot(ItemSlot? slot) => ItemSlot = slot;
+    }
+
+    private sealed class GirderPlatingHandler(SharedStationInventoryWorld world,
+        SharedWorldFixture owner, SharedWorldItem metal)
+        : IOwnedInteractionHandler<HandApply>
+    {
+        public WorldEntity Owner { get; } = owner;
+        public bool IsFirstInteractable => false;
+        public int Priority => 0;
+
+        public bool WillInteract(HandApply interaction, NetworkSide side) =>
+            interaction.Performer != null && interaction.TargetObject == Owner &&
+            ReferenceEquals(interaction.HandObject, metal) && (metal.Stackable?.Amount ?? 0) >= GirderPlatingTask.RequiredSheets &&
+            !world.platingTask.IsComplete && !world.platingTask.WorkerPeerId.HasValue;
+
+        public void ServerPerformInteraction(HandApply interaction)
+        {
+            if (interaction.Performer != null && world.TryStartGirderPlating(interaction.Performer.Id))
+                world.PublishConstructionState();
+        }
+    }
+
+    public sealed record StationConstructionSnapshot(int? MetalOwner, Vector2 MetalPosition, int MetalSheetCount,
+        Vector2 GirderPosition, bool GirderPlated, int? WorkerPeerId, double ProgressSeconds);
 
     private sealed class AcceptAllCapacity : IItemStorageCapacity
     {
