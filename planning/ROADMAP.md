@@ -40,11 +40,38 @@ and rendering/input in `game/`.
 **Deferred:** multiplayer and production networking; broad job/crew systems; multiple maps or
 objectives; economy/progression; full release signing, notarization, and distribution.
 
-## Later roadmap, pending Wave 8 results
+## Wave 9 — multiplayer station playtest foundation
 
-- **Wave 9:** deepen one game loop based on playtest evidence (additional objectives, hazards,
-  or failure recovery).
-- **Wave 10:** harden multiplayer boundaries and session flow only after the offline round is
-  stable.
+The Wave 8 protocol exposed a gap in the prototype: it is an offline systems demo, not a
+playtest for the intended 2D multiplayer Space Station 13-style game. The next playtest must
+let two people join one round, see a station map, and move their own crew characters around it.
+
+**Goal:** deliver a host-and-join LAN slice with server-resolved character movement on a small
+walkable station layout. Preserve Wave 8's offline round as a separate demo path.
+
+**Acceptance checks:**
+
+1. The lobby offers host and join-by-address paths, with connection status and useful errors.
+2. Two Godot instances can join one host; each sees both distinct crew characters and movement
+   from either peer updates on the other instance.
+3. WASD movement is resolved on the server by the existing headless movement processor; solid
+   room boundaries block movement on host and clients.
+4. The station layout is readable at launch and includes a corridor, rooms, walls, and visible
+   spawn points; no placeholder relay objective is required to evaluate locomotion.
+5. Deterministic tests cover network input authorization and station-map collision layout;
+   preflight, full .NET tests, and Godot startup smoke checks pass.
+6. The playtest instructions explain how to host locally and join over LAN and record known
+   limits. This milestone does not claim full Unitystation parity.
+
+**Scope boundary:** no combat, jobs/crew systems, inventory interactions, atmos simulation,
+round objective, internet matchmaking, or production server hardening. These remain follow-up
+work and must be sourced from Unitystation before implementation.
+
+## Later roadmap, pending playtest results
+
+- **Wave 10:** deepen the most important social/gameplay loop based on observations from the
+  multiplayer station playtest.
+- **Release track:** define supported macOS/Windows/Linux targets, reproducible exports, signing,
+  and distribution requirements before calling a build release-ready.
 - **Release track:** define supported macOS/Windows/Linux targets, reproducible exports,
   signing, and distribution requirements before calling a build release-ready.
