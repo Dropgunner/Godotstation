@@ -9,12 +9,14 @@ public partial class StationCrewAvatar : Node2D
     private int peerId;
     private bool isLocal;
     private string displayName = string.Empty;
+    private string jobName = string.Empty;
 
-    public void Configure(int ownerPeerId, bool local, string playerName)
+    public void Configure(int ownerPeerId, bool local, string playerName, string assignedJobName)
     {
         peerId = ownerPeerId;
         isLocal = local;
         displayName = playerName;
+        jobName = assignedJobName;
     }
 
     public override void _Ready()
@@ -40,7 +42,7 @@ public partial class StationCrewAvatar : Node2D
 
         var nameLabel = new Label
         {
-            Text = displayName,
+            Text = $"{displayName}\n{jobName.ToUpperInvariant()}",
             Position = new Vector2(-48f, -40f),
             Size = new Vector2(96f, 20f),
             Scale = new Vector2(0.04f, 0.04f),

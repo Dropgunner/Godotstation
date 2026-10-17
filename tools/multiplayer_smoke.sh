@@ -26,16 +26,16 @@ fi
 
 launch_host() {
   if [[ -n "$playtest_app" ]]; then
-    "$godot_bin" --headless --quit-after 300 -- --playtest-host --playtest-smoke-move
+    "$godot_bin" --headless --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-move
   else
-    "$godot_bin" --headless --path "$repo_root/game" --quit-after 300 -- --playtest-host --playtest-smoke-move
+    "$godot_bin" --headless --path "$repo_root/game" --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-move
   fi
 }
 launch_client() {
   if [[ -n "$playtest_app" ]]; then
-    "$godot_bin" --headless --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-smoke-move
+    "$godot_bin" --headless --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-move
   else
-    "$godot_bin" --headless --path "$repo_root/game" --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-smoke-move
+    "$godot_bin" --headless --path "$repo_root/game" --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-move
   fi
 }
 
@@ -59,7 +59,8 @@ client_pid=$!
 for _ in $(seq 1 100); do
   if grep -q "PLAYTEST_ROSTER peers=2" "$host_log" && \
      grep -q "PLAYTEST_PLAYER_SPAWNED peer=1" "$client_log" && \
-     grep -q "PLAYTEST_PLAYER_SPAWNED .*count=2" "$client_log" && \
+     grep -q "PLAYTEST_PLAYER_SPAWNED peer=1 job=20 role=Engineer" "$client_log" && \
+     grep -Eq "PLAYTEST_PLAYER_SPAWNED peer=[0-9]+ job=2 role=Assistant count=2" "$client_log" && \
      grep -q "PLAYTEST_CLIENT_POSITION peer=" "$host_log" && \
      grep -q "PLAYTEST_REMOTE_MOVE peer=" "$client_log"; then
     wait "$client_pid"
@@ -71,7 +72,7 @@ for _ in $(seq 1 100); do
       echo "Godot reported a runtime error. Logs: $log_dir" >&2
       exit 1
     fi
-    echo "MULTIPLAYER_SMOKE_OK: two peers joined, spawned, moved on the server, and received position updates"
+    echo "MULTIPLAYER_SMOKE_OK: server assigned distinct sourced crew jobs, spawned both peers, and relayed movement"
     echo "Logs: $log_dir"
     exit 0
   fi

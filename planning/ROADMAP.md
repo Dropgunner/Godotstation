@@ -67,11 +67,20 @@ walkable station layout. Preserve Wave 8's offline round as a separate demo path
 round objective, internet matchmaking, or production server hardening. These remain follow-up
 work and must be sourced from Unitystation before implementation.
 
-## Later roadmap, pending playtest results
+## Gameplay parity beyond Wave 9
 
-- **Wave 10:** deepen the most important social/gameplay loop based on observations from the
-  multiplayer station playtest.
+Wave 9 is a locomotion/network foundation only. It does not meet the game's intended SS13
+playtest target. Continue against the dependency-ordered milestones in
+[`UNITYSTATION_PARITY_ROADMAP.md`](UNITYSTATION_PARITY_ROADMAP.md): shared shift lifecycle and
+crew roles, spatial in-world speech, SS13 item/intent interactions, one source-backed job
+loop, survival/recovery, and round modes. Player playtests should validate and refine these
+systems, not decide whether core SS13 gameplay belongs in the project.
+
+Do not call a build a Unitystation-style playable build until it passes the two-client gate
+in that roadmap. Keep the current LAN movement smoke as evidence for networking/locomotion
+only.
+
+## Release track
+
 - **Release track:** define supported macOS/Windows/Linux targets, reproducible exports, signing,
   and distribution requirements before calling a build release-ready.
-- **Release track:** define supported macOS/Windows/Linux targets, reproducible exports,
-  signing, and distribution requirements before calling a build release-ready.

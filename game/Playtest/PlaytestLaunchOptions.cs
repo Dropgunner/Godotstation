@@ -7,6 +7,7 @@ public static class PlaytestLaunchOptions
 {
     public static bool IsHost { get; set; }
     public static string Address { get; set; } = "127.0.0.1";
+    public static int CrewJobId { get; set; } = Godotstation.Engine.Rounds.StationCrewJobCatalog.AssistantJobId;
     public static int Port { get; private set; } = 7777;
     public static bool SmokeMove { get; private set; }
 
@@ -30,6 +31,11 @@ public static class PlaytestLaunchOptions
                 int.TryParse(arg["--playtest-port=".Length..], out int port) && port is > 0 and <= 65535)
             {
                 Port = port;
+            }
+            else if (arg.StartsWith("--playtest-jobid=", System.StringComparison.Ordinal) &&
+                int.TryParse(arg["--playtest-jobid=".Length..], out int jobId))
+            {
+                CrewJobId = jobId;
             }
             else if (arg == "--playtest-smoke-move")
             {

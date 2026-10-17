@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using Godot;
 using Godotstation.Engine.Movement;
+using Godotstation.Engine.Rounds;
 
 namespace Godotstation.Game.Playtest;
 
@@ -14,6 +15,7 @@ public partial class StationPlaytestController : Node2D
     private const float SnapshotInterval = 0.05f;
 
     private readonly Dictionary<int, PlayerRuntime> players = new();
+    private readonly CrewRoster crewRoster = StationCrewJobCatalog.CreateRoster();
     private CollisionMap collisionMap = null!;
     private MovementProcessor movementProcessor = null!;
     private Label statusLabel = null!;
@@ -132,11 +134,19 @@ public partial class StationPlaytestController : Node2D
 
         GetMultiplayer().MultiplayerPeer = peer;
         localPeerId = 1;
+        CrewAssignmentResult assignment = crewRoster.TryAssign(localPeerId, PlaytestLaunchOptions.CrewJobId);
+        if (assignment != CrewAssignmentResult.Accepted ||
+            !crewRoster.TryGetAssignment(localPeerId, out CrewJob? assignedJob) || assignedJob == null)
+        {
+            SetStatus($"Could not reserve the selected crew role: {assignment}.");
+            peer.Close();
+            return;
+        }
         var spawn = StationPlaytestLayout.Spawns[0];
-        AddPlayer(1, new Vector2(spawn.X, spawn.Y));
+        AddPlayer(localPeerId, assignedJob, new Vector2(spawn.X, spawn.Y));
         hostAddress = GetLocalIpv4Address();
         SetStatus($"Hosting · join {hostAddress}:{PlaytestLaunchOptions.Port} · UDP");
-        GD.Print($"PLAYTEST_HOST_READY port={PlaytestLaunchOptions.Port}");
+        GD.Print($"PLAYTEST_HOST_READY port={PlaytestLaunchOptions.Port} job={assignedJob.Id}");
         RefreshStatus();
     }
 
@@ -167,6 +177,7 @@ public partial class StationPlaytestController : Node2D
         if (!GetMultiplayer().IsServer()) return;
         if (players.Remove(peerId, out PlayerRuntime? player))
         {
+            crewRoster.Release(peerId);
             collisionMap.RemoveObject(player.Obstacle);
             player.Avatar.QueueFree();
             Rpc(nameof(RemovePlayer), peerId);
@@ -180,7 +191,7 @@ public partial class StationPlaytestController : Node2D
         localPeerId = GetMultiplayer().GetUniqueId();
         SetStatus($"Connected · waiting for crew spawn (peer {localPeerId})");
         GD.Print($"PLAYTEST_CONNECTED local_peer={localPeerId}");
-        RpcId(1, nameof(RequestSpawn));
+        RpcId(1, nameof(RequestCrewSpawn), PlaytestLaunchOptions.CrewJobId);
     }
 
     private void OnConnectionFailed()
@@ -196,20 +207,39 @@ public partial class StationPlaytestController : Node2D
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestSpawn()
+    private void RequestCrewSpawn(int jobId)
     {
         if (!GetMultiplayer().IsServer()) return;
         int peerId = (int)GetMultiplayer().GetRemoteSenderId();
-        if (peerId <= 1 || players.ContainsKey(peerId) || players.Count >= StationPlaytestLayout.Spawns.Count)
+        if (peerId <= 1) return;
+        if (players.TryGetValue(peerId, out PlayerRuntime? existingPlayer))
+        {
+            RpcId(peerId, nameof(ReceiveSpawn), existingPlayer.PeerId, existingPlayer.Job.Id,
+                existingPlayer.Position.X, existingPlayer.Position.Y);
             return;
+        }
+        if (players.Count >= MaximumPlayers || players.Count >= StationPlaytestLayout.Spawns.Count)
+        {
+            RpcId(peerId, nameof(RejectCrewRequest), jobId, (int)CrewAssignmentResult.PositionFilled);
+            return;
+        }
+
+        CrewAssignmentResult assignment = crewRoster.TryAssign(peerId, jobId);
+        if (assignment != CrewAssignmentResult.Accepted ||
+            !crewRoster.TryGetAssignment(peerId, out CrewJob? assignedJob) || assignedJob == null)
+        {
+            RpcId(peerId, nameof(RejectCrewRequest), jobId, (int)assignment);
+            return;
+        }
 
         var spawnPoint = StationPlaytestLayout.Spawns[players.Count];
         Vector2 spawn = new(spawnPoint.X, spawnPoint.Y);
         foreach (PlayerRuntime existing in players.Values)
-            RpcId(peerId, nameof(ReceiveSpawn), existing.PeerId, existing.Position.X, existing.Position.Y);
+            RpcId(peerId, nameof(ReceiveSpawn), existing.PeerId, existing.Job.Id,
+                existing.Position.X, existing.Position.Y);
 
-        AddPlayer(peerId, spawn);
-        Rpc(nameof(ReceiveSpawn), peerId, spawn.X, spawn.Y);
+        AddPlayer(peerId, assignedJob, spawn);
+        Rpc(nameof(ReceiveSpawn), peerId, assignedJob.Id, spawn.X, spawn.Y);
         GD.Print($"PLAYTEST_ROSTER peers={players.Count}");
         RefreshStatus();
     }
@@ -223,12 +253,35 @@ public partial class StationPlaytestController : Node2D
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = true, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void ReceiveSpawn(int peerId, float x, float y)
+    private void ReceiveSpawn(int peerId, int jobId, float x, float y)
     {
         if (players.ContainsKey(peerId)) return;
-        AddPlayer(peerId, new Vector2(x, y));
-        GD.Print($"PLAYTEST_PLAYER_SPAWNED peer={peerId} count={players.Count}");
+        if (!StationCrewJobCatalog.CreateRoster().TryGetJob(jobId, out CrewJob? job) || job == null)
+        {
+            GD.PrintErr($"PLAYTEST_INVALID_SERVER_JOB peer={peerId} job={jobId}");
+            return;
+        }
+        AddPlayer(peerId, job, new Vector2(x, y));
+        GD.Print($"PLAYTEST_PLAYER_SPAWNED peer={peerId} job={job.Id} role={job.Name} count={players.Count}");
         RefreshStatus();
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RejectCrewRequest(int jobId, int resultCode)
+    {
+        var result = (CrewAssignmentResult)resultCode;
+        string jobName = StationCrewJobCatalog.CreateRoster().TryGetJob(jobId, out CrewJob? job) && job != null
+            ? job.Name
+            : $"job {jobId}";
+        string reason = result switch
+        {
+            CrewAssignmentResult.PositionFilled => "has no positions left",
+            CrewAssignmentResult.UnknownJob => "is not available in this playtest",
+            CrewAssignmentResult.InvalidPeer => "could not be assigned to your connection",
+            _ => "could not be assigned",
+        };
+        SetStatus($"{jobName} {reason}. Return to the lobby and choose another role.");
+        GD.PrintErr($"PLAYTEST_CREW_REQUEST_REJECTED job={jobId} result={result}");
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = true, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -254,19 +307,19 @@ public partial class StationPlaytestController : Node2D
         }
     }
 
-    private void AddPlayer(int peerId, Vector2 position)
+    private void AddPlayer(int peerId, CrewJob job, Vector2 position)
     {
         if (players.ContainsKey(peerId)) return;
 
         var avatar = new StationCrewAvatar { Name = $"Crew_{peerId}", Position = position };
         avatar.Configure(peerId, peerId == GetMultiplayer().GetUniqueId(),
-            peerId == 1 ? "CREW · HOST" : $"CREW · {players.Count + 1}");
+            peerId == 1 ? "CREW · HOST" : $"CREW · {players.Count + 1}", job.Name);
         AddChild(avatar);
 
         var obstacle = new DynamicObject(Mathf.RoundToInt(position.X), Mathf.RoundToInt(position.Y),
             isPushable: false, tag: "player");
         collisionMap.AddObject(obstacle);
-        players.Add(peerId, new PlayerRuntime(peerId, avatar, position, obstacle));
+        players.Add(peerId, new PlayerRuntime(peerId, job, avatar, position, obstacle));
     }
 
     private void SetMovementInput(int ownerPeerId, int senderPeerId, int deltaX, int deltaY)
@@ -365,9 +418,10 @@ public partial class StationPlaytestController : Node2D
         if (IsInstanceValid(statusLabel)) statusLabel.Text = connectionStatus;
     }
 
-    private sealed class PlayerRuntime(int peerId, Node2D avatar, Vector2 spawnPosition, DynamicObject obstacle)
+    private sealed class PlayerRuntime(int peerId, CrewJob job, Node2D avatar, Vector2 spawnPosition, DynamicObject obstacle)
     {
         public int PeerId { get; } = peerId;
+        public CrewJob Job { get; } = job;
         public Node2D Avatar { get; } = avatar;
         public Vector2 SpawnPosition { get; } = spawnPosition;
         public Vector2 Position { get; set; } = spawnPosition;

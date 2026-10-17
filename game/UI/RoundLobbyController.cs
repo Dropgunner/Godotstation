@@ -1,5 +1,6 @@
 using Godot;
 using Godotstation.Common.Interactions;
+using Godotstation.Engine.Rounds;
 using Godotstation.Game.Playtest;
 using Godotstation.Game.Round;
 
@@ -12,6 +13,7 @@ public partial class RoundLobbyController : Control
     private Label selectedLabel = null!;
     private Button startButton = null!;
     private LineEdit addressInput = null!;
+    private OptionButton crewJobOption = null!;
 
     public override void _Ready()
     {
@@ -97,6 +99,15 @@ public partial class RoundLobbyController : Control
         };
         content.AddChild(addressInput);
 
+        var crewJobRow = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        content.AddChild(crewJobRow);
+        crewJobRow.AddChild(new Label { Text = "LAN crew role:" });
+        crewJobOption = new OptionButton { CustomMinimumSize = new Vector2(280, 38) };
+        foreach (CrewJob job in StationCrewJobCatalog.Jobs)
+            crewJobOption.AddItem($"{job.Name} — {job.Description}", job.Id);
+        if (crewJobOption.ItemCount > 0) crewJobOption.Select(0);
+        crewJobRow.AddChild(crewJobOption);
+
         var playtestButtons = new HBoxContainer
         {
             Alignment = BoxContainer.AlignmentMode.Center,
@@ -138,6 +149,7 @@ public partial class RoundLobbyController : Control
         PlaytestLaunchOptions.Address = string.IsNullOrWhiteSpace(addressInput.Text)
             ? "127.0.0.1"
             : addressInput.Text.Trim();
+        PlaytestLaunchOptions.CrewJobId = crewJobOption.GetSelectedId();
         GetTree().ChangeSceneToFile("res://World/StationPlaytest.tscn");
     }
 
