@@ -48,7 +48,8 @@ trace additional upstream systems it actually implements.
 - The Wave 9 playtest now has networked job selection, capacity checks, and spawn gating for
   two sourced crew roles. It now also models the authoritative PreRound → Started gate for
   role spawn requests, plus server-routed local speech with hearing-range and wall checks.
-  It still has no shared item pickup/use, job-specific station task, round end, or restart.
+  This branch adds a first shared-world pickup/tool-use slice. It still lacks the broader
+  inventory and intent loop, a source-backed job task, round end, and restart.
   Role assignment does not yet make the role's job duties playable; this remains an early
   multiplayer station loop rather than a complete round.
 
@@ -95,6 +96,16 @@ drop, examine/alt-click, and at least one useful station object interaction.
 **Exit evidence:** two clients observe the same item ownership and object state; tests prove
 ownership, reach, intent/handler ordering, and rejection of forged client state. A playtester
 can pick up and use a tool on a nearby station object.
+
+**Implemented slice in `codex/wave9-shared-interactions`:** the shared wrench now moves through
+the engine `InventorySystem` into real left/right hand slots. Tab switches the active hand; tool
+use and Q-drop consult that selected slot. The common interaction dispatcher, authoritative peer
+position, reach and wall checks, and replicated snapshots remain in the path. Headless domain
+tests cover slot ownership, inactive-hand rejection, drop/recovery, range, obstruction, and
+disconnect cleanup. The existing two-client runtime smoke verifies shared request and snapshot
+replication. This is an interaction foundation, not a complete inventory, job task, or playable
+SS13 round. Inventory UI/storage, broader intent behavior, examine/alt-click, and full upstream
+anchor rules remain open.
 
 ### P3 — One complete crew job loop
 

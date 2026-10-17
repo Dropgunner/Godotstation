@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using Godot;
+using Godotstation.Common.Interactions;
 using Godotstation.Engine.Chat;
+using Godotstation.Engine.Interactions;
 using Godotstation.Engine.Movement;
 using Godotstation.Engine.Rounds;
 
@@ -20,7 +22,15 @@ public partial class StationPlaytestController : Node2D
     private readonly SharedRoundLifecycle roundLifecycle = new();
     private CollisionMap collisionMap = null!;
     private MovementProcessor movementProcessor = null!;
+    private SharedStationInventoryWorld sharedInteractionWorld = null!;
+    private StationMapView stationMapView = null!;
+    private DynamicObject fixtureObstacle = null!;
+    private int? wrenchOwner;
+    private Vector2 wrenchWorldPosition = new(-1, 2);
+    private Vector2 fixtureWorldPosition = new(0, 2);
+    private bool fixtureAnchored = true;
     private Label statusLabel = null!;
+    private Label activeHandLabel = null!;
     private Button startShiftButton = null!;
     private RichTextLabel chatLog = null!;
     private LineEdit chatInput = null!;
@@ -29,6 +39,10 @@ public partial class StationPlaytestController : Node2D
     private ulong smokeMoveUntilMsec;
     private bool smokeMoveStarted;
     private bool smokeChatStarted;
+    private bool smokeInteractionPickupRequested;
+    private bool smokeInteractionUseRequested;
+    private bool smokeInteractionDropRequested;
+    private bool smokeInteractionsCompleted;
     private bool localRoundStarted;
     private string connectionStatus = "Connecting…";
     private string hostAddress = "LAN IP unavailable";
@@ -38,6 +52,10 @@ public partial class StationPlaytestController : Node2D
         SetMultiplayerAuthority(1);
         collisionMap = StationPlaytestLayout.CreateCollisionMap();
         movementProcessor = new MovementProcessor(collisionMap);
+        sharedInteractionWorld = new SharedStationInventoryWorld(new StationReachabilityMap(collisionMap));
+        sharedInteractionWorld.StateChanged += OnSharedStateChanged;
+        fixtureObstacle = new DynamicObject(0, 2, isPushable: false, tag: "service-cart");
+        collisionMap.AddObject(fixtureObstacle);
         BuildStationView();
         BuildHud();
 
@@ -66,6 +84,7 @@ public partial class StationPlaytestController : Node2D
             smokeChatStarted = true;
             SubmitSpeech($"SMOKE_CHAT_PEER_{localPeerId}");
         }
+        DriveSmokeInteractions();
         var direction = ReadLocalInput();
 
         if (multiplayer.IsServer())
@@ -95,6 +114,13 @@ public partial class StationPlaytestController : Node2D
                     collisionMap.MoveObject(player.Obstacle, Mathf.RoundToInt(x), Mathf.RoundToInt(y));
 
                 player.Position = new Vector2(x, y);
+                sharedInteractionWorld.SetActorPosition(player.PeerId, new System.Numerics.Vector2(x, y));
+                if (fixtureObstacle.X != Mathf.RoundToInt(fixtureWorldPosition.X) ||
+                    fixtureObstacle.Y != Mathf.RoundToInt(fixtureWorldPosition.Y))
+                {
+                    fixtureWorldPosition = new Vector2(fixtureObstacle.X, fixtureObstacle.Y);
+                    sharedInteractionWorld.SetFixturePosition(new System.Numerics.Vector2(fixtureObstacle.X, fixtureObstacle.Y));
+                }
                 player.Avatar.Position = player.Position;
                 if (!player.HasLoggedMovement && player.Position.DistanceSquaredTo(player.SpawnPosition) > 0.08f)
                 {
@@ -152,7 +178,7 @@ public partial class StationPlaytestController : Node2D
         startShiftButton.Disabled = false;
         GD.Print($"PLAYTEST_HOST_READY port={PlaytestLaunchOptions.Port} phase={roundLifecycle.Phase}");
         RefreshStatus();
-        if (PlaytestLaunchOptions.SmokeMove)
+        if (PlaytestLaunchOptions.SmokeMove || PlaytestLaunchOptions.SmokeInteractions)
             CallDeferred(nameof(StartShift));
     }
 
@@ -183,6 +209,7 @@ public partial class StationPlaytestController : Node2D
         if (!GetMultiplayer().IsServer()) return;
         if (players.Remove(peerId, out PlayerRuntime? player))
         {
+            sharedInteractionWorld.RemoveActor(peerId);
             crewRoster.Release(peerId);
             collisionMap.RemoveObject(player.Obstacle);
             player.Avatar.QueueFree();
@@ -306,13 +333,17 @@ public partial class StationPlaytestController : Node2D
         }
 
         var spawnPoint = StationPlaytestLayout.Spawns[players.Count];
-        Vector2 spawn = new(spawnPoint.X, spawnPoint.Y);
+        Vector2 spawn = PlaytestLaunchOptions.SmokeInteractions
+            ? new Vector2(-1f, 1f)
+            : new Vector2(spawnPoint.X, spawnPoint.Y);
         foreach (PlayerRuntime existing in players.Values)
             RpcId(peerId, nameof(ReceiveSpawn), existing.PeerId, existing.Job.Id,
                 existing.Position.X, existing.Position.Y);
 
         AddPlayer(peerId, assignedJob, spawn);
         Rpc(nameof(ReceiveSpawn), peerId, assignedJob.Id, spawn.X, spawn.Y);
+        SendSharedState(peerId);
+        SendActiveHand(peerId);
         GD.Print($"PLAYTEST_ROSTER peers={players.Count}");
         RefreshStatus();
     }
@@ -466,6 +497,7 @@ public partial class StationPlaytestController : Node2D
             isPushable: false, tag: "player");
         collisionMap.AddObject(obstacle);
         players.Add(peerId, new PlayerRuntime(peerId, job, avatar, position, obstacle));
+        sharedInteractionWorld.AddActor(peerId, new System.Numerics.Vector2(position.X, position.Y));
     }
 
     private void SetMovementInput(int ownerPeerId, int senderPeerId, int deltaX, int deltaY)
@@ -497,7 +529,206 @@ public partial class StationPlaytestController : Node2D
     private void BuildStationView()
     {
         EnsureMovementActions();
-        AddChild(new StationMapView());
+        stationMapView = new StationMapView();
+        stationMapView.SetSharedObjects(wrenchOwner, wrenchWorldPosition, fixtureWorldPosition, fixtureAnchored);
+        AddChild(stationMapView);
+    }
+
+    public override void _UnhandledInput(InputEvent inputEvent)
+    {
+        if (inputEvent is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Tab } &&
+            localRoundStarted && players.ContainsKey(GetMultiplayer().GetUniqueId()))
+        {
+            if (GetMultiplayer().IsServer())
+                ResolveActiveHandToggle(localPeerId);
+            else
+                RpcId(1, nameof(RequestActiveHandToggle));
+            return;
+        }
+
+        if (inputEvent is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Q } &&
+            localRoundStarted && players.ContainsKey(GetMultiplayer().GetUniqueId()))
+        {
+            if (GetMultiplayer().IsServer())
+                ResolveSharedDrop(localPeerId);
+            else
+                RpcId(1, nameof(RequestSharedDrop));
+            return;
+        }
+
+        if (inputEvent is not InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click ||
+            !localRoundStarted || !players.ContainsKey(GetMultiplayer().GetUniqueId())) return;
+
+        Vector2 clickPosition = GetGlobalMousePosition();
+        int targetId = -1;
+        float nearestDistance = 0.7f;
+        if (wrenchOwner == null)
+        {
+            float distance = clickPosition.DistanceTo(wrenchWorldPosition);
+            if (distance < nearestDistance) { targetId = SharedStationInventoryWorld.WrenchId; nearestDistance = distance; }
+        }
+        float fixtureDistance = clickPosition.DistanceTo(fixtureWorldPosition);
+        if (fixtureDistance < nearestDistance) targetId = SharedStationInventoryWorld.FixtureId;
+        if (targetId < 0) return;
+
+        bool altClick = click.AltPressed;
+        if (GetMultiplayer().IsServer())
+            ResolveSharedInteraction(localPeerId, targetId, (int)Intent.Help, altClick);
+        else
+            RpcId(1, nameof(RequestSharedInteraction), targetId, (int)Intent.Help, altClick);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestSharedInteraction(int targetId, int intentValue, bool altClick)
+    {
+        if (!GetMultiplayer().IsServer()) return;
+        int senderId = (int)GetMultiplayer().GetRemoteSenderId();
+        ResolveSharedInteraction(senderId, targetId, intentValue, altClick);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestSharedDrop()
+    {
+        if (!GetMultiplayer().IsServer()) return;
+        ResolveSharedDrop((int)GetMultiplayer().GetRemoteSenderId());
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestActiveHandToggle()
+    {
+        if (!GetMultiplayer().IsServer()) return;
+        ResolveActiveHandToggle((int)GetMultiplayer().GetRemoteSenderId());
+    }
+
+    private void ResolveActiveHandToggle(int senderId)
+    {
+        if (!roundLifecycle.CanRequestJob || !players.ContainsKey(senderId) ||
+            !sharedInteractionWorld.TryToggleActiveHand(senderId)) return;
+        if (senderId == 1)
+            UpdateActiveHandLabel(sharedInteractionWorld.GetActiveHand(senderId));
+        else
+            SendActiveHand(senderId);
+    }
+
+    private void SendActiveHand(int peerId)
+    {
+        var hand = sharedInteractionWorld.GetActiveHand(peerId);
+        if (hand == null) return;
+        string itemName = sharedInteractionWorld.GetHandItemName(peerId, hand.Value);
+        if (peerId == 1)
+            UpdateActiveHandLabel(hand, itemName);
+        else
+            RpcId(peerId, nameof(ReceiveActiveHand), (int)hand.Value, itemName);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceiveActiveHand(int handValue, string itemName) =>
+        UpdateActiveHandLabel((Godotstation.Engine.Inventory.NamedSlot)handValue, itemName);
+
+    private void UpdateActiveHandLabel(Godotstation.Engine.Inventory.NamedSlot? hand, string? itemName = null)
+    {
+        if (activeHandLabel == null || hand == null) return;
+        itemName ??= sharedInteractionWorld.GetHandItemName(localPeerId, hand.Value);
+        activeHandLabel.Text = $"Active hand: {hand.Value} · {(itemName.Length == 0 ? "empty" : itemName)}";
+    }
+
+    private void ResolveSharedDrop(int senderId)
+    {
+        if (!roundLifecycle.CanRequestJob || !players.ContainsKey(senderId)) return;
+        if (sharedInteractionWorld.TryDropActiveHand(senderId))
+            SendActiveHand(senderId);
+    }
+
+    private void DriveSmokeInteractions()
+    {
+        if (!PlaytestLaunchOptions.SmokeInteractions || GetMultiplayer().IsServer() ||
+            smokeInteractionsCompleted || !localRoundStarted || players.Count < 2) return;
+
+        if (!smokeInteractionPickupRequested)
+        {
+            smokeInteractionPickupRequested = true;
+            RpcId(1, nameof(RequestSharedInteraction), SharedStationInventoryWorld.WrenchId,
+                (int)Intent.Help, false);
+            GD.Print("PLAYTEST_INTERACTION_REQUEST pickup");
+            return;
+        }
+
+        if (wrenchOwner == localPeerId && !smokeInteractionUseRequested)
+        {
+            smokeInteractionUseRequested = true;
+            RpcId(1, nameof(RequestSharedInteraction), SharedStationInventoryWorld.FixtureId,
+                (int)Intent.Help, false);
+            GD.Print("PLAYTEST_INTERACTION_REQUEST wrench-use");
+            return;
+        }
+
+        if (wrenchOwner == localPeerId && !fixtureAnchored && !smokeInteractionDropRequested)
+        {
+            smokeInteractionDropRequested = true;
+            RpcId(1, nameof(RequestSharedDrop));
+            GD.Print("PLAYTEST_INTERACTION_REQUEST drop");
+            return;
+        }
+
+        if (smokeInteractionDropRequested && wrenchOwner == null && !fixtureAnchored)
+        {
+            smokeInteractionsCompleted = true;
+            GD.Print("PLAYTEST_SHARED_INTERACTION_OK pickup=true wrench_use=true dropped=true replicated=true");
+        }
+    }
+
+    private void ResolveSharedInteraction(int senderId, int targetId, int intentValue, bool altClick)
+    {
+        if (!roundLifecycle.CanRequestJob || !players.ContainsKey(senderId) ||
+            intentValue is < (int)Intent.Help or > (int)Intent.Harm) return;
+        if (!sharedInteractionWorld.TryInteract(senderId, targetId, (Intent)intentValue, altClick))
+        {
+            if (senderId == localPeerId) SetStatus("Too far away, blocked, or you need the wrench in hand.");
+            else RpcId(senderId, nameof(RejectSharedInteraction));
+        }
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RejectSharedInteraction() => SetStatus("Too far away, blocked, or you need the wrench in hand.");
+
+    private void OnSharedStateChanged(SharedStationWorldSnapshot snapshot)
+    {
+        wrenchOwner = snapshot.WrenchOwner;
+        wrenchWorldPosition = new Vector2(snapshot.WrenchPosition.X, snapshot.WrenchPosition.Y);
+        fixtureWorldPosition = new Vector2(snapshot.FixturePosition.X, snapshot.FixturePosition.Y);
+        fixtureAnchored = snapshot.FixtureAnchored;
+        fixtureObstacle.IsPushable = !fixtureAnchored;
+        fixtureObstacle.X = Mathf.RoundToInt(fixtureWorldPosition.X);
+        fixtureObstacle.Y = Mathf.RoundToInt(fixtureWorldPosition.Y);
+        stationMapView?.SetSharedObjects(wrenchOwner, wrenchWorldPosition, fixtureWorldPosition, fixtureAnchored);
+        if (snapshot.WrenchOwner is int ownerPeerId)
+            SendActiveHand(ownerPeerId);
+        if (PlaytestLaunchOptions.SmokeInteractions)
+            GD.Print($"PLAYTEST_INTERACTION_SERVER_STATE owner={wrenchOwner ?? 0} anchored={fixtureAnchored}");
+        Rpc(nameof(ReceiveSharedState), wrenchOwner ?? 0, wrenchWorldPosition.X, wrenchWorldPosition.Y,
+            fixtureWorldPosition.X, fixtureWorldPosition.Y, fixtureAnchored);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceiveSharedState(int ownerPeerId, float wrenchX, float wrenchY, float fixtureX, float fixtureY, bool anchored)
+    {
+        wrenchOwner = ownerPeerId == 0 ? null : ownerPeerId;
+        wrenchWorldPosition = new Vector2(wrenchX, wrenchY);
+        fixtureWorldPosition = new Vector2(fixtureX, fixtureY);
+        fixtureAnchored = anchored;
+        stationMapView.SetSharedObjects(wrenchOwner, wrenchWorldPosition, fixtureWorldPosition, fixtureAnchored);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceiveInitialSharedState(int ownerPeerId, float wrenchX, float wrenchY, float fixtureX, float fixtureY, bool anchored)
+        => ReceiveSharedState(ownerPeerId, wrenchX, wrenchY, fixtureX, fixtureY, anchored);
+
+    private void SendSharedState(int peerId)
+    {
+        SharedStationWorldSnapshot snapshot = sharedInteractionWorld.Snapshot;
+        RpcId(peerId, nameof(ReceiveInitialSharedState), snapshot.WrenchOwner ?? 0,
+            snapshot.WrenchPosition.X, snapshot.WrenchPosition.Y,
+            snapshot.FixturePosition.X, snapshot.FixturePosition.Y, snapshot.FixtureAnchored);
     }
 
     private void BuildHud()
@@ -518,6 +749,9 @@ public partial class StationPlaytestController : Node2D
         startShiftButton.Pressed += StartShift;
         content.AddChild(startShiftButton);
         content.AddChild(new Label { Text = $"WASD move  ·  Host shares LAN IP  ·  UDP {PlaytestLaunchOptions.Port}" });
+        activeHandLabel = new Label { Text = "Active hand: rightHand · empty" };
+        content.AddChild(activeHandLabel);
+        content.AddChild(new Label { Text = "Click the wrench to pick it up, click the cart to unbolt it, Tab switches hands, Q drops the active hand, and WASD moves." });
 
         chatLog = new RichTextLabel
         {
@@ -602,5 +836,16 @@ public partial class StationPlaytestController : Node2D
         public int DeltaY { get; set; }
         public bool HasLoggedMovement { get; set; }
         public bool HasLoggedRemoteMovement { get; set; }
+    }
+
+    private sealed class StationReachabilityMap(CollisionMap map) : IReachabilityMap
+    {
+        public bool IsPassableForClick(System.Numerics.Vector2 fromWorldPos,
+            System.Numerics.Vector2 toWorldPos, bool isServer, WorldEntity? context = null)
+        {
+            var movementState = new PlayerMovementState();
+            return GridLineOfSight.IsClear(fromWorldPos, toWorldPos,
+                (x, y) => !map.IsPassable(x, y, movementState));
+        }
     }
 }
