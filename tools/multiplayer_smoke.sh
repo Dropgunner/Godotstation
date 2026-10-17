@@ -27,13 +27,17 @@ fi
 
 launch_host() {
   if [[ -n "$playtest_app" ]]; then
-    if [[ "$smoke_mode" == "--interactions" ]]; then
+    if [[ "$smoke_mode" == "--construction" ]]; then
+      "$godot_bin" --headless --quit-after 900 -- --playtest-host --playtest-jobid=20 --playtest-smoke-construction
+    elif [[ "$smoke_mode" == "--interactions" ]]; then
       "$godot_bin" --headless --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-interactions
     else
       "$godot_bin" --headless --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-move --playtest-smoke-chat
     fi
   else
-    if [[ "$smoke_mode" == "--interactions" ]]; then
+    if [[ "$smoke_mode" == "--construction" ]]; then
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 900 -- --playtest-host --playtest-jobid=20 --playtest-smoke-construction
+    elif [[ "$smoke_mode" == "--interactions" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-interactions
     else
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-move --playtest-smoke-chat
@@ -42,13 +46,17 @@ launch_host() {
 }
 launch_client() {
   if [[ -n "$playtest_app" ]]; then
-    if [[ "$smoke_mode" == "--interactions" ]]; then
+    if [[ "$smoke_mode" == "--construction" ]]; then
+      "$godot_bin" --headless --quit-after 900 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-construction
+    elif [[ "$smoke_mode" == "--interactions" ]]; then
       "$godot_bin" --headless --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-interactions
     else
       "$godot_bin" --headless --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-move --playtest-smoke-chat
     fi
   else
-    if [[ "$smoke_mode" == "--interactions" ]]; then
+    if [[ "$smoke_mode" == "--construction" ]]; then
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 900 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-construction
+    elif [[ "$smoke_mode" == "--interactions" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-interactions
     else
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-move --playtest-smoke-chat
@@ -73,9 +81,17 @@ fi
 launch_client >"$client_log" 2>&1 &
 client_pid=$!
 
-for _ in $(seq 1 100); do
+max_checks=100
+if [[ "$smoke_mode" == "--construction" ]]; then max_checks=200; fi
+for _ in $(seq 1 "$max_checks"); do
   ready=0
-  if [[ "$smoke_mode" == "--interactions" ]]; then
+  if [[ "$smoke_mode" == "--construction" ]]; then
+    if grep -q "PLAYTEST_ROSTER peers=2" "$host_log" && \
+       grep -q "PLAYTEST_GIRDER_PLATED host_state=true metal_sheets_remaining=0" "$host_log" && \
+       grep -q "PLAYTEST_GIRDER_PLATING_OK engineer=true sheets_consumed=2 duration_seconds=4 replicated=true" "$client_log"; then
+      ready=1
+    fi
+  elif [[ "$smoke_mode" == "--interactions" ]]; then
     if grep -q "PLAYTEST_ROSTER peers=2" "$host_log" && \
        grep -q "PLAYTEST_ROUND_STARTED host_job=20" "$host_log" && \
        grep -q "PLAYTEST_SHARED_INTERACTION_OK pickup=true wrench_use=true dropped=true replicated=true" "$client_log" && \
@@ -107,7 +123,9 @@ for _ in $(seq 1 100); do
       echo "Godot reported a runtime error. Logs: $log_dir" >&2
       exit 1
     fi
-    if [[ "$smoke_mode" == "--interactions" ]]; then
+    if [[ "$smoke_mode" == "--construction" ]]; then
+      echo "MULTIPLAYER_CONSTRUCTION_SMOKE_OK: engineer picked up two sheets, completed the four-second girder task, and both clients observed the wall"
+    elif [[ "$smoke_mode" == "--interactions" ]]; then
       echo "MULTIPLAYER_INTERACTION_SMOKE_OK: remote peer picked up, used, and dropped the shared wrench; snapshots replicated"
     else
       echo "MULTIPLAYER_SMOKE_OK: shared shift started, distinct roles spawned, local speech routed, and movement replicated"

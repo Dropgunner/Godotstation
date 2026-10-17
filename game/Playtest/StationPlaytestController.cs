@@ -25,6 +25,7 @@ public partial class StationPlaytestController : Node2D
     private SharedStationInventoryWorld sharedInteractionWorld = null!;
     private StationMapView stationMapView = null!;
     private DynamicObject fixtureObstacle = null!;
+    private DynamicObject girderObstacle = null!;
     private int? wrenchOwner;
     private Vector2 wrenchWorldPosition = new(-1, 2);
     private Vector2 fixtureWorldPosition = new(0, 2);
@@ -36,6 +37,7 @@ public partial class StationPlaytestController : Node2D
     private LineEdit chatInput = null!;
     private int localPeerId;
     private float snapshotTime;
+    private float constructionSnapshotTime;
     private ulong smokeMoveUntilMsec;
     private bool smokeMoveStarted;
     private bool smokeChatStarted;
@@ -43,6 +45,12 @@ public partial class StationPlaytestController : Node2D
     private bool smokeInteractionUseRequested;
     private bool smokeInteractionDropRequested;
     private bool smokeInteractionsCompleted;
+    private bool smokeConstructionPickupRequested;
+    private bool smokeConstructionStarted;
+    private bool smokeConstructionCompleted;
+    private int smokeMetalOwner;
+    private int smokeSheetCount = 2;
+    private bool smokeGirderPlated;
     private bool localRoundStarted;
     private string connectionStatus = "Connecting…";
     private string hostAddress = "LAN IP unavailable";
@@ -54,8 +62,11 @@ public partial class StationPlaytestController : Node2D
         movementProcessor = new MovementProcessor(collisionMap);
         sharedInteractionWorld = new SharedStationInventoryWorld(new StationReachabilityMap(collisionMap));
         sharedInteractionWorld.StateChanged += OnSharedStateChanged;
+        sharedInteractionWorld.ConstructionStateChanged += OnConstructionStateChanged;
         fixtureObstacle = new DynamicObject(0, 2, isPushable: false, tag: "service-cart");
         collisionMap.AddObject(fixtureObstacle);
+        girderObstacle = new DynamicObject(2, 2, isPushable: false, tag: "girder");
+        collisionMap.AddObject(girderObstacle);
         BuildStationView();
         BuildHud();
 
@@ -85,6 +96,7 @@ public partial class StationPlaytestController : Node2D
             SubmitSpeech($"SMOKE_CHAT_PEER_{localPeerId}");
         }
         DriveSmokeInteractions();
+        DriveSmokeConstruction();
         var direction = ReadLocalInput();
 
         if (multiplayer.IsServer())
@@ -93,6 +105,10 @@ public partial class StationPlaytestController : Node2D
                 SetMovementInput(localPeerId, localPeerId, direction.X, direction.Y);
 
             float step = (float)Math.Min(delta, 0.1);
+            constructionSnapshotTime += step;
+            bool publishConstructionProgress = constructionSnapshotTime >= SnapshotInterval;
+            if (publishConstructionProgress)
+                constructionSnapshotTime %= SnapshotInterval;
             foreach (PlayerRuntime player in players.Values)
             {
                 float x = player.Position.X;
@@ -115,6 +131,7 @@ public partial class StationPlaytestController : Node2D
 
                 player.Position = new Vector2(x, y);
                 sharedInteractionWorld.SetActorPosition(player.PeerId, new System.Numerics.Vector2(x, y));
+                sharedInteractionWorld.AdvanceConstruction(player.PeerId, step, publishConstructionProgress);
                 if (fixtureObstacle.X != Mathf.RoundToInt(fixtureWorldPosition.X) ||
                     fixtureObstacle.Y != Mathf.RoundToInt(fixtureWorldPosition.Y))
                 {
@@ -178,7 +195,7 @@ public partial class StationPlaytestController : Node2D
         startShiftButton.Disabled = false;
         GD.Print($"PLAYTEST_HOST_READY port={PlaytestLaunchOptions.Port} phase={roundLifecycle.Phase}");
         RefreshStatus();
-        if (PlaytestLaunchOptions.SmokeMove || PlaytestLaunchOptions.SmokeInteractions)
+        if (PlaytestLaunchOptions.SmokeMove || PlaytestLaunchOptions.SmokeInteractions || PlaytestLaunchOptions.SmokeConstruction)
             CallDeferred(nameof(StartShift));
     }
 
@@ -333,7 +350,9 @@ public partial class StationPlaytestController : Node2D
         }
 
         var spawnPoint = StationPlaytestLayout.Spawns[players.Count];
-        Vector2 spawn = PlaytestLaunchOptions.SmokeInteractions
+        Vector2 spawn = PlaytestLaunchOptions.SmokeConstruction
+            ? new Vector2(1f, 1f)
+            : PlaytestLaunchOptions.SmokeInteractions
             ? new Vector2(-1f, 1f)
             : new Vector2(spawnPoint.X, spawnPoint.Y);
         foreach (PlayerRuntime existing in players.Values)
@@ -343,6 +362,7 @@ public partial class StationPlaytestController : Node2D
         AddPlayer(peerId, assignedJob, spawn);
         Rpc(nameof(ReceiveSpawn), peerId, assignedJob.Id, spawn.X, spawn.Y);
         SendSharedState(peerId);
+        SendConstructionState(peerId);
         SendActiveHand(peerId);
         GD.Print($"PLAYTEST_ROSTER peers={players.Count}");
         RefreshStatus();
@@ -567,6 +587,19 @@ public partial class StationPlaytestController : Node2D
             float distance = clickPosition.DistanceTo(wrenchWorldPosition);
             if (distance < nearestDistance) { targetId = SharedStationInventoryWorld.WrenchId; nearestDistance = distance; }
         }
+        float metalDistance = clickPosition.DistanceTo(new Vector2(1, 2));
+        SharedStationInventoryWorld.StationConstructionSnapshot construction = sharedInteractionWorld.ConstructionSnapshot;
+        if (construction.MetalOwner == null && construction.MetalSheetCount > 0 && metalDistance < nearestDistance)
+        {
+            targetId = SharedStationInventoryWorld.MetalSheetsId;
+            nearestDistance = metalDistance;
+        }
+        float girderDistance = clickPosition.DistanceTo(new Vector2(2, 2));
+        if (!sharedInteractionWorld.ConstructionSnapshot.GirderPlated && girderDistance < nearestDistance)
+        {
+            targetId = SharedStationInventoryWorld.GirderId;
+            nearestDistance = girderDistance;
+        }
         float fixtureDistance = clickPosition.DistanceTo(fixtureWorldPosition);
         if (fixtureDistance < nearestDistance) targetId = SharedStationInventoryWorld.FixtureId;
         if (targetId < 0) return;
@@ -677,14 +710,54 @@ public partial class StationPlaytestController : Node2D
         }
     }
 
+    private void DriveSmokeConstruction()
+    {
+        if (!PlaytestLaunchOptions.SmokeConstruction || GetMultiplayer().IsServer() ||
+            smokeConstructionCompleted || !localRoundStarted || players.Count < 2) return;
+
+        if (!smokeConstructionPickupRequested)
+        {
+            smokeConstructionPickupRequested = true;
+            RpcId(1, nameof(RequestSharedInteraction), SharedStationInventoryWorld.MetalSheetsId,
+                (int)Intent.Help, false);
+            GD.Print("PLAYTEST_CONSTRUCTION_REQUEST pickup-metal");
+            return;
+        }
+
+        if (smokeMetalOwner == localPeerId && !smokeConstructionStarted)
+        {
+            smokeConstructionStarted = true;
+            RpcId(1, nameof(RequestSharedInteraction), SharedStationInventoryWorld.GirderId,
+                (int)Intent.Help, false);
+            GD.Print("PLAYTEST_CONSTRUCTION_REQUEST plate-girder");
+            return;
+        }
+
+        if (smokeGirderPlated && smokeSheetCount == 0)
+        {
+            smokeConstructionCompleted = true;
+            GD.Print("PLAYTEST_GIRDER_PLATING_OK engineer=true sheets_consumed=2 duration_seconds=4 replicated=true");
+        }
+    }
+
     private void ResolveSharedInteraction(int senderId, int targetId, int intentValue, bool altClick)
     {
         if (!roundLifecycle.CanRequestJob || !players.ContainsKey(senderId) ||
             intentValue is < (int)Intent.Help or > (int)Intent.Harm) return;
         if (!sharedInteractionWorld.TryInteract(senderId, targetId, (Intent)intentValue, altClick))
         {
-            if (senderId == localPeerId) SetStatus("Too far away, blocked, or you need the wrench in hand.");
+            if (GetMultiplayer().IsServer())
+                GD.Print($"PLAYTEST_INTERACTION_REJECTED peer={senderId} target={targetId} active_hand={sharedInteractionWorld.GetHandItemName(senderId, sharedInteractionWorld.GetActiveHand(senderId) ?? Godotstation.Engine.Inventory.NamedSlot.rightHand)}");
+            if (senderId == localPeerId) SetStatus(targetId == SharedStationInventoryWorld.GirderId
+                ? "Girder plating requires two metal sheets in your active hand and a clear reach to the girder."
+                : "Too far away, blocked, or you need the wrench in hand.");
             else RpcId(senderId, nameof(RejectSharedInteraction));
+        }
+        else
+        {
+            if (GetMultiplayer().IsServer() && targetId == SharedStationInventoryWorld.GirderId)
+                GD.Print($"PLAYTEST_GIRDER_PLATING_STARTED peer={senderId}");
+            SendActiveHand(senderId);
         }
     }
 
@@ -701,12 +774,57 @@ public partial class StationPlaytestController : Node2D
         fixtureObstacle.X = Mathf.RoundToInt(fixtureWorldPosition.X);
         fixtureObstacle.Y = Mathf.RoundToInt(fixtureWorldPosition.Y);
         stationMapView?.SetSharedObjects(wrenchOwner, wrenchWorldPosition, fixtureWorldPosition, fixtureAnchored);
-        if (snapshot.WrenchOwner is int ownerPeerId)
-            SendActiveHand(ownerPeerId);
+        foreach (PlayerRuntime player in players.Values)
+            SendActiveHand(player.PeerId);
         if (PlaytestLaunchOptions.SmokeInteractions)
             GD.Print($"PLAYTEST_INTERACTION_SERVER_STATE owner={wrenchOwner ?? 0} anchored={fixtureAnchored}");
         Rpc(nameof(ReceiveSharedState), wrenchOwner ?? 0, wrenchWorldPosition.X, wrenchWorldPosition.Y,
             fixtureWorldPosition.X, fixtureWorldPosition.Y, fixtureAnchored);
+        PublishConstructionStateToClients();
+    }
+
+    private void OnConstructionStateChanged(SharedStationInventoryWorld.StationConstructionSnapshot snapshot)
+    {
+        ApplyConstructionState(snapshot);
+        if (snapshot.GirderPlated)
+            GD.Print("PLAYTEST_GIRDER_PLATED host_state=true metal_sheets_remaining=0");
+        PublishConstructionStateToClients();
+    }
+
+    private void ApplyConstructionState(SharedStationInventoryWorld.StationConstructionSnapshot snapshot) =>
+        SetConstructionView(snapshot.MetalOwner,
+            new Vector2(snapshot.MetalPosition.X, snapshot.MetalPosition.Y), snapshot.MetalSheetCount,
+            new Vector2(snapshot.GirderPosition.X, snapshot.GirderPosition.Y), snapshot.GirderPlated,
+            snapshot.WorkerPeerId, snapshot.ProgressSeconds);
+
+    private void SetConstructionView(int? metalOwner, Vector2 metalPosition, int sheetCount,
+        Vector2 girderPosition, bool plated, int? workerPeerId, double progressSeconds)
+    {
+        smokeMetalOwner = metalOwner ?? 0;
+        smokeSheetCount = sheetCount;
+        smokeGirderPlated = plated;
+        stationMapView.SetConstruction(metalOwner, metalPosition, sheetCount, girderPosition,
+            plated, workerPeerId, progressSeconds);
+    }
+
+    private void PublishConstructionStateToClients()
+    {
+        if (!GetMultiplayer().IsServer()) return;
+        SharedStationInventoryWorld.StationConstructionSnapshot snapshot = sharedInteractionWorld.ConstructionSnapshot;
+        Rpc(nameof(ReceiveConstructionState), snapshot.MetalOwner ?? 0,
+            snapshot.MetalPosition.X, snapshot.MetalPosition.Y, snapshot.MetalSheetCount,
+            snapshot.GirderPosition.X, snapshot.GirderPosition.Y, snapshot.GirderPlated,
+            snapshot.WorkerPeerId ?? 0, snapshot.ProgressSeconds);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceiveConstructionState(int ownerPeerId, float metalX, float metalY, int sheetCount,
+        float girderX, float girderY, bool plated, int workerPeerId, double progressSeconds)
+    {
+        SetConstructionView(ownerPeerId == 0 ? null : ownerPeerId, new Vector2(metalX, metalY), sheetCount,
+            new Vector2(girderX, girderY), plated, workerPeerId == 0 ? null : workerPeerId, progressSeconds);
+        if (plated && GetMultiplayer().IsServer())
+            GD.Print("PLAYTEST_GIRDER_PLATED host_state=true metal_sheets_remaining=0");
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -731,6 +849,15 @@ public partial class StationPlaytestController : Node2D
             snapshot.FixturePosition.X, snapshot.FixturePosition.Y, snapshot.FixtureAnchored);
     }
 
+    private void SendConstructionState(int peerId)
+    {
+        SharedStationInventoryWorld.StationConstructionSnapshot snapshot = sharedInteractionWorld.ConstructionSnapshot;
+        RpcId(peerId, nameof(ReceiveConstructionState), snapshot.MetalOwner ?? 0,
+            snapshot.MetalPosition.X, snapshot.MetalPosition.Y, snapshot.MetalSheetCount,
+            snapshot.GirderPosition.X, snapshot.GirderPosition.Y, snapshot.GirderPlated,
+            snapshot.WorkerPeerId ?? 0, snapshot.ProgressSeconds);
+    }
+
     private void BuildHud()
     {
         var layer = new CanvasLayer { Name = "PlaytestHud" };
@@ -751,7 +878,7 @@ public partial class StationPlaytestController : Node2D
         content.AddChild(new Label { Text = $"WASD move  ·  Host shares LAN IP  ·  UDP {PlaytestLaunchOptions.Port}" });
         activeHandLabel = new Label { Text = "Active hand: rightHand · empty" };
         content.AddChild(activeHandLabel);
-        content.AddChild(new Label { Text = "Click the wrench to pick it up, click the cart to unbolt it, Tab switches hands, Q drops the active hand, and WASD moves." });
+        content.AddChild(new Label { Text = "Engineer task: pick up the metal, click the girder to plate it (4 seconds), and watch the wall appear. Click the wrench/cart to test tools; Tab switches hands, Q drops the active hand, WASD moves." });
 
         chatLog = new RichTextLabel
         {

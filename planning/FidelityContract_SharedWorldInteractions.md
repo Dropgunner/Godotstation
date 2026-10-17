@@ -1,6 +1,6 @@
 # Fidelity Contract: Shared-World Pickup and Wrench Interaction
 
-**Status:** verified shared pickup/tool-use slice integrated with the engine inventory and two hand slots; still narrower than Unitystation inventory and construction parity.
+**Status:** shared pickup/tool-use slice extended with a fixed metal stack and timed girder construction; still narrower than Unitystation inventory and construction parity. See [Girder Plating](FidelityContract_GirderPlating.md) for the new task contract.
 
 **Source check:** Unitystation source at commit `c911581e8354958d664b1e32087053ce43638790`, checked 2026-10-17.
 
@@ -23,8 +23,8 @@
 
 ## Known gaps before parity claims
 
-- The playtest still has only one shared item and a text active-hand indicator. It does not yet provide a general inventory UI, more item definitions, storage slots, pickup animation/prediction, or a full inventory screen and drop flow.
-- The fixture is placed on a valid floor tile. Floor absence, exposed-plating requirements, timed tool use, anchor blockers, wrench traits as data, examine feedback, and action messages are not implemented.
+- The playtest now includes a wrench, a two-sheet metal stack, a girder, and a service cart. It still does not provide a general inventory UI, storage slots, pickup animation/prediction, a full inventory screen, or data-driven item traits.
+- The fixture is placed on a valid floor tile. Floor absence, exposed-plating requirements for wrench anchoring, anchor blockers, wrench traits as data, examine feedback, and action messages are not implemented. Timed girder construction is covered by the separate contract.
 - The input currently uses the Help intent for this world interaction. Although `HandApply` transports intent and alt-click, this slice does not implement the wider intent actions or an examine action. The cited wrench source does not branch on intent or alt-click in `WillInteract`.
 - The multiplayer path is a LAN playtest adapter with host authority. This contract does not establish production server hosting, cheat resistance beyond the request checks listed above, or overall Unitystation gameplay parity.
 

@@ -7,11 +7,12 @@ public static class PlaytestLaunchOptions
 {
     public static bool IsHost { get; set; }
     public static string Address { get; set; } = "127.0.0.1";
-    public static int CrewJobId { get; set; } = Godotstation.Engine.Rounds.StationCrewJobCatalog.AssistantJobId;
+    public static int CrewJobId { get; set; } = Godotstation.Engine.Rounds.StationCrewJobCatalog.EngineerJobId;
     public static int Port { get; private set; } = 7777;
     public static bool SmokeMove { get; private set; }
     public static bool SmokeChat { get; private set; }
     public static bool SmokeInteractions { get; private set; }
+    public static bool SmokeConstruction { get; private set; }
 
     public static bool TryReadCommandLine()
     {
@@ -50,6 +51,10 @@ public static class PlaytestLaunchOptions
             else if (arg == "--playtest-smoke-interactions")
             {
                 SmokeInteractions = true;
+            }
+            else if (arg == "--playtest-smoke-construction")
+            {
+                SmokeConstruction = true;
             }
         }
 
