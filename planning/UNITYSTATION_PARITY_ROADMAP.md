@@ -47,10 +47,10 @@ trace additional upstream systems it actually implements.
   server-resolved position updates.
 - The Wave 9 playtest now has networked job selection, capacity checks, and spawn gating for
   two sourced crew roles. It now also models the authoritative PreRound → Started gate for
-  role spawn requests. It still has no in-world chat, shared item pickup/use, job-specific
-  station task, round end, or restart. Role assignment does not yet make the role's job
-  duties playable; the build remains useful primarily for checking the multiplayer movement
-  foundation.
+  role spawn requests, plus server-routed local speech with hearing-range and wall checks.
+  It still has no shared item pickup/use, job-specific station task, round end, or restart.
+  Role assignment does not yet make the role's job duties playable; this remains an early
+  multiplayer station loop rather than a complete round.
 
 ## Dependency-ordered milestones
 
@@ -78,6 +78,11 @@ system, combat, and action messages can be added without treating all text as gl
 **Exit evidence:** two clients can speak; a nearby unobstructed crew member hears it, a
 distant or wall-separated crew member does not, and both can see appropriate action/system
 feedback. Deterministic tests cover routing boundaries.
+
+**Completed slice:** local player speech now routes by the source-backed 14-tile default
+hearing range and station-wall line of sight under
+[`FidelityContract_LocalSpeech.md`](FidelityContract_LocalSpeech.md). Radios, whispers,
+ghost listeners, and Action/Combat channel integration remain open.
 
 ### P2 — SS13 interaction loop in the shared world
 

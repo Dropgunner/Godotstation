@@ -13,8 +13,8 @@ namespace Godotstation.Engine.Movement
 
         private static readonly Vector2[] SpawnPoints =
         [
-            new Vector2(-9f, 0f),
-            new Vector2(9f, 0f),
+            new Vector2(-6f, 0f),
+            new Vector2(6f, 0f),
             new Vector2(-1f, 0f),
             new Vector2(1f, 0f)
         ];

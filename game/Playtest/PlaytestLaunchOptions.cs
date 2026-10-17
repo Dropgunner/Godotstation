@@ -10,6 +10,7 @@ public static class PlaytestLaunchOptions
     public static int CrewJobId { get; set; } = Godotstation.Engine.Rounds.StationCrewJobCatalog.AssistantJobId;
     public static int Port { get; private set; } = 7777;
     public static bool SmokeMove { get; private set; }
+    public static bool SmokeChat { get; private set; }
 
     public static bool TryReadCommandLine()
     {
@@ -40,6 +41,10 @@ public static class PlaytestLaunchOptions
             else if (arg == "--playtest-smoke-move")
             {
                 SmokeMove = true;
+            }
+            else if (arg == "--playtest-smoke-chat")
+            {
+                SmokeChat = true;
             }
         }
 

@@ -26,16 +26,16 @@ fi
 
 launch_host() {
   if [[ -n "$playtest_app" ]]; then
-    "$godot_bin" --headless --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-move
+    "$godot_bin" --headless --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-move --playtest-smoke-chat
   else
-    "$godot_bin" --headless --path "$repo_root/game" --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-move
+    "$godot_bin" --headless --path "$repo_root/game" --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-move --playtest-smoke-chat
   fi
 }
 launch_client() {
   if [[ -n "$playtest_app" ]]; then
-    "$godot_bin" --headless --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-move
+    "$godot_bin" --headless --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-move --playtest-smoke-chat
   else
-    "$godot_bin" --headless --path "$repo_root/game" --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-move
+    "$godot_bin" --headless --path "$repo_root/game" --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-move --playtest-smoke-chat
   fi
 }
 
@@ -60,6 +60,10 @@ for _ in $(seq 1 100); do
   if grep -q "PLAYTEST_ROSTER peers=2" "$host_log" && \
      grep -q "PLAYTEST_HOST_READY port=7777 phase=PreRound" "$host_log" && \
      grep -q "PLAYTEST_ROUND_STARTED host_job=20" "$host_log" && \
+     grep -q "PLAYTEST_LOCAL_CHAT_RELAYED sender=1 recipients=2" "$host_log" && \
+     [[ $(grep -c "PLAYTEST_LOCAL_CHAT_RELAYED sender=" "$host_log") -ge 2 ]] && \
+     grep -q "PLAYTEST_LOCAL_CHAT_RECEIVED speaker=1" "$client_log" && \
+     [[ $(grep -c "PLAYTEST_LOCAL_CHAT_RECEIVED speaker=" "$client_log") -ge 2 ]] && \
      grep -q "PLAYTEST_PLAYER_SPAWNED peer=1" "$client_log" && \
      grep -q "PLAYTEST_PLAYER_SPAWNED peer=1 job=20 role=Engineer" "$client_log" && \
      grep -Eq "PLAYTEST_PLAYER_SPAWNED peer=[0-9]+ job=2 role=Assistant count=2" "$client_log" && \
@@ -74,7 +78,7 @@ for _ in $(seq 1 100); do
       echo "Godot reported a runtime error. Logs: $log_dir" >&2
       exit 1
     fi
-    echo "MULTIPLAYER_SMOKE_OK: host started the pre-round shift, server assigned distinct crew roles, spawned both peers, and relayed movement"
+    echo "MULTIPLAYER_SMOKE_OK: shared shift started, distinct roles spawned, local speech routed, and movement replicated"
     echo "Logs: $log_dir"
     exit 0
   fi

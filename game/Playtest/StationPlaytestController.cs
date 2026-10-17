@@ -1,6 +1,417 @@
-YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éíëİûN‹Z–‹­¦ëeŠw¬ÕÕÍ¥¹œMåÍÑ•´ì)ÕÍ¥¹œMåÍÑ•´¹½±±•Ñ¥½¹Ì¹•¹•É¥Œì)ÕÍ¥¹œMåÍÑ•´¹9•Ğì)ÕÍ¥¹œMåÍÑ•´¹9•Ğ¹M½­•ÑÌì)ÕÍ¥¹œ½‘½Ğì)ÕÍ¥¹œ½‘½ÑÍÑ…Ñ¥½¸¹¹¥¹”¹5½Ù•µ•¹Ğì)ÕÍ¥¹œ½‘½ÑÍÑ…Ñ¥½¸¹¹¥¹”¹I½Õ¹‘Ìì()¹…µ•ÍÁ…”½‘½ÑÍÑ…Ñ¥½¸¹…µ”¹A±…åÑ•ÍĞì((¼¼¼€ñÍÕµµ…Éäù18Á±…åÑ•ÍĞ…‘…ÁÑ•Èè…Ñ¡•ÉÌ¥¹ÁÕĞ°…Í­ÌÑ¡”Í•ÉÙ•Èµ½Ù•µ•¹Ğ•¹¥¹”°…¹‘É…İÌÑ¡”ÍÑ…Ñ¥½¸¸ğ½ÍÕµµ…Éäø)ÁÕ‰±¥ŒÁ…ÉÑ¥…°±…ÍÌMÑ…Ñ¥½¹A±…åÑ•ÍÑ½¹ÑÉ½±±•È€è9½‘”É)ì(€€€ÁÉ¥Ù…Ñ”½¹ÍĞ¥¹Ğ5…á¥µÕµA±…å•ÉÌ€ô€Ğì(€€€ÁÉ¥Ù…Ñ”½¹ÍĞ™±½…ĞM¹…ÁÍ¡½Ñ%¹Ñ•ÉÙ…°€ô€À¸ÀÕ˜ì((€€€ÁÉ¥Ù…Ñ”É•…‘½¹±ä¥Ñ¥½¹…Éäñ¥¹Ğ°A±…å•ÉIÕ¹Ñ¥µ”øÁ±…å•ÉÌ€ô¹•Ü ¤ì(€€€ÁÉ¥Ù…Ñ”É•…‘½¹±äÉ•İI½ÍÑ•ÈÉ•İI½ÍÑ•È€ôMÑ…Ñ¥½¹É•İ)½‰…Ñ…±½œ¹É•…Ñ•I½ÍÑ•È ¤ì(€€€ÁÉ¥Ù…Ñ”É•…‘½¹±äM¡…É•‘I½Õ¹‘1¥™•å±”É½Õ¹‘1¥™•å±”€ô¹•Ü ¤ì(€€€ÁÉ¥Ù…Ñ”½±±¥Í¥½¹5…À½±±¥Í¥½¹5…À€ô¹Õ±°„ì(€€€ÁÉ¥Ù…Ñ”5½Ù•µ•¹ÑAÉ½•ÍÍ½Èµ½Ù•µ•¹ÑAÉ½•ÍÍ½È€ô¹Õ±°„ì(€€€ÁÉ¥Ù…Ñ”1…‰•°ÍÑ…ÑÕÍ1…‰•°€ô¹Õ±°„ì(€€€ÁÉ¥Ù…Ñ”	ÕÑÑ½¸ÍÑ…ÉÑM¡¥™Ñ	ÕÑÑ½¸€ô¹Õ±°„ì(€€€ÁÉ¥Ù…Ñ”¥¹Ğ±½…±A••É%ì(€€€ÁÉ¥Ù…Ñ”™±½…ĞÍ¹…ÁÍ¡½ÑQ¥µ”ì(€€€ÁÉ¥Ù…Ñ”Õ±½¹œÍµ½­•5½Ù•U¹Ñ¥±5Í•Œì(€€€ÁÉ¥Ù…Ñ”‰½½°Íµ½­•5½Ù•MÑ…ÉÑ•ì(€€€ÁÉ¥Ù…Ñ”ÍÑÉ¥¹œ½¹¹•Ñ¥½¹MÑ…ÑÕÌ€ô€‰½¹¹•Ñ¥¹ŸŠ˜ˆì(€€€ÁÉ¥Ù…Ñ”ÍÑÉ¥¹œ¡½ÍÑ‘‘É•ÍÌ€ô€‰18%@Õ¹…Ù…¥±…‰±”ˆì((€€€ÁÕ‰±¥Œ½Ù•ÉÉ¥‘”Ù½¥}I•…‘ä ¤(€€€ì(€€€€€€€M•Ñ5Õ±Ñ¥Á±…å•ÉÕÑ¡½É¥Ñä Ä¤ì(€€€€€€€½±±¥Í¥½¹5…À€ôMÑ…Ñ¥½¹A±…åÑ•ÍÑ1…å½ÕĞ¹É•…Ñ•½±±¥Í¥½¹5…À ¤ì(€€€€€€€µ½Ù•µ•¹ÑAÉ½•ÍÍ½È€ô¹•Ü5½Ù•µ•¹ÑAÉ½•ÍÍ½È¡½±±¥Í¥½¹5…À¤ì(€€€€€€€	Õ¥±‘MÑ…Ñ¥½¹Y¥•Ü ¤ì(€€€€€€€	Õ¥±‘!Õ ¤ì((€€€€€€€Ù…ÈµÕ±Ñ¥Á±…å•È€ô•Ñ5Õ±Ñ¥Á±…å•È ¤ì(€€€€€€€µÕ±Ñ¥Á±…å•È¹A••É½¹¹•Ñ•€¬ôÁ••É%€ôø=¹A••É½¹¹•Ñ• ¡¥¹Ğ¥Á••É%¤ì(€€€€€€€µÕ±Ñ¥Á±…å•È¹A••É¥Í½¹¹•Ñ•€¬ôÁ••É%€ôø=¹A••É¥Í½¹¹•Ñ• ¡¥¹Ğ¥Á••É%¤ì(€€€€€€€µÕ±Ñ¥Á±…å•È¹½¹¹•Ñ•‘Q½M•ÉÙ•È€¬ô=¹½¹¹•Ñ•‘Q½M•ÉÙ•Èì(€€€€€€€µÕ±Ñ¥Á±…å•È¹½¹¹•Ñ¥½¹…¥±•€¬ô=¹½¹¹•Ñ¥½¹…¥±•ì(€€€€€€€µÕ±Ñ¥Á±…å•È¹M•ÉÙ•É¥Í½¹¹•Ñ•€¬ô=¹M•ÉÙ•É¥Í½¹¹•Ñ•ì((€€€€€€€¥˜€¡A±…åÑ•ÍÑ1…Õ¹¡=ÁÑ¥½¹Ì¹%Í!½ÍĞ¤(€€€€€€€€€€€MÑ…ÉÑ!½ÍĞ ¤ì(€€€€€€€•±Í”(€€€€€€€€€€€)½¥¹!½ÍĞ¡A±…åÑ•ÍÑ1…Õ¹¡=ÁÑ¥½¹Ì¹‘‘É•ÍÌ¤ì(€€€ô((€€€ÁÕ‰±¥Œ½Ù•ÉÉ¥‘”Ù½¥}A¡åÍ¥ÍAÉ½•ÍÌ¡‘½Õ‰±”‘•±Ñ„¤(€€€ì(€€€€€€€Ù…ÈµÕ±Ñ¥Á±…å•È€ô•Ñ5Õ±Ñ¥Á±…å•È ¤ì(€€€€€€€¥˜€¡µÕ±Ñ¥Á±…å•È¹5Õ±Ñ¥Á±…å•ÉA••È€ôô¹Õ±°ñğµÕ±Ñ¥Á±…å•È¹5Õ±Ñ¥Á±…å•ÉA••È¹•Ñ½¹¹•Ñ¥½¹MÑ…ÑÕÌ ¤€„ô5Õ±Ñ¥Á±…å•ÉA••È¹½¹¹•Ñ¥½¹MÑ…ÑÕÌ¹½¹¹•Ñ•¤(€€€€€€€€€€€É•ÑÕÉ¸ì((€€€€€€€±½…±A••É%€ôµÕ±Ñ¥Á±…å•È¹•ÑU¹¥ÅÕ•% ¤ì(€€€€€€€Ù…È‘¥É•Ñ¥½¸€ôI•…‘1½…±%¹ÁÕĞ ¤ì((€€€€€€€¥˜€¡µÕ±Ñ¥Á±…å•È¹%ÍM•ÉÙ•È ¤¤(€€€€€€€ì(€€€€€€€€€€€¥˜€¡Á±…å•ÉÌ¹½¹Ñ…¥¹Í-•ä¡±½…±A••É%¤¤(€€€€€€€€€€€€€€€M•Ñ5½Ù•µ•¹Ñ%¹ÁÕĞ¡±½…±A••É%°±½…±A••É%°‘¥É•Ñ¥½¸¹`°‘¥É•Ñ¥½¸¹d¤ì((€€€€€€€€€€€™±½…ĞÍÑ•À€ô€¡™±½…Ğ¥5…Ñ ¹5¥¸¡‘•±Ñ„°€À¸Ä¤ì(€€€€€€€€€€€™½É•… €¡A±…å•ÉIÕ¹Ñ¥µ”Á±…å•È¥¸Á±…å•ÉÌ¹Y…±Õ•Ì¤(€€€€€€€€€€€ì(€€€€€€€€€€€€€€€™±½…Ğà€ôÁ±…å•È¹A½Í¥Ñ¥½¸¹`ì(€€€€€€€€€€€€€€€™±½…Ğä€ôÁ±…å•È¹A½Í¥Ñ¥½¸¹dì(€€€€€€€€€€€€€€€Ù…È¥¹Ñ•¹Ğ€ô¹•Ü5½Ù•%¹Ñ•¹Ğ(€€€€€€€€€€€€€€€ì(€€€€€€€€€€€€€€€€€€€•±Ñ…`€ôÁ±…å•È¹•±Ñ…`°(€€€€€€€€€€€€€€€€€€€•±Ñ…d€ôÁ±…å•È¹•±Ñ…d°(€€€€€€€€€€€€€€€€€€€Q¥µ•ÍÑ…µÀ€ôQ¥µ”¹•ÑQ¥­Í5Í•Œ ¤€¼€ÄÀÀÀ¸À(€€€€€€€€€€€€€€€ôì((€€€€€€€€€€€€€€€¥˜€¡¥¹Ñ•¹Ğ¹•±Ñ…`€„ô€Àñğ¥¹Ñ•¹Ğ¹•±Ñ…d€„ô€À¤(€€€€€€€€€€€€€€€€€€€µ½Ù•µ•¹ÑAÉ½•ÍÍ½È¹QÉå5½Ù”¡Á±…å•È¹5½Ù•µ•¹Ğ°É•˜à°É•˜ä°¥¹Ñ•¹Ğ°ÍÑ•À¤ì(€€€€€€€€€€€€€€€•±Í”(€€€€€€€€€€€€€€€€€€€µ½Ù•µ•¹ÑAÉ½•ÍÍ½È¹ÁÁ±å5½µ•¹ÑÕ´¡Á±…å•È¹5½Ù•µ•¹Ğ°É•˜à°É•˜ä°ÍÑ•À¤ì((€€€€€€€€€€€€€€€¥˜€¡5…Ñ¡˜¹I½Õ¹‘Q½%¹Ğ¡à¤€„ô5…Ñ¡˜¹I½Õ¹‘Q½%¹Ğ¡Á±…å•È¹A½Í¥Ñ¥½¸¹`¤ñğ(€€€€€€€€€€€€€€€€€€€5…Ñ¡˜¹I½Õ¹‘Q½%¹Ğ¡ä¤€„ô5…Ñ¡˜¹I½Õ¹‘Q½%¹Ğ¡Á±…å•È¹A½Í¥Ñ¥½¸¹d¤¤(€€€€€€€€€€€€€€€€€€€½±±¥Í¥½¹5…À¹5½Ù•=‰©•Ğ¡Á±…å•È¹=‰ÍÑ…±”°5…Ñ¡˜¹I½Õ¹‘Q½%¹Ğ¡à¤°5…Ñ¡˜¹I½Õ¹‘Q½%¹Ğ¡ä¤¤ì((€€€€€€€€€€€€€€€Á±…å•È¹A½Í¥Ñ¥½¸€ô¹•ÜY•Ñ½ÈÈ¡à°ä¤ì(€€€€€€€€€€€€€€€Á±…å•È¹Ù…Ñ…È¹A½Í¥Ñ¥½¸€ôÁ±…å•È¹A½Í¥Ñ¥½¸ì(€€€€€€€€€€€€€€€¥˜€ …Á±…å•È¹!…Í1½•‘5½Ù•µ•¹Ğ€˜˜Á±…å•È¹A½Í¥Ñ¥½¸¹¥ÍÑ…¹•MÅÕ…É•‘Q¼¡Á±…å•È¹MÁ…İ¹A½Í¥Ñ¥½¸¤€ø€À¸Àá˜¤(€€€€€€€€€€€€€€€ì(€€€€€€€€€€€€€€€€€€€Á±…å•È¹!…Í1½•‘5½Ù•µ•¹Ğ€ôÑÉÕ”ì(€€€€€€€€€€€€€€€€€€€¹AÉ¥¹Ğ ‰A1eQMQ}A=M%Q%=8Á••ÈõíÁ±…å•È¹A••É%‘ôàõíàèÀ¸ÀÁôäõíäèÀ¸ÀÁôˆ¤ì(€€€€€€€€€€€€€€€€€€€¥˜€¡Á±…å•È¹A••É%€„ô€Ä¤(€€€€€€€€€€€€€€€€€€€€€€€¹AÉ¥¹Ğ ‰A1eQMQ}1%9Q}A=M%Q%=8Á••ÈõíÁ±…å•È¹A••É%‘ôˆ¤ì(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€ô((€€€€€€€€€€€Í¹…ÁÍ¡½ÑQ¥µ”€¬ô€¡™±½…Ğ¥‘•±Ñ„ì(€€€€€€€€€€€¥˜€¡Í¹…ÁÍ¡½ÑQ¥µ”€øôM¹…ÁÍ¡½Ñ%¹Ñ•ÉÙ…°¤(€€€€€€€€€€€ì(€€€€€€€€€€€€€€€Í¹…ÁÍ¡½ÑQ¥µ”€”ôM¹…ÁÍ¡½Ñ%¹Ñ•ÉÙ…°ì(€€€€€€€€€€€€€€€™½É•… €¡A±…å•ÉIÕ¹Ñ¥µ”Á±…å•È¥¸Á±…å•ÉÌ¹Y…±Õ•Ì¤(€€€€€€€€€€€€€€€€€€€IÁŒ¡¹…µ•½˜¡I••¥Ù•A½Í¥Ñ¥½¸¤°Á±…å•È¹A••É%°Á±…å•È¹A½Í¥Ñ¥½¸¹`°Á±…å•È¹A½Í¥Ñ¥½¸¹d¤ì(€€€€€€€€€€€ô((€€€€€€€ô(€€€€€€€•±Í”(€€€€€€€ì(€€€€€€€€€€€¥˜€¡Á±…å•ÉÌ¹½¹Ñ…¥¹Í-•ä¡±½…±A••É%¤¤(€€€€€€€€€€€€€€€IÁ% Ä°¹…µ•½˜¡MÕ‰µ¥Ñ5½Ù•µ•¹Ñ%¹ÁÕĞ¤°‘¥É•Ñ¥½¸¹`°‘¥É•Ñ¥½¸¹d¤ì((€€€€€€€€€€€™½É•… €¡A±…å•ÉIÕ¹Ñ¥µ”Á±…å•È¥¸Á±…å•ÉÌ¹Y…±Õ•Ì¤(€€€€€€€€€€€ì(€€€€€€€€€€€€€€€¥˜€¡Á±…å•È¹A••É%€ôô±½…±A••É%¤½¹Ñ¥¹Õ”ì(€€€€€€€€€€€€€€€Á±…å•È¹Ù…Ñ…È¹A½Í¥Ñ¥½¸€ôÁ±…å•È¹Ù…Ñ…È¹A½Í¥Ñ¥½¸¹1•ÉÀ¡Á±…å•È¹Q…É•ÑA½Í¥Ñ¥½¸°(€€€€€€€€€€€€€€€€€€€5…Ñ¡˜¹±…µÀ ¡™±½…Ğ¥‘•±Ñ„€¨€ÄÑ˜°€Á˜°€Å˜¤¤ì(€€€€€€€€€€€ô(€€€€€€€ô(€€€ô((€€€ÁÕ‰±¥Œ½Ù•ÉÉ¥‘”Ù½¥}á¥ÑQÉ•” ¤(€€€ì(€€€€€€€¥˜€¡•Ñ5Õ±Ñ¥Á±…å•È ¤¹5Õ±Ñ¥Á±…å•ÉA••È¥Ì9•Ñ5Õ±Ñ¥Á±…å•ÉA••ÈÁ••È¤(€€€€€€€€€€€Á••È¹±½Í” ¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥MÑ…ÉÑ!½ÍĞ ¤(€€€ì(€€€€€€€Ù…ÈÁ••È€ô¹•Ü9•Ñ5Õ±Ñ¥Á±…å•ÉA••È ¤ì(€€€€€€€ÉÉ½È•ÉÉ½È€ôÁ••È¹É•…Ñ•M•ÉÙ•È¡A±…åÑ•ÍÑ1…Õ¹¡=ÁÑ¥½¹Ì¹A½ÉĞ°5…á¥µÕµA±…å•ÉÌ€´€Ä¤ì(€€€€€€€¥˜€¡•ÉÉ½È€„ôÉÉ½È¹=¬¤(€€€€€€€ì(€€€€€€€€€€€M•ÑMÑ…ÑÕÌ ‰½Õ±¹½Ğ¡½ÍĞ½¸U@Á½ÉĞíA±…åÑ•ÍÑ1…Õ¹¡=ÁÑ¥½¹Ì¹A½ÉÑôèí•ÉÉ½Éôˆ¤ì(€€€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€ô((€€€€€€€•Ñ5Õ±Ñ¥Á±…å•È ¤¹5Õ±Ñ¥Á±…å•ÉA••È€ôÁ••Èì(€€€€€€€±½…±A••É%€ô€Äì(€€€€€€€¡½ÍÑ‘‘É•ÍÌ€ô•Ñ1½…±%ÁØÑ‘‘É•ÍÌ ¤ì(€€€€€€€M•ÑMÑ…ÑÕÌ ‰AÉ”µÉ½Õ¹ƒ
-Ü©½¥¸í¡½ÍÑ‘‘É•ÍÍôéíA±…åÑ•ÍÑ1…Õ¹¡=ÁÑ¥½¹Ì¹A½ÉÑô°Ñ¡•¸ÍÑ…ÉĞÑ¡”Í¡¥™Ğˆ¤ì(€€€€€€€ÍÑ…ÉÑM¡¥™Ñ	ÕÑÑ½¸¹Y¥Í¥‰±”€ôÑÉÕ”ì(€€€€€€€ÍÑ…ÉÑM¡¥™Ñ	ÕÑÑ½¸¹¥Í…‰±•€ô™…±Í”ì(€€€€€€€¹AÉ¥¹Ğ ‰A1eQMQ}!=MQ}IdÁ½ÉĞõíA±…åÑ•ÍÑ1…Õ¹¡=ÁÑ¥½¹Ì¹A½ÉÑôÁ¡…Í”õíÉ½Õ¹‘1¥™•å±”¹A¡…Í•ôˆ¤ì(€€€€€€€I•™É•Í¡MÑ…ÑÕÌ ¤ì(€€€€€€€¥˜€¡A±…åÑ•ÍÑ1…Õ¹¡=ÁÑ¥½¹Ì¹Mµ½­•5½Ù”¤(€€€€€€€€€€€…±±•™•ÉÉ•¡¹…µ•½˜¡MÑ…ÉÑM¡¥™Ğ¤¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥)½¥¹!½ÍĞ¡ÍÑÉ¥¹œ…‘‘É•ÍÌ¤(€€€ì(€€€€€€€Ù…ÈÁ••È€ô¹•Ü9•Ñ5Õ±Ñ¥Á±…å•ÉA••È ¤ì(€€€€€€€ÉÉ½È•ÉÉ½È€ôÁ••È¹É•…Ñ•±¥•¹Ğ¡…‘‘É•ÍÌ°A±…åÑ•ÍÑ1…Õ¹¡=ÁÑ¥½¹Ì¹A½ÉĞ¤ì(€€€€€€€¥˜€¡•ÉÉ½È€„ôÉÉ½È¹=¬¤(€€€€€€€ì(€€€€€€€€€€€M•ÑMÑ…ÑÕÌ ‰½Õ±¹½Ğ½¹¹•ĞÑ¼í…‘‘É•ÍÍôéíA±…åÑ•ÍÑ1…Õ¹¡=ÁÑ¥½¹Ì¹A½ÉÑôèí•ÉÉ½Éôˆ¤ì(€€€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€ô((€€€€€€€•Ñ5Õ±Ñ¥Á±…å•È ¤¹5Õ±Ñ¥Á±…å•ÉA••È€ôÁ••Èì(€€€€€€€M•ÑMÑ…ÑÕÌ ‰½¹¹•Ñ¥¹œÑ¼í…‘‘É•ÍÍôéíA±…åÑ•ÍÑ1…Õ¹¡=ÁÑ¥½¹Ì¹A½ÉÑ÷Š˜ˆ¤ì(€€€€€€€¹AÉ¥¹Ğ ‰A1eQMQ})=%9%9…‘‘É•ÍÌõí…‘‘É•ÍÍôÁ½ÉĞõíA±…åÑ•ÍÑ1…Õ¹¡=ÁÑ¥½¹Ì¹A½ÉÑôˆ¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥=¹A••É½¹¹•Ñ•¡¥¹ĞÁ••É%¤(€€€ì(€€€€€€€¥˜€ …•Ñ5Õ±Ñ¥Á±…å•È ¤¹%ÍM•ÉÙ•È ¤¤É•ÑÕÉ¸ì(€€€€€€€¹AÉ¥¹Ğ ‰A1eQMQ}AI}=99QÁ••ÈõíÁ••É%‘ôˆ¤ì(€€€€€€€I•™É•Í¡MÑ…ÑÕÌ ¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥=¹A••É¥Í½¹¹•Ñ•¡¥¹ĞÁ••É%¤(€€€ì(€€€€€€€¥˜€ …•Ñ5Õ±Ñ¥Á±…å•È ¤¹%ÍM•ÉÙ•È ¤¤É•ÑÕÉ¸ì(€€€€€€€¥˜€¡Á±…å•ÉÌ¹I•µ½Ù”¡Á••É%°½ÕĞA±…å•ÉIÕ¹Ñ¥µ”üÁ±…å•È¤¤(€€€€€€€ì(€€€€€€€€€€€É•İI½ÍÑ•È¹I•±•…Í”¡Á••É%¤ì(€€€€€€€€€€€½±±¥Í¥½¹5…À¹I•µ½Ù•=‰©•Ğ¡Á±…å•È¹=‰ÍÑ…±”¤ì(€€€€€€€€€€€Á±…å•È¹Ù…Ñ…È¹EÕ•Õ•É•” ¤ì(€€€€€€€€€€€IÁŒ¡¹…µ•½˜¡I•µ½Ù•A±…å•È¤°Á••É%¤ì(€€€€€€€ô(€€€€€€€¹AÉ¥¹Ğ ‰A1eQMQ}AI}%M=99QÁ••ÈõíÁ••É%‘ôˆ¤ì(€€€€€€€I•™É•Í¡MÑ…ÑÕÌ ¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥=¹½¹¹•Ñ•‘Q½M•ÉÙ•È ¤(€€€ì(€€€€€€€±½…±A••É%€ô•Ñ5Õ±Ñ¥Á±…å•È ¤¹•ÑU¹¥ÅÕ•% ¤ì(€€€€€€€M•ÑMÑ…ÑÕÌ ‰½¹¹•Ñ•ƒ
-Üİ…¥Ñ¥¹œ™½ÈÑ¡”¡½ÍĞÑ¼ÍÑ…ÉĞÑ¡”Í¡¥™Ğ€¡Á••Èí±½…±A••É%‘ô¤ˆ¤ì(€€€€€€€¹AÉ¥¹Ğ ‰A1eQMQ}=99Q±½…±}Á••Èõí±½…±A••É%‘ôˆ¤ì(€€€€€€€IÁ% Ä°¹…µ•½˜¡I•ÅÕ•ÍÑI½Õ¹‘A¡…Í”¤¤ì(€€€ô((€€€ÁÉ¥Ù…Ñ”Ù½¥MÑ…ÉÑM¡¥™Ğ ¤(€€€ì(€€€€€€€¥˜€ …•Ñ5Õ±Ñ¥Á±…å•È ¤¹%ÍM•ÉÙ•È ¤¤É•ÑÕÉ¸ì(€€€€€€€¥˜€ …É•İI½ÍÑ•È¹QÉç_wîÚ$z{-®éÜj×erModeEnum.Reliable)]
+using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Net.Sockets;
+using Godot;
+using Godotstation.Engine.Chat;
+using Godotstation.Engine.Movement;
+using Godotstation.Engine.Rounds;
+
+namespace Godotstation.Game.Playtest;
+
+/// <summary>LAN playtest adapter: gathers input, asks the server movement engine, and draws the station.</summary>
+public partial class StationPlaytestController : Node2D
+{
+    private const int MaximumPlayers = 4;
+    private const float SnapshotInterval = 0.05f;
+
+    private readonly Dictionary<int, PlayerRuntime> players = new();
+    private readonly CrewRoster crewRoster = StationCrewJobCatalog.CreateRoster();
+    private readonly SharedRoundLifecycle roundLifecycle = new();
+    private CollisionMap collisionMap = null!;
+    private MovementProcessor movementProcessor = null!;
+    private Label statusLabel = null!;
+    private Button startShiftButton = null!;
+    private RichTextLabel chatLog = null!;
+    private LineEdit chatInput = null!;
+    private int localPeerId;
+    private float snapshotTime;
+    private ulong smokeMoveUntilMsec;
+    private bool smokeMoveStarted;
+    private bool smokeChatStarted;
+    private bool localRoundStarted;
+    private string connectionStatus = "Connectingâ€¦";
+    private string hostAddress = "LAN IP unavailable";
+
+    public override void _Ready()
+    {
+        SetMultiplayerAuthority(1);
+        collisionMap = StationPlaytestLayout.CreateCollisionMap();
+        movementProcessor = new MovementProcessor(collisionMap);
+        BuildStationView();
+        BuildHud();
+
+        var multiplayer = GetMultiplayer();
+        multiplayer.PeerConnected += peerId => OnPeerConnected((int)peerId);
+        multiplayer.PeerDisconnected += peerId => OnPeerDisconnected((int)peerId);
+        multiplayer.ConnectedToServer += OnConnectedToServer;
+        multiplayer.ConnectionFailed += OnConnectionFailed;
+        multiplayer.ServerDisconnected += OnServerDisconnected;
+
+        if (PlaytestLaunchOptions.IsHost)
+            StartHost();
+        else
+            JoinHost(PlaytestLaunchOptions.Address);
+    }
+
+    public override void _PhysicsProcess(double delta)
+    {
+        var multiplayer = GetMultiplayer();
+        if (multiplayer.MultiplayerPeer == null || multiplayer.MultiplayerPeer.GetConnectionStatus() != MultiplayerPeer.ConnectionStatus.Connected)
+            return;
+
+        localPeerId = multiplayer.GetUniqueId();
+        if (PlaytestLaunchOptions.SmokeChat && !smokeChatStarted && players.Count >= 2 && localRoundStarted)
+        {
+            smokeChatStarted = true;
+            SubmitSpeech($"SMOKE_CHAT_PEER_{localPeerId}");
+        }
+        var direction = ReadLocalInput();
+
+        if (multiplayer.IsServer())
+        {
+            if (players.ContainsKey(localPeerId))
+                SetMovementInput(localPeerId, localPeerId, direction.X, direction.Y);
+
+            float step = (float)Math.Min(delta, 0.1);
+            foreach (PlayerRuntime player in players.Values)
+            {
+                float x = player.Position.X;
+                float y = player.Position.Y;
+                var intent = new MoveIntent
+                {
+                    DeltaX = player.DeltaX,
+                    DeltaY = player.DeltaY,
+                    Timestamp = Time.GetTicksMsec() / 1000.0
+                };
+
+                if (intent.DeltaX != 0 || intent.DeltaY != 0)
+                    movementProcessor.TryMove(player.Movement, ref x, ref y, intent, step);
+                else
+                    movementProcessor.ApplyMomentum(player.Movement, ref x, ref y, step);
+
+                if (Mathf.RoundToInt(x) != Mathf.RoundToInt(player.Position.X) ||
+                    Mathf.RoundToInt(y) != Mathf.RoundToInt(player.Position.Y))
+                    collisionMap.MoveObject(player.Obstacle, Mathf.RoundToInt(x), Mathf.RoundToInt(y));
+
+                player.Position = new Vector2(x, y);
+                player.Avatar.Position = player.Position;
+                if (!player.HasLoggedMovement && player.Position.DistanceSquaredTo(player.SpawnPosition) > 0.08f)
+                {
+                    player.HasLoggedMovement = true;
+                    GD.Print($"PLAYTEST_POSITION peer={player.PeerId} x={x:0.00} y={y:0.00}");
+                    if (player.PeerId != 1)
+                        GD.Print($"PLAYTEST_CLIENT_POSITION peer={player.PeerId}");
+                }
+            }
+
+            snapshotTime += (float)delta;
+            if (snapshotTime >= SnapshotInterval)
+            {
+                snapshotTime %= SnapshotInterval;
+                foreach (PlayerRuntime player in players.Values)
+                    Rpc(nameof(ReceivePosition), player.PeerId, player.Position.X, player.Position.Y);
+            }
+
+        }
+        else
+        {
+            if (players.ContainsKey(localPeerId))
+                RpcId(1, nameof(SubmitMovementInput), direction.X, direction.Y);
+
+            foreach (PlayerRuntime player in players.Values)
+            {
+                if (player.PeerId == localPeerId) continue;
+                player.Avatar.Position = player.Avatar.Position.Lerp(player.TargetPosition,
+                    Mathf.Clamp((float)delta * 14f, 0f, 1f));
+            }
+        }
+    }
+
+    public override void _ExitTree()
+    {
+        if (GetMultiplayer().MultiplayerPeer is ENetMultiplayerPeer peer)
+            peer.Close();
+    }
+
+    private void StartHost()
+    {
+        var peer = new ENetMultiplayerPeer();
+        Error error = peer.CreateServer(PlaytestLaunchOptions.Port, MaximumPlayers - 1);
+        if (error != Error.Ok)
+        {
+            SetStatus($"Could not host on UDP port {PlaytestLaunchOptions.Port}: {error}");
+            return;
+        }
+
+        GetMultiplayer().MultiplayerPeer = peer;
+        localPeerId = 1;
+        hostAddress = GetLocalIpv4Address();
+        SetStatus($"Pre-round Â· join {hostAddress}:{PlaytestLaunchOptions.Port}, then start the shift");
+        startShiftButton.Visible = true;
+        startShiftButton.Disabled = false;
+        GD.Print($"PLAYTEST_HOST_READY port={PlaytestLaunchOptions.Port} phase={roundLifecycle.Phase}");
+        RefreshStatus();
+        if (PlaytestLaunchOptions.SmokeMove)
+            CallDeferred(nameof(StartShift));
+    }
+
+    private void JoinHost(string address)
+    {
+        var peer = new ENetMultiplayerPeer();
+        Error error = peer.CreateClient(address, PlaytestLaunchOptions.Port);
+        if (error != Error.Ok)
+        {
+            SetStatus($"Could not connect to {address}:{PlaytestLaunchOptions.Port}: {error}");
+            return;
+        }
+
+        GetMultiplayer().MultiplayerPeer = peer;
+        SetStatus($"Connecting to {address}:{PlaytestLaunchOptions.Port}â€¦");
+        GD.Print($"PLAYTEST_JOINING address={address} port={PlaytestLaunchOptions.Port}");
+    }
+
+    private void OnPeerConnected(int peerId)
+    {
+        if (!GetMultiplayer().IsServer()) return;
+        GD.Print($"PLAYTEST_PEER_CONNECTED peer={peerId}");
+        RefreshStatus();
+    }
+
+    private void OnPeerDisconnected(int peerId)
+    {
+        if (!GetMultiplayer().IsServer()) return;
+        if (players.Remove(peerId, out PlayerRuntime? player))
+        {
+            crewRoster.Release(peerId);
+            collisionMap.RemoveObject(player.Obstacle);
+            player.Avatar.QueueFree();
+            Rpc(nameof(RemovePlayer), peerId);
+        }
+        GD.Print($"PLAYTEST_PEER_DISCONNECTED peer={peerId}");
+        RefreshStatus();
+    }
+
+    private void OnConnectedToServer()
+    {
+        localPeerId = GetMultiplayer().GetUniqueId();
+        SetStatus($"Connected Â· waiting for the host to start the shift (peer {localPeerId})");
+        GD.Print($"PLAYTEST_CONNECTED local_peer={localPeerId}");
+        RpcId(1, nameof(RequestRoundPhase));
+    }
+
+    private void StartShift()
+    {
+        if (!GetMultiplayer().IsServer()) return;
+        if (!crewRoster.TryGetJob(PlaytestLaunchOptions.CrewJobId, out CrewJob? selectedJob) || selectedJob == null)
+        {
+            SetStatus("The selected crew role is unavailable. Return to the lobby and choose another role.");
+            return;
+        }
+        RoundStartResult result = roundLifecycle.TryStart(localPeerId);
+        if (result != RoundStartResult.Started) return;
+        localRoundStarted = true;
+
+        CrewAssignmentResult assignment = crewRoster.TryAssign(localPeerId, PlaytestLaunchOptions.CrewJobId);
+        if (assignment != CrewAssignmentResult.Accepted ||
+            !crewRoster.TryGetAssignment(localPeerId, out CrewJob? assignedJob) || assignedJob == null)
+        {
+            SetStatus($"Could not reserve the selected crew role: {assignment}.");
+            return;
+        }
+
+        var spawn = StationPlaytestLayout.Spawns[0];
+        AddPlayer(localPeerId, assignedJob, new Vector2(spawn.X, spawn.Y));
+        startShiftButton.Disabled = true;
+        startShiftButton.Text = "Shift started";
+        SetStatus($"Shift started Â· joining crew can now spawn Â· {hostAddress}:{PlaytestLaunchOptions.Port}");
+        GD.Print($"PLAYTEST_ROUND_STARTED host_job={assignedJob.Id}");
+        Rpc(nameof(ReceiveRoundStarted));
+        RefreshStatus();
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestRoundPhase()
+    {
+        if (!GetMultiplayer().IsServer()) return;
+        int peerId = (int)GetMultiplayer().GetRemoteSenderId();
+        RpcId(peerId, nameof(ReceiveRoundPhase), (int)roundLifecycle.Phase);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceiveRoundPhase(int phase)
+    {
+        if (phase == (int)SharedRoundPhase.Started)
+        {
+            localRoundStarted = true;
+            RequestCrewSpawnFromClient();
+        }
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceiveRoundStarted()
+    {
+        localRoundStarted = true;
+        RequestCrewSpawnFromClient();
+    }
+
+    private void RequestCrewSpawnFromClient()
+    {
+        if (GetMultiplayer().IsServer()) return;
+        SetStatus("Shift started Â· requesting your crew roleâ€¦");
+        RpcId(1, nameof(RequestCrewSpawn), PlaytestLaunchOptions.CrewJobId);
+    }
+
+    private void OnConnectionFailed()
+    {
+        SetStatus($"Connection failed. Check the host address, UDP port {PlaytestLaunchOptions.Port}, and firewall settings.");
+        GD.PrintErr("PLAYTEST_CONNECTION_FAILED");
+    }
+
+    private void OnServerDisconnected()
+    {
+        SetStatus("The host disconnected. Return to the lobby and reconnect.");
+        GD.PrintErr("PLAYTEST_SERVER_DISCONNECTED");
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestCrewSpawn(int jobId)
+    {
+        if (!GetMultiplayer().IsServer()) return;
+        int peerId = (int)GetMultiplayer().GetRemoteSenderId();
+        if (peerId <= 1) return;
+        if (!roundLifecycle.CanRequestJob)
+        {
+            RpcId(peerId, nameof(RejectCrewRequest), jobId, (int)CrewAssignmentResult.RoundNotStarted);
+            return;
+        }
+        if (players.TryGetValue(peerId, out PlayerRuntime? existingPlayer))
+        {
+            RpcId(peerId, nameof(ReceiveSpawn), existingPlayer.PeerId, existingPlayer.Job.Id,
+                existingPlayer.Position.X, existingPlayer.Position.Y);
+            return;
+        }
+        if (players.Count >= MaximumPlayers || players.Count >= StationPlaytestLayout.Spawns.Count)
+        {
+            RpcId(peerId, nameof(RejectCrewRequest), jobId, (int)CrewAssignmentResult.PositionFilled);
+            return;
+        }
+
+        CrewAssignmentResult assignment = crewRoster.TryAssign(peerId, jobId);
+        if (assignment != CrewAssignmentResult.Accepted ||
+            !crewRoster.TryGetAssignment(peerId, out CrewJob? assignedJob) || assignedJob == null)
+        {
+            RpcId(peerId, nameof(RejectCrewRequest), jobId, (int)assignment);
+            return;
+        }
+
+        var spawnPoint = StationPlaytestLayout.Spawns[players.Count];
+        Vector2 spawn = new(spawnPoint.X, spawnPoint.Y);
+        foreach (PlayerRuntime existing in players.Values)
+            RpcId(peerId, nameof(ReceiveSpawn), existing.PeerId, existing.Job.Id,
+                existing.Position.X, existing.Position.Y);
+
+        AddPlayer(peerId, assignedJob, spawn);
+        Rpc(nameof(ReceiveSpawn), peerId, assignedJob.Id, spawn.X, spawn.Y);
+        GD.Print($"PLAYTEST_ROSTER peers={players.Count}");
+        RefreshStatus();
+    }
+
+    private void SubmitSpeech(string message)
+    {
+        if (!localRoundStarted || !players.ContainsKey(localPeerId))
+        {
+            SetStatus("You can speak after joining the started shift.");
+            return;
+        }
+        string text = message.Trim();
+        if (text.Length == 0 || text.Length > 256 || text.IndexOfAny(['\r', '\n', '\0']) >= 0)
+        {
+            SetStatus("Speech must be 1â€“256 characters on one line.");
+            return;
+        }
+
+        if (GetMultiplayer().IsServer())
+            RouteLocalSpeech(localPeerId, text);
+        else
+            RpcId(1, nameof(RequestLocalSpeech), text);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestLocalSpeech(string message)
+    {
+        if (!GetMultiplayer().IsServer()) return;
+        RouteLocalSpeech((int)GetMultiplayer().GetRemoteSenderId(), message);
+    }
+
+    private void RouteLocalSpeech(int speakerPeerId, string message)
+    {
+        if (!roundLifecycle.CanRequestJob || message.Length == 0 || message.Length > 256 ||
+            message.IndexOfAny(['\r', '\n', '\0']) >= 0 || !players.TryGetValue(speakerPeerId, out PlayerRuntime? speaker))
+            return;
+
+        var listeners = new List<LocalChatListener>(players.Count);
+        foreach (PlayerRuntime player in players.Values)
+            listeners.Add(new LocalChatListener(player.PeerId,
+                new System.Numerics.Vector2(player.Position.X, player.Position.Y),
+                LocalSpeechRouter.DefaultHearingRange));
+
+        System.Numerics.Vector2 origin = new(speaker.Position.X, speaker.Position.Y);
+        IReadOnlyList<int> recipients = LocalSpeechRouter.FindListeners(speakerPeerId, origin, listeners,
+            HasLocalLineOfSight);
+        foreach (int recipient in recipients)
+        {
+            if (recipient == 1)
+                AppendSpeech(speakerPeerId, speaker.Job.Name, message);
+            else
+                RpcId(recipient, nameof(ReceiveLocalSpeech), speakerPeerId, speaker.Job.Name, message);
+        }
+
+        GD.Print($"PLAYTEST_LOCAL_CHAT_RELAYED sender={speakerPeerId} recipients={recipients.Count}");
+    }
+
+    private bool HasLocalLineOfSight(System.Numerics.Vector2 from, System.Numerics.Vector2 to)
+    {
+        var movementState = new PlayerMovementState();
+        return GridLineOfSight.IsClear(from, to, (x, y) => !collisionMap.IsPassable(x, y, movementState));
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceiveLocalSpeech(int speakerPeerId, string jobName, string message)
+    {
+        AppendSpeech(speakerPeerId, jobName, message);
+    }
+
+    private void AppendSpeech(int speakerPeerId, string jobName, string message)
+    {
+        chatLog.AppendText($"[LOCAL] Crew {speakerPeerId} Â· {jobName}: {message}\n");
+        chatLog.ScrollToLine(Math.Max(0, chatLog.GetLineCount() - 1));
+        GD.Print($"PLAYTEST_LOCAL_CHAT_RECEIVED speaker={speakerPeerId}");
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable)]
+    private void SubmitMovementInput(int deltaX, int deltaY)
+    {
+        if (!GetMultiplayer().IsServer()) return;
+        int senderId = (int)GetMultiplayer().GetRemoteSenderId();
+        SetMovementInput(senderId, senderId, deltaX, deltaY);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = true, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceiveSpawn(int peerId, int jobId, float x, float y)
+    {
+        if (players.ContainsKey(peerId)) return;
+        if (!StationCrewJobCatalog.CreateRoster().TryGetJob(jobId, out CrewJob? job) || job == null)
+        {
+            GD.PrintErr($"PLAYTEST_INVALID_SERVER_JOB peer={peerId} job={jobId}");
+            return;
+        }
+        AddPlayer(peerId, job, new Vector2(x, y));
+        GD.Print($"PLAYTEST_PLAYER_SPAWNED peer={peerId} job={job.Id} role={job.Name} count={players.Count}");
+        RefreshStatus();
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void RejectCrewRequest(int jobId, int resultCode)
     {
         var result = (CrewAssignmentResult)resultCode;
@@ -107,6 +518,23 @@ YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éíëİûN‹Z–‹­¦ëeŠw¬ÕÕÍ¥¹œMåÍÑ•´ì)ÕÍ¥¹œMåÍÑ•´¹½±±•Ñ
         startShiftButton.Pressed += StartShift;
         content.AddChild(startShiftButton);
         content.AddChild(new Label { Text = $"WASD move  Â·  Host shares LAN IP  Â·  UDP {PlaytestLaunchOptions.Port}" });
+
+        chatLog = new RichTextLabel
+        {
+            CustomMinimumSize = new Vector2(440, 150),
+            BbcodeEnabled = false,
+            ScrollActive = true,
+            FitContent = false,
+        };
+        content.AddChild(chatLog);
+        chatInput = new LineEdit
+        {
+            PlaceholderText = "Speak locallyâ€¦ (Enter)",
+            CustomMinimumSize = new Vector2(440, 36),
+            MaxLength = 256,
+        };
+        chatInput.TextSubmitted += SubmitSpeech;
+        content.AddChild(chatInput);
 
         var returnButton = new Button { Text = "Return to lobby" };
         returnButton.Pressed += () => GetTree().ChangeSceneToFile("res://UI/RoundLobby.tscn");
