@@ -13,9 +13,11 @@ occupancy of one shared station space, with local speech routed by hearing range
 Pickup and drop use the engine inventory's left- and right-hand slots. Press Tab to switch the
 active hand; a tool or material can be used only while it is selected. The Engineer task uses
 two metal sheets from the station floor to plate a girder after a four-second action, changing
-the shared object into a wall on both clients. The material stack and girder are fixed playtest
-objects, and this does not yet provide the full Engineer loadout/access, broader construction,
-power machinery, survival, antagonists, or complete round systems. It is not full Unitystation
+the shared object into a wall on both clients. The Engineer now spawns with a nine-slot,
+source-mapped starter kit and ID clearances. The shared engineering airlock blocks movement
+while closed, denies the Assistant, and opens for an Engineer whose ID carries Engine access.
+This slice does not yet make the kit items functional or provide power machinery, broader
+construction, survival, antagonists, or complete round systems. It is not full Unitystation
 gameplay parity.
 
 ## Start a local two-instance playtest
@@ -44,6 +46,9 @@ gameplay parity.
    click the cart, push it with WASD, then press Q to drop the wrench. Both clients should see the
    cart become loose and the wrench return to the floor.
 10. Use **Return to lobby** to leave the playtest.
+11. For the Engineer access check, stand beside the labeled Engineering ID Lock. Click it as
+    Assistant and confirm it stays closed; click it as Engineer and confirm it opens for both
+    clients. The crew HUD lists the Engineer's issued equipment and ID access.
 
 Command-line smoke mode (used by the repository test script):
 
@@ -57,8 +62,9 @@ and the client Assistant, both avatars are replicated with those roles, and serv
 movement reaches the client.
 `tools/multiplayer_smoke.sh --interactions` checks the remote pickup, wrench use, drop, and
 authoritative snapshots. `tools/multiplayer_smoke.sh --construction` checks a two-client
- metal pickup, four-second server action, sheet consumption, and replicated wall completion.
-A local macOS app can be exported with
+metal pickup, four-second server action, sheet consumption, and replicated wall completion.
+`tools/multiplayer_smoke.sh --engineering-access` checks Assistant denial, Engineer ID
+authorization, and replicated airlock passability. A local macOS app can be exported with
 `GODOT_BIN=/path/to/Godot bash tools/export_playtest_macos.sh /path/to/Godotstation.app`.
 
 ## Feedback to collect
