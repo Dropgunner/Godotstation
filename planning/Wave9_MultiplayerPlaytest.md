@@ -16,9 +16,9 @@ two metal sheets from the station floor to plate a girder after a four-second ac
 the shared object into a wall on both clients. The Engineer now spawns with a nine-slot,
 source-mapped starter kit and ID clearances. The shared engineering airlock blocks movement
 while closed, denies the Assistant, and opens for an Engineer whose ID carries Engine access.
-This slice does not yet make the kit items functional or provide power machinery, broader
-construction, survival, antagonists, or complete round systems. It is not full Unitystation
-gameplay parity.
+This slice does not yet make the kit items functional or provide a station-wide power grid,
+broader construction, survival, antagonists, or complete round systems. It is not full
+Unitystation gameplay parity.
 
 ## Start a local two-instance playtest
 
@@ -26,7 +26,8 @@ gameplay parity.
    export templates.
 2. Choose a **LAN crew role**. For a varied smoke test, select Engineer on the host and
    Assistant on the joining client.
-3. Open two instances. In the first, choose **Host Station**. It listens on UDP port 7777
+3. Open two instances. On one Mac, launch each with `open -n /path/to/Godotstation.app` so
+   macOS starts a separate process. In the first, choose **Host Station**. It listens on UDP port 7777
    and waits in pre-round with no crew spawned.
 4. In the second, enter `127.0.0.1` and choose **Join Station**. Once both are connected, the
    host presses **Start shift**.
@@ -49,6 +50,11 @@ gameplay parity.
 11. For the Engineer access check, stand beside the labeled Engineering ID Lock. Click it as
     Assistant and confirm it stays closed; click it as Engineer and confirm it opens for both
     clients. The crew HUD lists the Engineer's issued equipment and ID access.
+12. For the Engineer power task, pick up the fuel stack and click the generator twice to load
+    fuel. Press Tab to switch to an empty hand, click the generator to start it, then click
+    storage to enable output. Watch both clients' APC lamp turn on, then wait for fuel and stored
+    energy to run out. Pick up the reserve fuel, load it, and restart the generator; both clients
+    should observe recovery. The short test uses placeholder rates, not source-game balance.
 
 Command-line smoke mode (used by the repository test script):
 

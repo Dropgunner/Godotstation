@@ -1,6 +1,6 @@
 # Fidelity Contract: Engineer Power Loop
 
-**Status:** implemented in the LAN adapter with deterministic rule and snapshot tests; the two-peer smoke is scripted but could not run in this local Godot environment. Exact source-game power-network behavior and ordinary-controls playtest remain open.
+**Status:** implemented in the LAN adapter with deterministic rule and snapshot tests. The two-peer power-loop smoke passed on the integrated game code; a hands-on ordinary-controls playtest and exact source-game power-network behavior remain open.
 
 **Source check:** Unitystation `b0bb5b77b33e2e3e61de1a17254664f626834263` and tgstation `f37d36c295c4bf991b72647281352f3bd471b335`, inspected 2026-10-18.
 
@@ -22,11 +22,21 @@
 ## Known gaps before parity claims
 
 - This is a single isolated generator/storage/lamp dependency, not a station electrical grid. Cable topology, voltage, APC circuits, power priorities, load variation, tools, and grid failures remain unimplemented. The generator's internal fuel slot, stack transfer/autoload behavior, fuel-time reservoir, and voltage variation are also not ported.
-- The scripted smoke is intended to verify two-peer transport and replicated consequence. It has not yet run here and does not replace the ordinary-controls two-person task or a source-runtime comparison.
-- Local runtime execution is currently blocked: the installed Godot 4.4.1 command aborts at startup with `CSSM_ModuleLoad(): One or more parameters passed to a function were not valid.`
+- The scripted smoke verifies two-peer transport and replicated consequence for this power loop only. It does not replace the ordinary-controls two-person task or a source-runtime comparison.
+- Godot 4.4.1 Mono command-line startup and the exported macOS app's headless startup passed on 2026-10-18. This establishes local runtime availability for those checks, not hands-on playability.
 - The current smoke exercises fuel exhaustion and recovery. It does not yet cover the full requested outage-report-action loop, a second failure/recovery cycle, or end/restart after the power task.
 - REA inventoried a bounded source corpus; no Unitystation or tgstation runtime trace was captured, so exact behavior beyond the inspected source path remains unverified.
 
 ## Regression coverage
 
-`StationPowerLoopTests` covers charging, output load, outage, reserve-fuel recovery, invalid fuel, and invalid time. `SharedStationInventoryWorldTests` covers Engineer pickup/refueling/start/output through validated interactions. `ReplicatedStationPowerTests` covers client-visible state and hit-target availability. `tools/multiplayer_smoke.sh --power-loop` is the scripted Assistant/Engineer two-peer check; runtime proof is pending.
+`StationPowerLoopTests` covers charging, output load, outage, reserve-fuel recovery, invalid fuel, and invalid time. `SharedStationInventoryWorldTests` covers Engineer pickup/refueling/start/output through validated interactions. `ReplicatedStationPowerTests` covers client-visible state and hit-target availability. `tools/multiplayer_smoke.sh --power-loop` passed for two local peers on 2026-10-18; the ordinary-controls human task is still open.
+
+## Verification recorded 2026-10-18
+
+- `dotnet build game/Godotstation.Game.sln`: passed on integrated commit `c1d2b64` with 0 warnings and 0 errors.
+- `bash tools/preflight.sh --fast`: passed; this mode explicitly skips build and test execution.
+- The test project targets `net10.0`, but the installed SDK is .NET 8. `dotnet test tests/Godotstation.Tests/Godotstation.Tests.csproj` therefore failed with `NETSDK1045`. With a temporary, automatically restored retarget to `net8.0`, the suite passed: 255 passed, 8 skipped, 263 total. The tracked project file was restored unchanged.
+- `GODOT_BIN=/Applications/Godot_mono.app/Contents/MacOS/Godot tools/multiplayer_smoke.sh --power-loop`: passed on `7808126`; both peers observed the generator/storage/APC outage and recovery. The later `c1d2b64` merge adds only the game solution file.
+- `bash tools/export_playtest_macos.sh /private/tmp/Godotstation-Integrated-c1d2b64-Playtest.app`: produced a universal app with PCK and arm64/x86_64 C# runtime assemblies; the exported executable started and exited headlessly without runtime errors. Godot emitted a `DirectoryNotFoundException` while cleaning an already-absent temporary .NET publish directory after writing the bundle. The export script completed its bundle and startup checks; the cleanup diagnostic remains visible.
+
+These checks establish rules, local transport for the scripted scenario, and app startup. They do not establish completion of the manual two-player task or `/tg/station`/Unitystation parity.
