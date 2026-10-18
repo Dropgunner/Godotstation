@@ -45,13 +45,35 @@ trace additional upstream systems it actually implements.
   and a small offline objective round.
 - Wave 9 adds a station-shaped map, crew avatars, movement, and LAN host/join with
   server-resolved position updates.
-- The Wave 9 playtest now has networked job selection, capacity checks, and spawn gating for
-  two sourced crew roles. It now also models the authoritative PreRound → Started gate for
-  role spawn requests, plus server-routed local speech with hearing-range and wall checks.
-  This branch adds a first shared-world pickup/tool-use slice. It still lacks the broader
-  inventory and intent loop, a source-backed job task, round end, and restart.
-  Role assignment does not yet make the role's job duties playable; this remains an early
-  multiplayer station loop rather than a complete round.
+- Integrated Wave 9 slices now cover server-gated role spawn, local speech, a shared wrench/cart,
+  metal pickup and timed girder plating, Engineer equipment/access, and client click targets
+  driven by replicated entity state. The exported LAN app is an early station loop. Full
+  Engineer machinery, round end/restart, failure/recovery, broader inventory/intent, and a
+  two-person ordinary-controls gate remain open.
+
+## Delivery workflow and outcome ledger
+
+1. Merge a dependent PR chain in order and verify each merge. Build one app from the
+   integrated code commit before starting the next feature slice. Open PRs are not delivery.
+2. Exercise the player path with ordinary controls as well as automated checks: two people
+   join, move, speak, pick up equipment, complete an Engineer task, see the shared result,
+   and end or restart. Log observed bugs, then fix the narrow architecture boundary they expose.
+3. Use .NET tests to prove rules, a two-client smoke to prove transport, and the exported app
+   to assess playability. Jev is for a remaining bounded decision only. Review new subsystem
+   boundaries more deeply than mechanical edits.
+4. Record the integrated build, new player action, full-round gate, and playtest bugs here.
+
+| Outcome | Current evidence | Status |
+| --- | --- | --- |
+| Integrated build | `f3914045fa1f357430a153c8d1b95480b6388d52` exported as `Godotstation-Integrated-f391404-Playtest.app`; four exported two-client smokes passed. | Built; manual full-round gate open |
+| New player action | Wrench, cart, metal, girder, and Engineer airlock now share replicated positions/availability for rendering and click targeting. | Integrated in PR #32; ordinary-control two-player path unverified |
+| Full round | Host can start a shared shift; Engineer can plate a girder and open an access-controlled airlock. | **Open:** no shared end/restart, failure/recovery, or complete Engineer machinery loop |
+| Bugs found during play | A client could click stale construction targets; the HUD covered the station after spawn. | Fixed in PRs #32 and #33; repeat human playtest needed |
+
+The app export still relies on a local untracked Godot export preset, and Godot reports an
+export cleanup exception after producing a working bundle. The local .NET 8 SDK cannot run
+the repository's net10 test target or `.slnx` full preflight without a newer SDK. These are
+reproducibility issues to resolve before calling the delivery pipeline complete.
 
 ## Dependency-ordered milestones
 
