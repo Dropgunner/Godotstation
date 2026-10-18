@@ -20,6 +20,7 @@
 6. An unanchored cart is pushable through the existing server movement processor; its new position is replicated as shared state.
 7. A nearby crew member can pick up the dropped wrench. Disconnecting while holding it returns it to the world at the last authoritative crew position.
 8. Unknown peers, unknown targets, out-of-range clicks, blocked click lines, an occupied pickup, or wrench use without the wrench in the active hand leave the world state unchanged.
+9. The client chooses click targets from the same replicated entity positions and availability that it draws. A remote pickup, dropped item, moved cart, or completed girder changes hit testing as soon as its authoritative snapshot arrives; this target choice does not bypass the host's checks. This follows the source `HandApply` target identity and `Pickupable` target requirement above. The previous adapter drew construction snapshots but hit-tested the client's unchanged local world, so a visible plated girder could still receive clicks.
 
 ## Known gaps before parity claims
 
@@ -30,4 +31,4 @@
 
 ## Regression coverage
 
-`SharedStationInventoryWorldTests` verifies the wrench occupies the actual active-hand slot, switching to the empty hand prevents use, active-hand drop returns it to the world, a second crew member can recover it, and range, obstruction, unknown requests, and disconnect are handled. Movement pushability remains covered by the existing movement fidelity tests. The separate two-client smoke verifies the LAN request and replication path; a headless domain test is not end-to-end parity evidence. The project SDK remains pinned to 4.4.1. These checks verify this slice's runtime path, not overall Unitystation parity.
+`SharedStationInventoryWorldTests` verifies the wrench occupies the actual active-hand slot, switching to the empty hand prevents use, active-hand drop returns it to the world, a second crew member can recover it, and range, obstruction, unknown requests, and disconnect are handled. `ReplicatedStationEntitiesTests` verifies that client hit targets follow received pickup, position, airlock, and plating snapshots, including late-join state. Movement pushability remains covered by the existing movement fidelity tests. The separate two-client smoke verifies the LAN request and replication path; a headless domain test is not end-to-end parity evidence. The project SDK remains pinned to 4.4.1. These checks verify this slice's runtime path, not overall Unitystation parity.
