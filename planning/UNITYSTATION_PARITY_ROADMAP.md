@@ -119,11 +119,15 @@ the current generic wrench-relay objective as a stand-in for Unitystation gamepl
 station objects and the existing engine systems; shared state changes are visible and
 recoverable; tests cover the domain outcome; a two-client playtest can complete the task.
 
-**Active implementation:** the playtest now has a source-grounded girder-plating task: pick up
-two metal sheets, hold them in the active hand for a four-second server action, and replicate
-the resulting wall to both clients. This is the first construction step toward an Engineer loop.
-It does not close P3: the Engineer loadout/access, full station machinery, and broader
-construction paths remain open. See [Fidelity Contract: Girder Plating](FidelityContract_GirderPlating.md).
+**Implemented slices:** the playtest has a source-grounded girder-plating task: pick up two
+metal sheets, hold them in the active hand for a four-second server action, and replicate the
+resulting wall to both clients. The Engineer spawn also receives the nine source-mapped named
+slots and ID clearances; an Assistant cannot open the shared engineering airlock, while an
+Engineer with Engine clearance can. This establishes role equipment and one access-controlled
+station object, but does not close P3: functional tool/equipment behavior, power machinery,
+broader construction, and a complete engineering objective remain open. See [Fidelity Contract:
+Girder Plating](FidelityContract_GirderPlating.md) and [Fidelity Contract: Engineer Loadout and
+Engineering Airlock](FidelityContract_EngineerLoadoutAccess.md).
 
 ### P4 — Survival, incapacitation, and recovery
 

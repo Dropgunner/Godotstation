@@ -10,6 +10,7 @@ public partial class StationMapView : Node2D
     private Vector2 wrenchPosition = new(-1, 2);
     private Vector2 fixturePosition = new(0, 2);
     private bool fixtureAnchored = true;
+    private bool engineeringAirlockOpen;
     private int? metalOwner;
     private Vector2 metalPosition = new(1, 2);
     private int metalSheetCount = 2;
@@ -41,6 +42,12 @@ public partial class StationMapView : Node2D
         QueueRedraw();
     }
 
+    public void SetEngineeringAirlock(bool isOpen)
+    {
+        engineeringAirlockOpen = isOpen;
+        QueueRedraw();
+    }
+
     public override void _Ready()
     {
         AddRoomLabel("MEDICAL", new Vector2(-8f, -6.3f), new Color("#b8efff"));
@@ -67,6 +74,15 @@ public partial class StationMapView : Node2D
             DrawRect(new Rect2(x - 0.49f, y - 0.49f, 0.98f, 0.98f), new Color("#24323b"), true);
             DrawRect(new Rect2(x - 0.49f, y - 0.49f, 0.98f, 0.12f), new Color("#6c8591"), true);
         }
+
+        Vector2 airlockPosition = new(8, -4);
+        DrawRect(new Rect2(airlockPosition - new Vector2(0.43f, 0.43f), new Vector2(0.86f, 0.86f)),
+            engineeringAirlockOpen ? new Color("#65aa83") : new Color("#bb8b4c"), true);
+        DrawRect(new Rect2(airlockPosition - new Vector2(0.34f, 0.34f), new Vector2(0.68f, 0.68f)),
+            engineeringAirlockOpen ? new Color("#b1e5c2") : new Color("#55452f"), false, 0.07f);
+        DrawString(ThemeDB.FallbackFont, airlockPosition + new Vector2(-1.1f, 0.67f),
+            engineeringAirlockOpen ? "ENGINEERING · OPEN" : "ENGINEERING · ID LOCK", HorizontalAlignment.Left, -1, 1,
+            engineeringAirlockOpen ? new Color("#b8f2cb") : new Color("#ffe1a8"));
 
         DrawRect(new Rect2(fixturePosition - new Vector2(0.37f, 0.27f), new Vector2(0.74f, 0.54f)),
             fixtureAnchored ? new Color("#c87955") : new Color("#70cfa6"), true);
