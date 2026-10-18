@@ -510,7 +510,10 @@ public partial class StationPlaytestController : Node2D
                 existingPlayer.Position.X, existingPlayer.Position.Y);
             return;
         }
-        if (players.Count >= MaximumPlayers || players.Count >= StationPlaytestLayout.Spawns.Count)
+        System.Numerics.Vector2 spawnPoint = default;
+        if (players.Count >= MaximumPlayers || !StationPlaytestLayout.TryFindFreeSpawn(
+                players.Values.Select(player => new System.Numerics.Vector2(player.Position.X, player.Position.Y)),
+                out spawnPoint))
         {
             RpcId(peerId, nameof(RejectCrewRequest), jobId, (int)CrewAssignmentResult.PositionFilled);
             return;
@@ -524,7 +527,6 @@ public partial class StationPlaytestController : Node2D
             return;
         }
 
-        var spawnPoint = StationPlaytestLayout.Spawns[players.Count];
         Vector2 spawn = PlaytestLaunchOptions.SmokeEngineeringAccess
             ? new Vector2(8f, -5f)
             : PlaytestLaunchOptions.SmokePowerLoop

@@ -24,6 +24,30 @@ namespace Godotstation.Engine.Movement
 
         public static IReadOnlyList<Vector2> Spawns => ReadOnlySpawnPoints;
 
+        /// <summary>
+        /// Picks the first spawn point whose tile no crew member stands on, so a late joiner
+        /// never lands on a player who is still at their own spawn after someone else left.
+        /// </summary>
+        public static bool TryFindFreeSpawn(IEnumerable<Vector2> occupiedPositions, out Vector2 spawn)
+        {
+            var occupied = new HashSet<(int X, int Y)>();
+            foreach (Vector2 position in occupiedPositions)
+                occupied.Add(ToTile(position));
+
+            foreach (Vector2 candidate in SpawnPoints)
+            {
+                if (occupied.Contains(ToTile(candidate))) continue;
+                spawn = candidate;
+                return true;
+            }
+
+            spawn = default;
+            return false;
+        }
+
+        private static (int X, int Y) ToTile(Vector2 position) =>
+            ((int)System.MathF.Round(position.X), (int)System.MathF.Round(position.Y));
+
         public static IReadOnlyList<(int X, int Y)> GetWallTiles()
         {
             var walls = new HashSet<(int X, int Y)>();
