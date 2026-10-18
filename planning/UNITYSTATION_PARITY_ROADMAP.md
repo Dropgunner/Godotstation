@@ -48,8 +48,9 @@ trace additional upstream systems it actually implements.
 - Integrated Wave 9 slices now cover server-gated role spawn, local speech, a shared wrench/cart,
   metal pickup and timed girder plating, Engineer equipment/access, and client click targets
   driven by replicated entity state. The exported LAN app is an early station loop. Full
-  Engineer machinery, round end/restart, failure/recovery, broader inventory/intent, and a
-  two-person ordinary-controls gate remain open.
+  Engineer machinery, mode-driven round outcome/report, failure/recovery, broader inventory/intent, and a
+  two-person ordinary-controls gate remain open. The [bounded SS13 source comparison](SS13_ESSENCE_REA.md)
+  now uses tgstation as the gameplay criterion and Unitystation as the porting bridge.
 
 ## Delivery workflow and outcome ledger
 
@@ -65,7 +66,7 @@ trace additional upstream systems it actually implements.
 
 | Outcome | Current evidence | Status |
 | --- | --- | --- |
-| Integrated build | `f3914045fa1f357430a153c8d1b95480b6388d52` exported as `Godotstation-Integrated-f391404-Playtest.app`; four exported two-client smokes passed. | Built; manual full-round gate open |
+| Integrated build | `c7269eaf79fb0a024ae55e670c12ccac97536afd` exported as `Godotstation-Integrated-c7269ea-Playtest.app`; five exported two-client smokes passed, including round restart. | Built; manual full-round gate open |
 | New player action | Wrench, cart, metal, girder, and Engineer airlock now share replicated positions/availability for rendering and click targeting. | Integrated in PR #32; ordinary-control two-player path unverified |
 | Full round | Host can start, end, and restart a shared shift; two clients respawn into fresh shared state. Engineer can plate a girder and open an access-controlled airlock. | **Open:** no sourced round outcome/report, failure/recovery, complete Engineer machinery loop, or two-person ordinary-controls pass |
 | Bugs found during play | A client could click stale construction targets; the HUD covered the station after spawn. | Fixed in PRs #32 and #33; repeat human playtest needed |
@@ -150,7 +151,9 @@ Engineer with Engine clearance can. This establishes role equipment and one acce
 station object, but does not close P3: functional tool/equipment behavior, power machinery,
 broader construction, and a complete engineering objective remain open. See [Fidelity Contract:
 Girder Plating](FidelityContract_GirderPlating.md) and [Fidelity Contract: Engineer Loadout and
-Engineering Airlock](FidelityContract_EngineerLoadoutAccess.md).
+Engineering Airlock](FidelityContract_EngineerLoadoutAccess.md). The next vertical slice should
+restore an observable shared station power dependency as scoped in
+[SS13 gameplay reconstruction](SS13_ESSENCE_REA.md), rather than add another isolated task.
 
 ### P4 — Survival, incapacitation, and recovery
 
