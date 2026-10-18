@@ -23,6 +23,7 @@ public partial class StationPlaytestController : Node2D
     private CollisionMap collisionMap = null!;
     private MovementProcessor movementProcessor = null!;
     private SharedStationInventoryWorld sharedInteractionWorld = null!;
+    private readonly ReplicatedStationEntities replicatedEntities = new();
     private StationMapView stationMapView = null!;
     private DynamicObject fixtureObstacle = null!;
     private DynamicObject girderObstacle = null!;
@@ -568,8 +569,7 @@ public partial class StationPlaytestController : Node2D
     {
         EnsureMovementActions();
         stationMapView = new StationMapView();
-        stationMapView.SetSharedObjects(wrenchOwner, wrenchWorldPosition, fixtureWorldPosition, fixtureAnchored);
-        stationMapView.SetEngineeringAirlock(engineeringAirlockOpen);
+        stationMapView.SetEntities(replicatedEntities);
         AddChild(stationMapView);
     }
 
@@ -599,41 +599,15 @@ public partial class StationPlaytestController : Node2D
             !localRoundStarted || !players.ContainsKey(GetMultiplayer().GetUniqueId())) return;
 
         Vector2 clickPosition = GetGlobalMousePosition();
-        int targetId = -1;
-        float nearestDistance = 0.7f;
-        float airlockDistance = clickPosition.DistanceTo(new Vector2(8, -4));
-        if (airlockDistance < nearestDistance)
-        {
-            targetId = SharedStationInventoryWorld.EngineeringAirlockId;
-            nearestDistance = airlockDistance;
-        }
-        if (wrenchOwner == null)
-        {
-            float distance = clickPosition.DistanceTo(wrenchWorldPosition);
-            if (distance < nearestDistance) { targetId = SharedStationInventoryWorld.WrenchId; nearestDistance = distance; }
-        }
-        float metalDistance = clickPosition.DistanceTo(new Vector2(1, 2));
-        SharedStationInventoryWorld.StationConstructionSnapshot construction = sharedInteractionWorld.ConstructionSnapshot;
-        if (construction.MetalOwner == null && construction.MetalSheetCount > 0 && metalDistance < nearestDistance)
-        {
-            targetId = SharedStationInventoryWorld.MetalSheetsId;
-            nearestDistance = metalDistance;
-        }
-        float girderDistance = clickPosition.DistanceTo(new Vector2(2, 2));
-        if (!sharedInteractionWorld.ConstructionSnapshot.GirderPlated && girderDistance < nearestDistance)
-        {
-            targetId = SharedStationInventoryWorld.GirderId;
-            nearestDistance = girderDistance;
-        }
-        float fixtureDistance = clickPosition.DistanceTo(fixtureWorldPosition);
-        if (fixtureDistance < nearestDistance) targetId = SharedStationInventoryWorld.FixtureId;
-        if (targetId < 0) return;
+        int? targetId = replicatedEntities.FindNearestTarget(
+            new System.Numerics.Vector2(clickPosition.X, clickPosition.Y), 0.7f);
+        if (targetId is null) return;
 
         bool altClick = click.AltPressed;
         if (GetMultiplayer().IsServer())
-            ResolveSharedInteraction(localPeerId, targetId, (int)Intent.Help, altClick);
+            ResolveSharedInteraction(localPeerId, targetId.Value, (int)Intent.Help, altClick);
         else
-            RpcId(1, nameof(RequestSharedInteraction), targetId, (int)Intent.Help, altClick);
+            RpcId(1, nameof(RequestSharedInteraction), targetId.Value, (int)Intent.Help, altClick);
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -847,7 +821,10 @@ public partial class StationPlaytestController : Node2D
         fixtureObstacle.IsPushable = !fixtureAnchored;
         fixtureObstacle.X = Mathf.RoundToInt(fixtureWorldPosition.X);
         fixtureObstacle.Y = Mathf.RoundToInt(fixtureWorldPosition.Y);
-        stationMapView?.SetSharedObjects(wrenchOwner, wrenchWorldPosition, fixtureWorldPosition, fixtureAnchored);
+        replicatedEntities.ApplyShared(wrenchOwner,
+            new System.Numerics.Vector2(wrenchWorldPosition.X, wrenchWorldPosition.Y),
+            new System.Numerics.Vector2(fixtureWorldPosition.X, fixtureWorldPosition.Y), fixtureAnchored);
+        stationMapView?.RefreshEntities();
         if (!GetMultiplayer().IsServer()) return;
         foreach (PlayerRuntime player in players.Values)
             SendActiveHand(player.PeerId);
@@ -869,7 +846,8 @@ public partial class StationPlaytestController : Node2D
     private void OnEngineeringAirlockStateChanged(bool isOpen)
     {
         engineeringAirlockOpen = isOpen;
-        stationMapView?.SetEngineeringAirlock(isOpen);
+        replicatedEntities.ApplyEngineeringAirlock(isOpen);
+        stationMapView?.RefreshEntities();
         if (!GetMultiplayer().IsServer()) return;
         if (isOpen) GD.Print("PLAYTEST_ENGINEERING_AIRLOCK_OPENED peer=1 clearance=Engine");
         Rpc(nameof(ReceiveEngineeringAirlockState), isOpen);
@@ -879,7 +857,8 @@ public partial class StationPlaytestController : Node2D
     private void ReceiveEngineeringAirlockState(bool isOpen)
     {
         engineeringAirlockOpen = isOpen;
-        stationMapView?.SetEngineeringAirlock(isOpen);
+        replicatedEntities.ApplyEngineeringAirlock(isOpen);
+        stationMapView?.RefreshEntities();
         if (!GetMultiplayer().IsServer() && PlaytestLaunchOptions.SmokeEngineeringAccess &&
             smokeEngineeringAccessDenied && isOpen && !smokeEngineeringAccessVerified)
         {
@@ -903,8 +882,10 @@ public partial class StationPlaytestController : Node2D
         smokeMetalOwner = metalOwner ?? 0;
         smokeSheetCount = sheetCount;
         smokeGirderPlated = plated;
-        stationMapView.SetConstruction(metalOwner, metalPosition, sheetCount, girderPosition,
-            plated, workerPeerId, progressSeconds);
+        replicatedEntities.ApplyConstruction(metalOwner,
+            new System.Numerics.Vector2(metalPosition.X, metalPosition.Y), sheetCount,
+            new System.Numerics.Vector2(girderPosition.X, girderPosition.Y), plated, workerPeerId, progressSeconds);
+        stationMapView.RefreshEntities();
     }
 
     private void PublishConstructionStateToClients()
@@ -934,7 +915,9 @@ public partial class StationPlaytestController : Node2D
         wrenchWorldPosition = new Vector2(wrenchX, wrenchY);
         fixtureWorldPosition = new Vector2(fixtureX, fixtureY);
         fixtureAnchored = anchored;
-        stationMapView.SetSharedObjects(wrenchOwner, wrenchWorldPosition, fixtureWorldPosition, fixtureAnchored);
+        replicatedEntities.ApplyShared(wrenchOwner, new System.Numerics.Vector2(wrenchX, wrenchY),
+            new System.Numerics.Vector2(fixtureX, fixtureY), anchored);
+        stationMapView.RefreshEntities();
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]

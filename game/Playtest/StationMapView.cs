@@ -1,52 +1,21 @@
 using Godot;
 using Godotstation.Engine.Movement;
+using Godotstation.Engine.Interactions;
 
 namespace Godotstation.Game.Playtest;
 
 /// <summary>Renders the shared tile layout as a compact station with labeled departments.</summary>
 public partial class StationMapView : Node2D
 {
-    private int? wrenchOwner;
-    private Vector2 wrenchPosition = new(-1, 2);
-    private Vector2 fixturePosition = new(0, 2);
-    private bool fixtureAnchored = true;
-    private bool engineeringAirlockOpen;
-    private int? metalOwner;
-    private Vector2 metalPosition = new(1, 2);
-    private int metalSheetCount = 2;
-    private Vector2 girderPosition = new(2, 2);
-    private bool girderPlated;
-    private int? constructionWorker;
-    private double constructionProgress;
+    private ReplicatedStationEntities entities = new();
 
-    public void SetSharedObjects(int? currentWrenchOwner, Vector2 currentWrenchPosition,
-        Vector2 currentFixturePosition, bool isFixtureAnchored)
+    public void SetEntities(ReplicatedStationEntities currentEntities)
     {
-        wrenchOwner = currentWrenchOwner;
-        wrenchPosition = currentWrenchPosition;
-        fixturePosition = currentFixturePosition;
-        fixtureAnchored = isFixtureAnchored;
+        entities = currentEntities;
         QueueRedraw();
     }
 
-    public void SetConstruction(int? currentMetalOwner, Vector2 currentMetalPosition, int sheetCount,
-        Vector2 currentGirderPosition, bool isGirderPlated, int? workerPeerId, double progressSeconds)
-    {
-        metalOwner = currentMetalOwner;
-        metalPosition = currentMetalPosition;
-        metalSheetCount = sheetCount;
-        girderPosition = currentGirderPosition;
-        girderPlated = isGirderPlated;
-        constructionWorker = workerPeerId;
-        constructionProgress = progressSeconds;
-        QueueRedraw();
-    }
-
-    public void SetEngineeringAirlock(bool isOpen)
-    {
-        engineeringAirlockOpen = isOpen;
-        QueueRedraw();
-    }
+    public void RefreshEntities() => QueueRedraw();
 
     public override void _Ready()
     {
@@ -59,6 +28,23 @@ public partial class StationMapView : Node2D
 
     public override void _Draw()
     {
+        static Vector2 Position(ReplicatedStationEntities state, int id)
+        {
+            var position = state.Get(id).Position;
+            return new Vector2(position.X, position.Y);
+        }
+        Vector2 wrenchPosition = Position(entities, SharedStationInventoryWorld.WrenchId);
+        Vector2 fixturePosition = Position(entities, SharedStationInventoryWorld.FixtureId);
+        Vector2 metalPosition = Position(entities, SharedStationInventoryWorld.MetalSheetsId);
+        Vector2 girderPosition = Position(entities, SharedStationInventoryWorld.GirderId);
+        bool fixtureAnchored = entities.FixtureAnchored;
+        bool engineeringAirlockOpen = entities.EngineeringAirlockOpen;
+        int? wrenchOwner = entities.WrenchOwner;
+        int? metalOwner = entities.MetalOwner;
+        int metalSheetCount = entities.MetalSheetCount;
+        bool girderPlated = entities.GirderPlated;
+        int? constructionWorker = entities.ConstructionWorker;
+        double constructionProgress = entities.ConstructionProgress;
         for (int y = StationPlaytestLayout.MinY; y <= StationPlaytestLayout.MaxY; y++)
         for (int x = StationPlaytestLayout.MinX; x <= StationPlaytestLayout.MaxX; x++)
         {
@@ -75,7 +61,7 @@ public partial class StationMapView : Node2D
             DrawRect(new Rect2(x - 0.49f, y - 0.49f, 0.98f, 0.12f), new Color("#6c8591"), true);
         }
 
-        Vector2 airlockPosition = new(8, -4);
+        Vector2 airlockPosition = Position(entities, SharedStationInventoryWorld.EngineeringAirlockId);
         DrawRect(new Rect2(airlockPosition - new Vector2(0.43f, 0.43f), new Vector2(0.86f, 0.86f)),
             engineeringAirlockOpen ? new Color("#65aa83") : new Color("#bb8b4c"), true);
         DrawRect(new Rect2(airlockPosition - new Vector2(0.34f, 0.34f), new Vector2(0.68f, 0.68f)),
