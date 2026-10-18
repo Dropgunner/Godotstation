@@ -27,7 +27,9 @@ fi
 
 launch_host() {
   if [[ -n "$playtest_app" ]]; then
-    if [[ "$smoke_mode" == "--round-restart" ]]; then
+    if [[ "$smoke_mode" == "--power-loop" ]]; then
+      "$godot_bin" --headless --quit-after 4800 -- --playtest-host --playtest-jobid=2 --playtest-smoke-power-loop
+    elif [[ "$smoke_mode" == "--round-restart" ]]; then
       "$godot_bin" --headless --quit-after 900 -- --playtest-host --playtest-jobid=20 --playtest-smoke-construction --playtest-smoke-round-restart
     elif [[ "$smoke_mode" == "--construction" ]]; then
       "$godot_bin" --headless --quit-after 900 -- --playtest-host --playtest-jobid=20 --playtest-smoke-construction
@@ -39,7 +41,9 @@ launch_host() {
       "$godot_bin" --headless --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-move --playtest-smoke-chat
     fi
   else
-    if [[ "$smoke_mode" == "--round-restart" ]]; then
+    if [[ "$smoke_mode" == "--power-loop" ]]; then
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 4800 -- --playtest-host --playtest-jobid=2 --playtest-smoke-power-loop
+    elif [[ "$smoke_mode" == "--round-restart" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 900 -- --playtest-host --playtest-jobid=20 --playtest-smoke-construction --playtest-smoke-round-restart
     elif [[ "$smoke_mode" == "--construction" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 900 -- --playtest-host --playtest-jobid=20 --playtest-smoke-construction
@@ -54,7 +58,9 @@ launch_host() {
 }
 launch_client() {
   if [[ -n "$playtest_app" ]]; then
-    if [[ "$smoke_mode" == "--round-restart" ]]; then
+    if [[ "$smoke_mode" == "--power-loop" ]]; then
+      "$godot_bin" --headless --quit-after 4800 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-power-loop
+    elif [[ "$smoke_mode" == "--round-restart" ]]; then
       "$godot_bin" --headless --quit-after 900 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-construction --playtest-smoke-round-restart
     elif [[ "$smoke_mode" == "--construction" ]]; then
       "$godot_bin" --headless --quit-after 900 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-construction
@@ -66,7 +72,9 @@ launch_client() {
       "$godot_bin" --headless --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-move --playtest-smoke-chat
     fi
   else
-    if [[ "$smoke_mode" == "--round-restart" ]]; then
+    if [[ "$smoke_mode" == "--power-loop" ]]; then
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 4800 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-power-loop
+    elif [[ "$smoke_mode" == "--round-restart" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 900 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-construction --playtest-smoke-round-restart
     elif [[ "$smoke_mode" == "--construction" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 900 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-construction
@@ -100,6 +108,7 @@ client_pid=$!
 max_checks=100
 if [[ "$smoke_mode" == "--construction" ]]; then max_checks=200; fi
 if [[ "$smoke_mode" == "--round-restart" ]]; then max_checks=200; fi
+if [[ "$smoke_mode" == "--power-loop" ]]; then max_checks=900; fi
 if [[ "$smoke_mode" == "--engineering-access" ]]; then max_checks=100; fi
 for _ in $(seq 1 "$max_checks"); do
   ready=0
@@ -123,6 +132,16 @@ for _ in $(seq 1 "$max_checks"); do
     if grep -q "PLAYTEST_ENGINEERING_ACCESS_DENIED peer=" "$host_log" && \
        grep -q "PLAYTEST_ENGINEERING_AIRLOCK_OPENED peer=1 clearance=Engine" "$host_log" && \
        grep -q "PLAYTEST_ENGINEERING_ACCESS_OK denied=true engineer_open=true replicated=true" "$client_log"; then
+      ready=1
+    fi
+  elif [[ "$smoke_mode" == "--power-loop" ]]; then
+    if grep -q "PLAYTEST_ROSTER peers=2" "$host_log" && \
+       grep -q "PLAYTEST_POWER_HOST_ON" "$host_log" && \
+       grep -q "PLAYTEST_POWER_HOST_OUTAGE energy=0" "$host_log" && \
+       grep -q "PLAYTEST_POWER_HOST_RECOVERED shared=true" "$host_log" && \
+       grep -q "PLAYTEST_POWER_CLIENT_ON replicated=true" "$client_log" && \
+       grep -q "PLAYTEST_POWER_CLIENT_OUTAGE replicated=true" "$client_log" && \
+       grep -Eq "PLAYTEST_POWER_LOOP_CLIENT_OK engineer=[0-9]+ job=20 role=Engineer on=True outage=True recovery=True replicated=true" "$client_log"; then
       ready=1
     fi
   elif [[ "$smoke_mode" == "--interactions" ]]; then
@@ -161,6 +180,8 @@ for _ in $(seq 1 "$max_checks"); do
       echo "MULTIPLAYER_ROUND_RESTART_SMOKE_OK: two clients saw the end and respawned in a fresh shared round"
     elif [[ "$smoke_mode" == "--construction" ]]; then
       echo "MULTIPLAYER_CONSTRUCTION_SMOKE_OK: engineer picked up two sheets, completed the four-second girder task, and both clients observed the wall"
+    elif [[ "$smoke_mode" == "--power-loop" ]]; then
+      echo "MULTIPLAYER_POWER_LOOP_SMOKE_OK: Engineer fuel, generator, storage, replicated APC lamp outage, and recovery were observed by both peers"
     elif [[ "$smoke_mode" == "--engineering-access" ]]; then
       echo "MULTIPLAYER_ENGINEERING_ACCESS_SMOKE_OK: Assistant ID was denied; Engineer ID opened the shared airlock on both clients"
     elif [[ "$smoke_mode" == "--interactions" ]]; then

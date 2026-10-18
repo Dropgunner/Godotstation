@@ -2,6 +2,7 @@ using System.Numerics;
 using Godotstation.Common.Interactions;
 using Godotstation.Engine.Interactions;
 using Godotstation.Engine.Inventory;
+using Godotstation.Engine.Rounds;
 using InventoryNamedSlot = Godotstation.Engine.Inventory.NamedSlot;
 using Xunit;
 
@@ -90,5 +91,47 @@ public sealed class SharedStationInventoryWorldTests
         Assert.Equal(new Vector2(-1, 1), world.Snapshot.WrenchPosition);
         Assert.True(world.TryInteract(2, SharedStationInventoryWorld.WrenchId, Intent.Help, false));
         Assert.Equal(2, world.Snapshot.WrenchOwner);
+    }
+
+    [Fact]
+    public void EngineerCanFuelGeneratorAndRestoreSharedLampThroughValidatedInteractions()
+    {
+        var world = new SharedStationInventoryWorld();
+        Assert.True(world.AddActor(2, new Vector2(7, -7), StationCrewJobCatalog.EngineerJobId));
+        SharedStationInventoryWorld.StationPowerSnapshot? published = null;
+        world.PowerStateChanged += snapshot => published = snapshot;
+
+        Assert.True(world.TryInteract(2, SharedStationInventoryWorld.GeneratorFuelId, Intent.Help, false));
+        Assert.Equal(2, world.PowerSnapshot.FuelOwner);
+        Assert.Equal(3, world.PowerSnapshot.FuelStackCount);
+        Assert.True(world.TryInteract(2, SharedStationInventoryWorld.GeneratorId, Intent.Help, false));
+        Assert.Equal(4d, world.PowerSnapshot.FuelSeconds);
+        Assert.True(world.TryInteract(2, SharedStationInventoryWorld.GeneratorId, Intent.Help, false));
+        Assert.Equal(8d, world.PowerSnapshot.FuelSeconds);
+        Assert.Equal(1, world.PowerSnapshot.FuelStackCount);
+
+        Assert.True(world.TryToggleActiveHand(2));
+        Assert.True(world.TryInteract(2, SharedStationInventoryWorld.GeneratorId, Intent.Help, false));
+        Assert.True(world.PowerSnapshot.GeneratorRunning);
+        Assert.True(world.SetActorPosition(2, new Vector2(8, -7)));
+        Assert.True(world.TryInteract(2, SharedStationInventoryWorld.PowerStorageId, Intent.Help, false));
+        Assert.True(world.AdvancePower(1));
+        Assert.True(world.PowerSnapshot.DevicePowered);
+        Assert.Equal(1, world.PowerSnapshot.StoredEnergy);
+        Assert.NotNull(published);
+    }
+
+    [Fact]
+    public void DisconnectingWhileHoldingFuelPublishesItsWorldDrop()
+    {
+        var world = new SharedStationInventoryWorld();
+        Assert.True(world.AddActor(2, new Vector2(7, -7), StationCrewJobCatalog.EngineerJobId));
+        Assert.True(world.TryInteract(2, SharedStationInventoryWorld.GeneratorFuelId, Intent.Help, false));
+
+        Assert.True(world.RemoveActor(2));
+
+        Assert.Null(world.PowerSnapshot.FuelOwner);
+        Assert.Equal(new Vector2(7, -7), world.PowerSnapshot.FuelPosition);
+        Assert.Equal(3, world.PowerSnapshot.FuelStackCount);
     }
 }

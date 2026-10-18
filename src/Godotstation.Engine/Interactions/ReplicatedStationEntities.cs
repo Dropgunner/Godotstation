@@ -19,6 +19,10 @@ public sealed class ReplicatedStationEntities
         Set(SharedStationInventoryWorld.MetalSheetsId, new Vector2(1, 2), true);
         Set(SharedStationInventoryWorld.GirderId, new Vector2(2, 2), true);
         Set(SharedStationInventoryWorld.EngineeringAirlockId, new Vector2(8, -4), true);
+        Set(SharedStationInventoryWorld.GeneratorFuelId, new Vector2(7, -7), true);
+        Set(SharedStationInventoryWorld.GeneratorId, new Vector2(8, -7), true);
+        Set(SharedStationInventoryWorld.PowerStorageId, new Vector2(9, -7), true);
+        Set(SharedStationInventoryWorld.PoweredLampId, new Vector2(10, -7), false);
     }
 
     public int? WrenchOwner { get; private set; }
@@ -29,6 +33,13 @@ public sealed class ReplicatedStationEntities
     public int? ConstructionWorker { get; private set; }
     public double ConstructionProgress { get; private set; }
     public bool EngineeringAirlockOpen { get; private set; }
+    public int? GeneratorFuelOwner { get; private set; }
+    public int GeneratorFuelCount { get; private set; } = 3;
+    public bool GeneratorRunning { get; private set; }
+    public double GeneratorFuelSeconds { get; private set; }
+    public double StoredEnergy { get; private set; }
+    public bool PowerOutputEnabled { get; private set; }
+    public bool PoweredLampOn { get; private set; }
 
     public Entity Get(int id) => entities[id];
 
@@ -53,6 +64,21 @@ public sealed class ReplicatedStationEntities
     }
 
     public void ApplyEngineeringAirlock(bool isOpen) => EngineeringAirlockOpen = isOpen;
+
+    public void ApplyPower(int? fuelOwner, Vector2 fuelPosition, int fuelCount, bool generatorRunning,
+        double fuelSeconds, double storedEnergy, bool outputEnabled, bool lampOn)
+    {
+        GeneratorFuelOwner = fuelOwner;
+        GeneratorFuelCount = fuelCount;
+        GeneratorRunning = generatorRunning;
+        GeneratorFuelSeconds = fuelSeconds;
+        StoredEnergy = storedEnergy;
+        PowerOutputEnabled = outputEnabled;
+        PoweredLampOn = lampOn;
+        Set(SharedStationInventoryWorld.GeneratorFuelId, fuelPosition, fuelOwner is null && fuelCount > 0);
+        Set(SharedStationInventoryWorld.GeneratorId, new Vector2(8, -7), true);
+        Set(SharedStationInventoryWorld.PowerStorageId, new Vector2(9, -7), true);
+    }
 
     public int? FindNearestTarget(Vector2 position, float radius)
     {
