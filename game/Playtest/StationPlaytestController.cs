@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using Godot;
@@ -38,10 +39,13 @@ public partial class StationPlaytestController : Node2D
     private Button startShiftButton = null!;
     private Button endShiftButton = null!;
     private Button restartShiftButton = null!;
+    private AcceptDialog roundEndReportDialog = null!;
     private RichTextLabel chatLog = null!;
     private LineEdit chatInput = null!;
     private int localPeerId;
     private int localRoundId = 1;
+    private ulong shiftStartedAtMsec;
+    private RoundEndReport? currentRoundEndReport;
     private float snapshotTime;
     private float constructionSnapshotTime;
     private float powerSnapshotTime;
@@ -139,6 +143,9 @@ public partial class StationPlaytestController : Node2D
         crewRoster = StationCrewJobCatalog.CreateRoster();
         InitializeWorld();
         localRoundStarted = false;
+        currentRoundEndReport = null;
+        shiftStartedAtMsec = 0;
+        if (IsInstanceValid(roundEndReportDialog)) roundEndReportDialog.Hide();
         activeHandLabel.Text = "Active hand: rightHand · empty";
         loadoutLabel.Text = "Crew loadout: awaiting role spawn";
         chatLog.Clear();
@@ -346,6 +353,9 @@ public partial class StationPlaytestController : Node2D
             ? new Vector2(8f, -6f)
             : new Vector2(spawn.X, spawn.Y);
         AddPlayer(localPeerId, assignedJob, hostSpawn);
+        shiftStartedAtMsec = Time.GetTicksMsec();
+        currentRoundEndReport = null;
+        roundEndReportDialog.Hide();
         startShiftButton.Disabled = true;
         startShiftButton.Text = "Shift started";
         endShiftButton.Visible = true;
@@ -357,14 +367,41 @@ public partial class StationPlaytestController : Node2D
 
     private void EndShift()
     {
-        if (!GetMultiplayer().IsServer() ||
-            roundLifecycle.TryEnd(localPeerId, localRoundId) != RoundEndResult.Ended) return;
+        if (!GetMultiplayer().IsServer()) return;
+        RoundEndReport report = CaptureRoundEndReport();
+        if (roundLifecycle.TryEnd(localPeerId, localRoundId) != RoundEndResult.Ended) return;
+        currentRoundEndReport = report;
         localRoundStarted = false;
         endShiftButton.Visible = false;
         restartShiftButton.Visible = true;
-        SetStatus($"Shift {localRoundId} ended · review the station, then restart when ready.");
-        Rpc(nameof(ReceiveRoundEnded), localRoundId);
+        ShowRoundEndReport(report.RoundId, report.ToDisplayText());
+        Rpc(nameof(ReceiveRoundEnded), localRoundId, report.ToDisplayText());
         GD.Print($"PLAYTEST_ROUND_ENDED round={localRoundId}");
+    }
+
+    private RoundEndReport CaptureRoundEndReport()
+    {
+        SharedStationInventoryWorld.StationPowerSnapshot power = sharedInteractionWorld.PowerSnapshot;
+        SharedStationInventoryWorld.StationConstructionSnapshot construction = sharedInteractionWorld.ConstructionSnapshot;
+        double durationSeconds = shiftStartedAtMsec == 0 ? 0 : (Time.GetTicksMsec() - shiftStartedAtMsec) / 1000.0;
+        return RoundEndReport.Create(localRoundId, durationSeconds,
+            players.Values.Select(player => player.Job.Name), power.GeneratorRunning,
+            power.OutputEnabled, power.DevicePowered, power.StoredEnergy,
+            sharedInteractionWorld.IsEngineeringAirlockOpen, construction.GirderPlated,
+            construction.MetalSheetCount);
+    }
+
+    private void ShowRoundEndReport(int roundId, string reportText)
+    {
+        if (string.IsNullOrWhiteSpace(reportText)) return;
+        SetStatus($"Shift {roundId} ended · review the report, then restart when ready.");
+        roundEndReportDialog.DialogText = reportText;
+        roundEndReportDialog.PopupCentered(new Vector2I(540, 390));
+        bool containsTrackedFacts = reportText.Contains("Crew roles present:", StringComparison.Ordinal) &&
+            reportText.Contains("APC lamp:", StringComparison.Ordinal) &&
+            reportText.Contains("Not tracked in this prototype:", StringComparison.Ordinal);
+        string audience = GetMultiplayer().IsServer() ? "HOST" : "CLIENT";
+        GD.Print($"PLAYTEST_ROUND_REPORT_{audience} round={roundId} received=true tracked_state={containsTrackedFacts.ToString().ToLowerInvariant()}");
     }
 
     private void RestartShift()
@@ -373,6 +410,7 @@ public partial class StationPlaytestController : Node2D
             roundLifecycle.TryRestart(localPeerId) != RoundRestartResult.Restarted) return;
         localRoundId = roundLifecycle.RoundId;
         ResetSharedWorld();
+        currentRoundEndReport = null;
         startShiftButton.Text = "Start shift";
         startShiftButton.Disabled = false;
         restartShiftButton.Visible = false;
@@ -386,11 +424,12 @@ public partial class StationPlaytestController : Node2D
     {
         if (!GetMultiplayer().IsServer()) return;
         int peerId = (int)GetMultiplayer().GetRemoteSenderId();
-        RpcId(peerId, nameof(ReceiveRoundPhase), (int)roundLifecycle.Phase, roundLifecycle.RoundId);
+        RpcId(peerId, nameof(ReceiveRoundPhase), (int)roundLifecycle.Phase, roundLifecycle.RoundId,
+            currentRoundEndReport?.ToDisplayText() ?? string.Empty);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void ReceiveRoundPhase(int phase, int roundId)
+    private void ReceiveRoundPhase(int phase, int roundId, string reportText)
     {
         if (roundId < localRoundId) return;
         localRoundId = roundId;
@@ -402,7 +441,7 @@ public partial class StationPlaytestController : Node2D
         else if (phase == (int)SharedRoundPhase.Ended)
         {
             localRoundStarted = false;
-            SetStatus($"Shift {roundId} ended · waiting for the host to restart.");
+            ShowRoundEndReport(roundId, reportText);
         }
     }
 
@@ -412,15 +451,16 @@ public partial class StationPlaytestController : Node2D
         if (roundId < localRoundId) return;
         localRoundId = roundId;
         localRoundStarted = true;
+        roundEndReportDialog.Hide();
         RequestCrewSpawnFromClient();
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void ReceiveRoundEnded(int roundId)
+    private void ReceiveRoundEnded(int roundId, string reportText)
     {
         if (roundId != localRoundId) return;
         localRoundStarted = false;
-        SetStatus($"Shift {roundId} ended · waiting for the host to restart.");
+        ShowRoundEndReport(roundId, reportText);
         GD.Print($"PLAYTEST_ROUND_ENDED_CLIENT round={roundId}");
     }
 
@@ -1300,6 +1340,9 @@ public partial class StationPlaytestController : Node2D
         var returnButton = new Button { Text = "Return to lobby" };
         returnButton.Pressed += () => GetTree().ChangeSceneToFile("res://UI/RoundLobby.tscn");
         content.AddChild(returnButton);
+
+        roundEndReportDialog = new AcceptDialog { Title = "Round report" };
+        layer.AddChild(roundEndReportDialog);
     }
 
     private static string GetLocalIpv4Address()

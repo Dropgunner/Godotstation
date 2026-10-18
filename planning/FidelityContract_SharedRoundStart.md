@@ -16,9 +16,11 @@ round ID, and performs cleanup. Source rechecked 2026-10-18. These are confirmed
 behaviors; no upstream issue or PR cause is established for Godotstation's missing LAN
 restart. The old adapter had no end/restart transition.
 
-This slice implements a host-driven end and fresh round in one LAN session. It does not
-port Unitystation's mode-specific end conditions, report, vote, timer, shuttle, or
-process/scene restart behavior.
+This slice implements a host-driven end and fresh round in one LAN session. The factual
+report of the prototype's tracked state is covered by
+[Fidelity Contract: Shared Round-End Report](FidelityContract_RoundEndReport.md). It does
+not port Unitystation's mode-specific end conditions, objective reports, vote, timer,
+shuttle, or process/scene restart behavior.
 
 ## Godot contract
 

@@ -70,7 +70,7 @@ trace additional upstream systems it actually implements.
 | --- | --- | --- |
 | Integrated build | `c1d2b64dc77ce4fb1f276ca782714a7b903c43d1` exported as `/private/tmp/Godotstation-Integrated-c1d2b64-Playtest.app`; universal runtime bundle passed headless startup. | Built; manual full-round gate open |
 | New player action | Wrench/cart and construction interactions remain; Engineer can also fuel/start a generator, enable storage output, observe APC lamp outage, and recover power. Two-peer smoke passed. | Integrated in PRs #32 and #37; ordinary-control two-player path unverified |
-| Full round | Host can start, end, and restart a shared shift; Engineer can plate a girder, access the engineering airlock, and complete the scripted power failure/recovery loop. | **Open:** no sourced round outcome/report, survival/incapacitation path, full power grid or machinery parity, or two-person ordinary-controls pass |
+| Full round | Host can start, end, and restart a shared shift; Engineer can plate a girder, access the engineering airlock, and complete the scripted power failure/recovery loop. End sends both peers a fact-only report of tracked crew and station state. | **Open:** no mode-specific outcome/report, survival/incapacitation path, full power grid or machinery parity, or two-person ordinary-controls pass |
 | Bugs found during play | A client could click stale construction targets; the HUD covered the station after spawn. | Fixed in PRs #32 and #33; repeat human playtest needed |
 
 The export script now uses the tracked game solution, creates a
@@ -97,7 +97,9 @@ relaunching. Tests prove assignment/capacity and lifecycle transitions.
 **Completed slices:** host-controlled pre-round/start gate, authoritative spawn gating,
 and a host-driven end/restart that resets the shared world while clients stay connected
 are covered by [`FidelityContract_SharedRoundStart.md`](FidelityContract_SharedRoundStart.md).
-Mode-driven outcomes, end report, and manual full-round evidence remain open.
+A fact-only report of the tracked prototype state is covered by
+[`FidelityContract_RoundEndReport.md`](FidelityContract_RoundEndReport.md). Mode-driven
+outcomes, sourced objective/antagonist reports, and manual full-round evidence remain open.
 
 ### P1 — Shared-world speech and social feedback
 

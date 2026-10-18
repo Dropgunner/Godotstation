@@ -119,7 +119,9 @@ for _ in $(seq 1 "$max_checks"); do
        grep -q "PLAYTEST_ROUND_RESTARTED round=2 phase=PreRound" "$host_log" && \
        grep -q "PLAYTEST_ROUND_RESTARTED_CLIENT round=2 crew=0 metal=2 plated=False" "$client_log" && \
        grep -q "PLAYTEST_ROUND_RESTART_OK round=2 crew=2 metal=2 plated=false airlock=false wrench_owner=0" "$host_log" && \
-       grep -q "PLAYTEST_ROUND_RESTART_CLIENT_OK round=2 crew=2 metal=2 plated=false" "$client_log"; then
+       grep -q "PLAYTEST_ROUND_RESTART_CLIENT_OK round=2 crew=2 metal=2 plated=false" "$client_log" && \
+       grep -q "PLAYTEST_ROUND_REPORT_HOST round=1 received=true tracked_state=true" "$host_log" && \
+       grep -q "PLAYTEST_ROUND_REPORT_CLIENT round=1 received=true tracked_state=true" "$client_log"; then
       ready=1
     fi
   elif [[ "$smoke_mode" == "--construction" ]]; then
