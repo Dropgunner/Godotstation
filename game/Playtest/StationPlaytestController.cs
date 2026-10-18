@@ -947,28 +947,36 @@ public partial class StationPlaytestController : Node2D
         AddChild(layer);
         var panel = new PanelContainer { Position = new Vector2(14, 14) };
         layer.AddChild(panel);
-        var content = new VBoxContainer();
+        var content = new VBoxContainer { CustomMinimumSize = new Vector2(320, 0) };
         panel.AddChild(content);
         var title = new Label { Text = "GODOTSTATION · CREW TEST" };
         title.AddThemeFontSizeOverride("font_size", 20);
         content.AddChild(title);
         statusLabel = new Label { Text = connectionStatus, AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        statusLabel.CustomMinimumSize = new Vector2(420, 34);
+        statusLabel.CustomMinimumSize = new Vector2(320, 34);
         content.AddChild(statusLabel);
         startShiftButton = new Button { Text = "Start shift", Visible = false, Disabled = true };
         startShiftButton.Pressed += StartShift;
         content.AddChild(startShiftButton);
-        content.AddChild(new Label { Text = $"WASD move  ·  Host shares LAN IP  ·  UDP {PlaytestLaunchOptions.Port}" });
+        content.AddChild(new Label
+        {
+            Text = $"WASD move · LAN UDP {PlaytestLaunchOptions.Port}",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        });
         activeHandLabel = new Label { Text = "Active hand: rightHand · empty" };
         content.AddChild(activeHandLabel);
         loadoutLabel = new Label { Text = "Crew loadout: awaiting role spawn", AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        loadoutLabel.CustomMinimumSize = new Vector2(430, 60);
+        loadoutLabel.CustomMinimumSize = new Vector2(320, 48);
         content.AddChild(loadoutLabel);
-        content.AddChild(new Label { Text = "Engineer task: pick up the metal, click the girder to plate it (4 seconds), and watch the wall appear. Click the wrench/cart to test tools; Tab switches hands, Q drops the active hand, WASD moves." });
+        content.AddChild(new Label
+        {
+            Text = "Task: pick up metal, click girder, stay close 4s. Tab: hand; Q: drop.",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        });
 
         chatLog = new RichTextLabel
         {
-            CustomMinimumSize = new Vector2(440, 150),
+            CustomMinimumSize = new Vector2(320, 60),
             BbcodeEnabled = false,
             ScrollActive = true,
             FitContent = false,
@@ -977,7 +985,7 @@ public partial class StationPlaytestController : Node2D
         chatInput = new LineEdit
         {
             PlaceholderText = "Speak locally… (Enter)",
-            CustomMinimumSize = new Vector2(440, 36),
+            CustomMinimumSize = new Vector2(320, 36),
             MaxLength = 256,
         };
         chatInput.TextSubmitted += SubmitSpeech;
