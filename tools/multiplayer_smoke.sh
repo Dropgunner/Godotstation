@@ -27,7 +27,9 @@ fi
 
 launch_host() {
   if [[ -n "$playtest_app" ]]; then
-    if [[ "$smoke_mode" == "--construction" ]]; then
+    if [[ "$smoke_mode" == "--round-restart" ]]; then
+      "$godot_bin" --headless --quit-after 900 -- --playtest-host --playtest-jobid=20 --playtest-smoke-construction --playtest-smoke-round-restart
+    elif [[ "$smoke_mode" == "--construction" ]]; then
       "$godot_bin" --headless --quit-after 900 -- --playtest-host --playtest-jobid=20 --playtest-smoke-construction
     elif [[ "$smoke_mode" == "--engineering-access" ]]; then
       "$godot_bin" --headless --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-engineering-access
@@ -37,7 +39,9 @@ launch_host() {
       "$godot_bin" --headless --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-move --playtest-smoke-chat
     fi
   else
-    if [[ "$smoke_mode" == "--construction" ]]; then
+    if [[ "$smoke_mode" == "--round-restart" ]]; then
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 900 -- --playtest-host --playtest-jobid=20 --playtest-smoke-construction --playtest-smoke-round-restart
+    elif [[ "$smoke_mode" == "--construction" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 900 -- --playtest-host --playtest-jobid=20 --playtest-smoke-construction
     elif [[ "$smoke_mode" == "--engineering-access" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-engineering-access
@@ -50,7 +54,9 @@ launch_host() {
 }
 launch_client() {
   if [[ -n "$playtest_app" ]]; then
-    if [[ "$smoke_mode" == "--construction" ]]; then
+    if [[ "$smoke_mode" == "--round-restart" ]]; then
+      "$godot_bin" --headless --quit-after 900 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-construction --playtest-smoke-round-restart
+    elif [[ "$smoke_mode" == "--construction" ]]; then
       "$godot_bin" --headless --quit-after 900 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-construction
     elif [[ "$smoke_mode" == "--engineering-access" ]]; then
       "$godot_bin" --headless --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-engineering-access
@@ -60,7 +66,9 @@ launch_client() {
       "$godot_bin" --headless --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-move --playtest-smoke-chat
     fi
   else
-    if [[ "$smoke_mode" == "--construction" ]]; then
+    if [[ "$smoke_mode" == "--round-restart" ]]; then
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 900 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-construction --playtest-smoke-round-restart
+    elif [[ "$smoke_mode" == "--construction" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 900 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-construction
     elif [[ "$smoke_mode" == "--engineering-access" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-engineering-access
@@ -91,10 +99,21 @@ client_pid=$!
 
 max_checks=100
 if [[ "$smoke_mode" == "--construction" ]]; then max_checks=200; fi
+if [[ "$smoke_mode" == "--round-restart" ]]; then max_checks=200; fi
 if [[ "$smoke_mode" == "--engineering-access" ]]; then max_checks=100; fi
 for _ in $(seq 1 "$max_checks"); do
   ready=0
-  if [[ "$smoke_mode" == "--construction" ]]; then
+  if [[ "$smoke_mode" == "--round-restart" ]]; then
+    if grep -q "PLAYTEST_GIRDER_PLATED host_state=true metal_sheets_remaining=0" "$host_log" && \
+       grep -q "PLAYTEST_ROUND_ENDED round=1" "$host_log" && \
+       grep -q "PLAYTEST_ROUND_ENDED_CLIENT round=1" "$client_log" && \
+       grep -q "PLAYTEST_ROUND_RESTARTED round=2 phase=PreRound" "$host_log" && \
+       grep -q "PLAYTEST_ROUND_RESTARTED_CLIENT round=2 crew=0 metal=2 plated=False" "$client_log" && \
+       grep -q "PLAYTEST_ROUND_RESTART_OK round=2 crew=2 metal=2 plated=false airlock=false wrench_owner=0" "$host_log" && \
+       grep -q "PLAYTEST_ROUND_RESTART_CLIENT_OK round=2 crew=2 metal=2 plated=false" "$client_log"; then
+      ready=1
+    fi
+  elif [[ "$smoke_mode" == "--construction" ]]; then
     if grep -q "PLAYTEST_ROSTER peers=2" "$host_log" && \
        grep -q "PLAYTEST_GIRDER_PLATED host_state=true metal_sheets_remaining=0" "$host_log" && \
        grep -q "PLAYTEST_GIRDER_PLATING_OK engineer=true sheets_consumed=2 duration_seconds=4 replicated=true" "$client_log"; then
@@ -138,7 +157,9 @@ for _ in $(seq 1 "$max_checks"); do
       echo "Godot reported a runtime error. Logs: $log_dir" >&2
       exit 1
     fi
-    if [[ "$smoke_mode" == "--construction" ]]; then
+    if [[ "$smoke_mode" == "--round-restart" ]]; then
+      echo "MULTIPLAYER_ROUND_RESTART_SMOKE_OK: two clients saw the end and respawned in a fresh shared round"
+    elif [[ "$smoke_mode" == "--construction" ]]; then
       echo "MULTIPLAYER_CONSTRUCTION_SMOKE_OK: engineer picked up two sheets, completed the four-second girder task, and both clients observed the wall"
     elif [[ "$smoke_mode" == "--engineering-access" ]]; then
       echo "MULTIPLAYER_ENGINEERING_ACCESS_SMOKE_OK: Assistant ID was denied; Engineer ID opened the shared airlock on both clients"

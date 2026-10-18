@@ -67,7 +67,7 @@ trace additional upstream systems it actually implements.
 | --- | --- | --- |
 | Integrated build | `f3914045fa1f357430a153c8d1b95480b6388d52` exported as `Godotstation-Integrated-f391404-Playtest.app`; four exported two-client smokes passed. | Built; manual full-round gate open |
 | New player action | Wrench, cart, metal, girder, and Engineer airlock now share replicated positions/availability for rendering and click targeting. | Integrated in PR #32; ordinary-control two-player path unverified |
-| Full round | Host can start a shared shift; Engineer can plate a girder and open an access-controlled airlock. | **Open:** no shared end/restart, failure/recovery, or complete Engineer machinery loop |
+| Full round | Host can start, end, and restart a shared shift; two clients respawn into fresh shared state. Engineer can plate a girder and open an access-controlled airlock. | **Open:** no sourced round outcome/report, failure/recovery, complete Engineer machinery loop, or two-person ordinary-controls pass |
 | Bugs found during play | A client could click stale construction targets; the HUD covered the station after spawn. | Fixed in PRs #32 and #33; repeat human playtest needed |
 
 The app export still relies on a local untracked Godot export preset, and Godot reports an
@@ -88,9 +88,10 @@ existing offline round as a separate development path until the shared path repl
 spawns, handle a full role or not-ready rejection, and can finish/reset the same round without
 relaunching. Tests prove assignment/capacity and lifecycle transitions.
 
-**Completed slice:** host-controlled pre-round/start gate and authoritative spawn gating are
-implemented under [`FidelityContract_SharedRoundStart.md`](FidelityContract_SharedRoundStart.md).
-Round end/restart and full P0 exit evidence remain open.
+**Completed slices:** host-controlled pre-round/start gate, authoritative spawn gating,
+and a host-driven end/restart that resets the shared world while clients stay connected
+are covered by [`FidelityContract_SharedRoundStart.md`](FidelityContract_SharedRoundStart.md).
+Mode-driven outcomes, end report, and manual full-round evidence remain open.
 
 ### P1 — Shared-world speech and social feedback
 
