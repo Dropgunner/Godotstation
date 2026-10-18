@@ -1,5 +1,7 @@
 using Godot;
 using Godotstation.Common.Interactions;
+using Godotstation.Engine.Rounds;
+using Godotstation.Game.Playtest;
 using Godotstation.Game.Round;
 
 namespace Godotstation.Game.UI;
@@ -10,9 +12,17 @@ public partial class RoundLobbyController : Control
     private int selectedJobId = -1;
     private Label selectedLabel = null!;
     private Button startButton = null!;
+    private LineEdit addressInput = null!;
+    private OptionButton crewJobOption = null!;
 
     public override void _Ready()
     {
+        if (PlaytestLaunchOptions.TryReadCommandLine())
+        {
+            CallDeferred(nameof(OpenPlaytestScene));
+            return;
+        }
+
         SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         var background = new ColorRect
         {
@@ -26,7 +36,7 @@ public partial class RoundLobbyController : Control
         center.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         AddChild(center);
 
-        var panel = new PanelContainer { CustomMinimumSize = new Vector2(520, 340) };
+        var panel = new PanelContainer { CustomMinimumSize = new Vector2(600, 480) };
         center.AddChild(panel);
         var content = new VBoxContainer();
         content.AddThemeConstantOverride("separation", 16);
@@ -74,6 +84,49 @@ public partial class RoundLobbyController : Control
         };
         startButton.Pressed += StartRound;
         content.AddChild(startButton);
+
+        content.AddChild(new HSeparator());
+        content.AddChild(new Label
+        {
+            Text = "2D multiplayer station playtest · LAN",
+            HorizontalAlignment = HorizontalAlignment.Center,
+        });
+        addressInput = new LineEdit
+        {
+            PlaceholderText = "Host address (example: 192.168.1.20)",
+            Text = "127.0.0.1",
+            CustomMinimumSize = new Vector2(440, 38),
+        };
+        content.AddChild(addressInput);
+
+        var crewJobRow = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        content.AddChild(crewJobRow);
+        crewJobRow.AddChild(new Label { Text = "LAN crew role:" });
+        crewJobOption = new OptionButton { CustomMinimumSize = new Vector2(280, 38) };
+        foreach (CrewJob job in StationCrewJobCatalog.Jobs)
+            crewJobOption.AddItem($"{job.Name} — {job.Description}", job.Id);
+        if (crewJobOption.ItemCount > 0) crewJobOption.Select(0);
+        crewJobRow.AddChild(crewJobOption);
+
+        var playtestButtons = new HBoxContainer
+        {
+            Alignment = BoxContainer.AlignmentMode.Center,
+        };
+        content.AddChild(playtestButtons);
+        var hostButton = new Button
+        {
+            Text = "Host Station",
+            CustomMinimumSize = new Vector2(190, 44),
+        };
+        hostButton.Pressed += () => StartPlaytest(host: true);
+        playtestButtons.AddChild(hostButton);
+        var joinButton = new Button
+        {
+            Text = "Join Station",
+            CustomMinimumSize = new Vector2(190, 44),
+        };
+        joinButton.Pressed += () => StartPlaytest(host: false);
+        playtestButtons.AddChild(joinButton);
     }
 
     private void SelectJob(int jobId, string jobName)
@@ -89,4 +142,16 @@ public partial class RoundLobbyController : Control
         UiServices.Lobby.SelectJob(selectedJobId);
         GetTree().ChangeSceneToFile("res://World/Wave8Station.tscn");
     }
+
+    private void StartPlaytest(bool host)
+    {
+        PlaytestLaunchOptions.IsHost = host;
+        PlaytestLaunchOptions.Address = string.IsNullOrWhiteSpace(addressInput.Text)
+            ? "127.0.0.1"
+            : addressInput.Text.Trim();
+        PlaytestLaunchOptions.CrewJobId = crewJobOption.GetSelectedId();
+        GetTree().ChangeSceneToFile("res://World/StationPlaytest.tscn");
+    }
+
+    private void OpenPlaytestScene() => GetTree().ChangeSceneToFile("res://World/StationPlaytest.tscn");
 }

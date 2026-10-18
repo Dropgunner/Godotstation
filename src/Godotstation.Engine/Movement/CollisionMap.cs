@@ -100,6 +100,14 @@ namespace Godotstation.Engine.Movement
             _objects[(newX, newY)] = obj;
         }
 
+        /// <summary>Remove a dynamic obstacle if it is still registered at its current tile.</summary>
+        public bool RemoveObject(DynamicObject obj)
+        {
+            if (!_objects.TryGetValue((obj.X, obj.Y), out var registered) || !ReferenceEquals(registered, obj))
+                return false;
+            return _objects.Remove((obj.X, obj.Y));
+        }
+
         /// <summary>
         /// True if the tile hard-blocks entry regardless of pushing: a wall, or a non-pushable
         /// object. Pushable objects are NOT considered blocked here — the processor resolves them.
