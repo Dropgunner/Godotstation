@@ -7,6 +7,7 @@ using Godotstation.Engine.Access;
 using Godotstation.Engine.Construction;
 using Godotstation.Engine.Inventory;
 using Godotstation.Engine.Movement;
+using Godotstation.Engine.Power;
 using Godotstation.Engine.Rounds;
 using InventoryBodyPartType = Godotstation.Engine.Inventory.BodyPartType;
 using InventoryNamedSlot = Godotstation.Engine.Inventory.NamedSlot;
@@ -24,6 +25,10 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
     public const int MetalSheetsId = 9003;
     public const int GirderId = 9004;
     public const int EngineeringAirlockId = 9005;
+    public const int GeneratorFuelId = 9006;
+    public const int GeneratorId = 9007;
+    public const int PowerStorageId = 9008;
+    public const int PoweredLampId = 9009;
 
     private readonly Dictionary<int, CrewMember> crew = new();
     private readonly Dictionary<ItemStorage, CrewMember> crewByStorage = new();
@@ -35,6 +40,11 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
     private readonly SharedWorldFixture fixture;
     private readonly SharedWorldFixture girder;
     private readonly EngineeringAccessDoor engineeringAirlock;
+    private readonly SharedWorldItem generatorFuel;
+    private readonly SharedWorldFixture generator;
+    private readonly SharedWorldFixture powerStorage;
+    private readonly SharedWorldFixture poweredLamp;
+    private readonly StationPowerLoop powerLoop = new();
     private readonly GirderPlatingTask platingTask = new();
     private Vector2 girderPosition = new(2, 2);
     private bool girderPlated;
@@ -52,15 +62,35 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         fixture = new SharedWorldFixture(FixtureId, "service cart", fixturePosition);
         girder = new SharedWorldFixture(GirderId, "girder", girderPosition);
         engineeringAirlock = new EngineeringAccessDoor(EngineeringAirlockId, new Vector2(8, -4));
+        generatorFuel = new SharedWorldItem(this, GeneratorFuelId, "generator fuel", new Vector2(7, -7), new SharedFuelStack(3));
+        generator = new SharedWorldFixture(GeneratorId, "fuel generator", new Vector2(8, -7));
+        powerStorage = new SharedWorldFixture(PowerStorageId, "power storage", new Vector2(9, -7));
+        poweredLamp = new SharedWorldFixture(PoweredLampId, "APC-powered lamp", new Vector2(10, -7));
         dispatcher.RegisterHandler(new WrenchPickupHandler(this, wrench));
         dispatcher.RegisterHandler(new WrenchPickupHandler(this, metalSheets));
+        dispatcher.RegisterHandler(new WrenchPickupHandler(this, generatorFuel));
         dispatcher.RegisterHandler(new FixtureWrenchHandler(this, fixture, wrench));
         dispatcher.RegisterHandler(new GirderPlatingHandler(this, girder, metalSheets));
         dispatcher.RegisterHandler(new EngineeringDoorHandler(this, engineeringAirlock));
+        dispatcher.RegisterHandler(new GeneratorHandler(this, generator, generatorFuel));
+        dispatcher.RegisterHandler(new PowerStorageHandler(this, powerStorage));
     }
 
     public event Action<SharedStationWorldSnapshot>? StateChanged;
     public event Action<bool>? EngineeringAirlockStateChanged;
+    public event Action<StationPowerSnapshot>? PowerStateChanged;
+
+    public StationPowerSnapshot PowerSnapshot
+    {
+        get
+        {
+            CrewMember? owner = generatorFuel.ItemSlot == null ? null : GetCrewForStorage(generatorFuel.ItemSlot.ItemStorage);
+            return new StationPowerSnapshot(owner?.PeerId, owner?.Position ?? generatorFuel.PositionInWorld,
+                generatorFuel.IsInWorld || generatorFuel.ItemSlot != null ? generatorFuel.Stackable?.Amount ?? 0 : 0,
+                powerLoop.GeneratorRunning, powerLoop.FuelSeconds,
+                powerLoop.StoredEnergy, powerLoop.OutputEnabled, powerLoop.DevicePowered);
+        }
+    }
 
     public IPassable EngineeringAirlockPassability => engineeringAirlock;
     public bool IsEngineeringAirlockOpen => engineeringAirlock.IsOpen;
@@ -160,10 +190,13 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
             inventory.ServerDrop(wrench.ItemSlot);
         if (metalSheets.ItemSlot?.ItemStorage == member.Inventory)
             inventory.ServerDrop(metalSheets.ItemSlot);
+        if (generatorFuel.ItemSlot?.ItemStorage == member.Inventory)
+            inventory.ServerDrop(generatorFuel.ItemSlot);
         platingTask.Cancel(peerId);
         crew.Remove(peerId);
         crewByStorage.Remove(member.Inventory);
         PublishConstructionState();
+        PublishPowerState();
         return true;
     }
 
@@ -245,9 +278,12 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         {
             WrenchId when wrench.ItemSlot == null && wrench.IsInWorld => wrench,
             MetalSheetsId when metalSheets.ItemSlot == null && metalSheets.IsInWorld => metalSheets,
+            GeneratorFuelId when generatorFuel.ItemSlot == null && generatorFuel.IsInWorld => generatorFuel,
             FixtureId => fixture,
             GirderId when !girderPlated => girder,
             EngineeringAirlockId => engineeringAirlock,
+            GeneratorId => generator,
+            PowerStorageId => powerStorage,
             _ => null,
         };
         if (target == null) return false;
@@ -256,8 +292,31 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
                 target.WorldPosition, intent, isAltClick, NetworkSide.Server)) return false;
         Changed();
         PublishConstructionState();
+        PublishPowerState();
         return true;
     }
+
+    /// <summary>Advance authoritative power simulation time on the host only.</summary>
+    public bool AdvancePower(double elapsedSeconds)
+    {
+        bool changed = powerLoop.Advance(elapsedSeconds);
+        if (changed) PublishPowerState();
+        return changed;
+    }
+
+    private bool TryLoadGeneratorFuel(int peerId)
+    {
+        if (!crew.TryGetValue(peerId, out CrewMember? member) ||
+            !ReferenceEquals(member.ActiveHandSlot.Item, generatorFuel) ||
+            generatorFuel.Stackable is not { Amount: > 0 } || !powerLoop.CanLoadFuel(1)) return false;
+        if (!inventory.ServerConsume(member.ActiveHandSlot, 1)) return false;
+        if (!powerLoop.TryLoadFuel(1)) throw new InvalidOperationException("Validated generator fuel could not be loaded.");
+        return true;
+    }
+
+    private bool CanToggleGenerator => powerLoop.GeneratorRunning || powerLoop.FuelSeconds > 0;
+
+    private void PublishPowerState() => PowerStateChanged?.Invoke(PowerSnapshot);
 
     public bool CanCrewOpenEngineeringAirlock(int peerId) =>
         HasClearance(peerId, StationClearance.Engine);
@@ -267,7 +326,9 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
     {
         if (!crew.TryGetValue(senderPeerId, out CrewMember? member)) return false;
         ItemSlot? activeHand = member.ActiveHandSlot;
-        return activeHand.Item != null && inventory.ServerDrop(activeHand);
+        bool dropped = activeHand.Item != null && inventory.ServerDrop(activeHand);
+        if (dropped) PublishPowerState();
+        return dropped;
     }
 
     /// <summary>Compatibility helper for the current playtest's single shared wrench.</summary>
@@ -489,6 +550,44 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         }
     }
 
+    private sealed class SharedFuelStack(int initialAmount) : IStackable
+    {
+        public int Amount { get; private set; } = initialAmount;
+        public bool CanAccommodate(IPickupable other) => other.Stackable is SharedFuelStack;
+        public void ServerCombine(IStackable other)
+        {
+            if (other is not SharedFuelStack stack) return;
+            Amount += stack.Amount;
+            stack.Amount = 0;
+        }
+        public bool ServerConsume(int amountToConsume)
+        {
+            if (amountToConsume <= 0 || amountToConsume > Amount) return false;
+            Amount -= amountToConsume;
+            return true;
+        }
+        public IPickupable ServerRemoveOne()
+        {
+            if (Amount <= 0) throw new InvalidOperationException("Cannot split an empty fuel stack.");
+            Amount--;
+            return new LooseGeneratorFuel();
+        }
+    }
+
+    private sealed class LooseGeneratorFuel : IPickupable
+    {
+        public string Name => "generator fuel";
+        public ItemSlot? ItemSlot { get; private set; }
+        public bool IsBuckled => false;
+        public IStackable? Stackable => null;
+        public IEnumerable<ItemStorage> ItemStorages => Array.Empty<ItemStorage>();
+        public IEnumerable<IServerInventoryMove> MoveHooks => Array.Empty<IServerInventoryMove>();
+        public float ThrowSpeed => 6f;
+        public float ThrowRange => 7f;
+        public bool StickyMovement => false;
+        public void SetItemSlot(ItemSlot? slot) => ItemSlot = slot;
+    }
+
     private sealed class LooseMetalSheet : IPickupable
     {
         public string Name => "metal sheet";
@@ -541,8 +640,56 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         }
     }
 
+    private sealed class GeneratorHandler(SharedStationInventoryWorld world, SharedWorldFixture owner,
+        SharedWorldItem fuel) : IOwnedInteractionHandler<HandApply>
+    {
+        public WorldEntity Owner { get; } = owner;
+        public bool IsFirstInteractable => false;
+        public int Priority => 0;
+
+        public bool WillInteract(HandApply interaction, NetworkSide side)
+        {
+            if (side != NetworkSide.Server || interaction.Performer == null || interaction.TargetObject != Owner)
+                return false;
+            if (ReferenceEquals(interaction.HandObject, fuel))
+                return fuel.Stackable is { Amount: > 0 } && world.powerLoop.CanLoadFuel(1);
+            return interaction.HandObject == null && world.CanToggleGenerator;
+        }
+
+        public void ServerPerformInteraction(HandApply interaction)
+        {
+            if (interaction.Performer == null) return;
+            if (ReferenceEquals(interaction.HandObject, fuel))
+            {
+                if (world.TryLoadGeneratorFuel(interaction.Performer.Id)) world.PublishPowerState();
+            }
+            else if (world.powerLoop.TryToggleGenerator())
+                world.PublishPowerState();
+        }
+    }
+
+    private sealed class PowerStorageHandler(SharedStationInventoryWorld world, SharedWorldFixture owner)
+        : IOwnedInteractionHandler<HandApply>
+    {
+        public WorldEntity Owner { get; } = owner;
+        public bool IsFirstInteractable => false;
+        public int Priority => 0;
+
+        public bool WillInteract(HandApply interaction, NetworkSide side) =>
+            side == NetworkSide.Server && interaction.Performer != null && interaction.TargetObject == Owner &&
+            interaction.HandObject == null;
+
+        public void ServerPerformInteraction(HandApply interaction)
+        {
+            world.powerLoop.ToggleOutput();
+            world.PublishPowerState();
+        }
+    }
+
     public sealed record StationConstructionSnapshot(int? MetalOwner, Vector2 MetalPosition, int MetalSheetCount,
         Vector2 GirderPosition, bool GirderPlated, int? WorkerPeerId, double ProgressSeconds);
+    public sealed record StationPowerSnapshot(int? FuelOwner, Vector2 FuelPosition, int FuelStackCount,
+        bool GeneratorRunning, double FuelSeconds, double StoredEnergy, bool OutputEnabled, bool DevicePowered);
 
     private sealed class AcceptAllCapacity : IItemStorageCapacity
     {

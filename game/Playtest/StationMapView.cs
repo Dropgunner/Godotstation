@@ -45,6 +45,12 @@ public partial class StationMapView : Node2D
         bool girderPlated = entities.GirderPlated;
         int? constructionWorker = entities.ConstructionWorker;
         double constructionProgress = entities.ConstructionProgress;
+        bool generatorRunning = entities.GeneratorRunning;
+        int fuelCount = entities.GeneratorFuelCount;
+        double fuelSeconds = entities.GeneratorFuelSeconds;
+        double storedEnergy = entities.StoredEnergy;
+        bool outputEnabled = entities.PowerOutputEnabled;
+        bool lampOn = entities.PoweredLampOn;
         for (int y = StationPlaytestLayout.MinY; y <= StationPlaytestLayout.MaxY; y++)
         for (int x = StationPlaytestLayout.MinX; x <= StationPlaytestLayout.MaxX; x++)
         {
@@ -108,6 +114,34 @@ public partial class StationMapView : Node2D
         DrawString(ThemeDB.FallbackFont, girderPosition + new Vector2(-0.88f, 0.65f),
             girderLabel, HorizontalAlignment.Left, -1, 1,
             girderPlated ? new Color("#d4e7ef") : new Color("#ffe1a8"));
+
+        Vector2 fuelPosition = Position(entities, SharedStationInventoryWorld.GeneratorFuelId);
+        Vector2 generatorPosition = Position(entities, SharedStationInventoryWorld.GeneratorId);
+        Vector2 storagePosition = Position(entities, SharedStationInventoryWorld.PowerStorageId);
+        Vector2 lampPosition = Position(entities, SharedStationInventoryWorld.PoweredLampId);
+        if (fuelCount > 0)
+        {
+            DrawRect(new Rect2(fuelPosition - new Vector2(0.24f, 0.18f), new Vector2(0.48f, 0.36f)),
+                new Color("#d5aa59"), true);
+            DrawString(ThemeDB.FallbackFont, fuelPosition + new Vector2(-0.48f, 0.48f),
+                $"FUEL ×{fuelCount}", HorizontalAlignment.Left, -1, 1, new Color("#ffe5a8"));
+        }
+        DrawRect(new Rect2(generatorPosition - new Vector2(0.38f, 0.36f), new Vector2(0.76f, 0.72f)),
+            generatorRunning ? new Color("#e18b54") : new Color("#667984"), true);
+        DrawString(ThemeDB.FallbackFont, generatorPosition + new Vector2(-0.65f, 0.62f),
+            generatorRunning ? $"GENERATOR · {fuelSeconds:0.0}s" : "FUEL GENERATOR · OFF",
+            HorizontalAlignment.Left, -1, 1, new Color("#ffe1a8"));
+        DrawRect(new Rect2(storagePosition - new Vector2(0.38f, 0.36f), new Vector2(0.76f, 0.72f)),
+            outputEnabled ? new Color("#6397a4") : new Color("#52616b"), true);
+        DrawString(ThemeDB.FallbackFont, storagePosition + new Vector2(-0.62f, 0.62f),
+            $"STORAGE · {storedEnergy:0.0} · {(outputEnabled ? "OUT" : "OFF")}",
+            HorizontalAlignment.Left, -1, 1, new Color("#d5eff4"));
+        DrawCircle(lampPosition, lampOn ? 0.34f : 0.22f,
+            lampOn ? new Color("#fff09a") : new Color("#60656a"));
+        if (lampOn) DrawCircle(lampPosition, 0.48f, new Color(1f, 0.89f, 0.45f, 0.16f));
+        DrawString(ThemeDB.FallbackFont, lampPosition + new Vector2(-0.55f, 0.66f),
+            lampOn ? "APC LAMP · ON" : "APC LAMP · OUTAGE",
+            HorizontalAlignment.Left, -1, 1, lampOn ? new Color("#fff1a8") : new Color("#bdc7cd"));
     }
 
     private void AddRoomLabel(string text, Vector2 worldPosition, Color color)
