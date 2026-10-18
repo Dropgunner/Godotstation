@@ -10,6 +10,13 @@ public partial class StationMapView : Node2D
     private Vector2 wrenchPosition = new(-1, 2);
     private Vector2 fixturePosition = new(0, 2);
     private bool fixtureAnchored = true;
+    private int? metalOwner;
+    private Vector2 metalPosition = new(1, 2);
+    private int metalSheetCount = 2;
+    private Vector2 girderPosition = new(2, 2);
+    private bool girderPlated;
+    private int? constructionWorker;
+    private double constructionProgress;
 
     public void SetSharedObjects(int? currentWrenchOwner, Vector2 currentWrenchPosition,
         Vector2 currentFixturePosition, bool isFixtureAnchored)
@@ -18,6 +25,19 @@ public partial class StationMapView : Node2D
         wrenchPosition = currentWrenchPosition;
         fixturePosition = currentFixturePosition;
         fixtureAnchored = isFixtureAnchored;
+        QueueRedraw();
+    }
+
+    public void SetConstruction(int? currentMetalOwner, Vector2 currentMetalPosition, int sheetCount,
+        Vector2 currentGirderPosition, bool isGirderPlated, int? workerPeerId, double progressSeconds)
+    {
+        metalOwner = currentMetalOwner;
+        metalPosition = currentMetalPosition;
+        metalSheetCount = sheetCount;
+        girderPosition = currentGirderPosition;
+        girderPlated = isGirderPlated;
+        constructionWorker = workerPeerId;
+        constructionProgress = progressSeconds;
         QueueRedraw();
     }
 
@@ -67,6 +87,25 @@ public partial class StationMapView : Node2D
         else
             DrawString(ThemeDB.FallbackFont, wrenchPosition + new Vector2(-0.3f, -0.55f),
                 "WRENCH", HorizontalAlignment.Left, -1, 1, new Color("#ffe39a"));
+
+        if (metalSheetCount > 0)
+        {
+            Vector2 position = metalOwner == null ? metalPosition : metalPosition + new Vector2(0.35f, 0.15f);
+            DrawRect(new Rect2(position - new Vector2(0.22f, 0.16f), new Vector2(0.44f, 0.32f)),
+                new Color("#aebbc2"), true);
+            DrawString(ThemeDB.FallbackFont, position + new Vector2(-0.5f, 0.47f),
+                $"METAL ×{metalSheetCount}", HorizontalAlignment.Left, -1, 1, new Color("#e3edf1"));
+        }
+
+        DrawRect(new Rect2(girderPosition - new Vector2(0.39f, 0.39f), new Vector2(0.78f, 0.78f)),
+            girderPlated ? new Color("#728c98") : new Color("#8e7b5a"), true);
+        DrawRect(new Rect2(girderPosition - new Vector2(0.32f, 0.32f), new Vector2(0.64f, 0.64f)),
+            new Color("#293941"), false, 0.08f);
+        string girderLabel = girderPlated ? "PLATED WALL" : constructionWorker.HasValue
+            ? $"PLATING {constructionProgress:0.0}/4.0s" : "GIRDER · 2 SHEETS";
+        DrawString(ThemeDB.FallbackFont, girderPosition + new Vector2(-0.88f, 0.65f),
+            girderLabel, HorizontalAlignment.Left, -1, 1,
+            girderPlated ? new Color("#d4e7ef") : new Color("#ffe1a8"));
     }
 
     private void AddRoomLabel(string text, Vector2 worldPosition, Color color)
