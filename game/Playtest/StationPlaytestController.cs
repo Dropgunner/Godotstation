@@ -18,12 +18,12 @@ public partial class StationPlaytestController : Node2D
     private const float SnapshotInterval = 0.05f;
 
     private readonly Dictionary<int, PlayerRuntime> players = new();
-    private readonly CrewRoster crewRoster = StationCrewJobCatalog.CreateRoster();
+    private CrewRoster crewRoster = StationCrewJobCatalog.CreateRoster();
     private readonly SharedRoundLifecycle roundLifecycle = new();
     private CollisionMap collisionMap = null!;
     private MovementProcessor movementProcessor = null!;
     private SharedStationInventoryWorld sharedInteractionWorld = null!;
-    private readonly ReplicatedStationEntities replicatedEntities = new();
+    private ReplicatedStationEntities replicatedEntities = new();
     private StationMapView stationMapView = null!;
     private DynamicObject fixtureObstacle = null!;
     private DynamicObject girderObstacle = null!;
@@ -36,9 +36,12 @@ public partial class StationPlaytestController : Node2D
     private Label activeHandLabel = null!;
     private Label loadoutLabel = null!;
     private Button startShiftButton = null!;
+    private Button endShiftButton = null!;
+    private Button restartShiftButton = null!;
     private RichTextLabel chatLog = null!;
     private LineEdit chatInput = null!;
     private int localPeerId;
+    private int localRoundId = 1;
     private float snapshotTime;
     private float constructionSnapshotTime;
     private ulong smokeMoveUntilMsec;
@@ -58,6 +61,9 @@ public partial class StationPlaytestController : Node2D
     private int smokeMetalOwner;
     private int smokeSheetCount = 2;
     private bool smokeGirderPlated;
+    private int smokeRoundRestartStage;
+    private ulong smokeRoundRestartAfterMsec;
+    private bool smokeRoundRestartClientVerified;
     private bool localRoundStarted;
     private string connectionStatus = "Connecting…";
     private string hostAddress = "LAN IP unavailable";
@@ -65,17 +71,7 @@ public partial class StationPlaytestController : Node2D
     public override void _Ready()
     {
         SetMultiplayerAuthority(1);
-        collisionMap = StationPlaytestLayout.CreateCollisionMap();
-        movementProcessor = new MovementProcessor(collisionMap);
-        sharedInteractionWorld = new SharedStationInventoryWorld(new StationReachabilityMap(collisionMap));
-        sharedInteractionWorld.StateChanged += OnSharedStateChanged;
-        sharedInteractionWorld.ConstructionStateChanged += OnConstructionStateChanged;
-        sharedInteractionWorld.EngineeringAirlockStateChanged += OnEngineeringAirlockStateChanged;
-        collisionMap.SetTile(8, -4, sharedInteractionWorld.EngineeringAirlockPassability);
-        fixtureObstacle = new DynamicObject(0, 2, isPushable: false, tag: "service-cart");
-        collisionMap.AddObject(fixtureObstacle);
-        girderObstacle = new DynamicObject(2, 2, isPushable: false, tag: "girder");
-        collisionMap.AddObject(girderObstacle);
+        InitializeWorld();
         BuildStationView();
         BuildHud();
 
@@ -92,6 +88,49 @@ public partial class StationPlaytestController : Node2D
             JoinHost(PlaytestLaunchOptions.Address);
     }
 
+    private void InitializeWorld()
+    {
+        collisionMap = StationPlaytestLayout.CreateCollisionMap();
+        movementProcessor = new MovementProcessor(collisionMap);
+        sharedInteractionWorld = new SharedStationInventoryWorld(new StationReachabilityMap(collisionMap));
+        sharedInteractionWorld.StateChanged += OnSharedStateChanged;
+        sharedInteractionWorld.ConstructionStateChanged += OnConstructionStateChanged;
+        sharedInteractionWorld.EngineeringAirlockStateChanged += OnEngineeringAirlockStateChanged;
+        collisionMap.SetTile(8, -4, sharedInteractionWorld.EngineeringAirlockPassability);
+        fixtureObstacle = new DynamicObject(0, 2, isPushable: false, tag: "service-cart");
+        collisionMap.AddObject(fixtureObstacle);
+        girderObstacle = new DynamicObject(2, 2, isPushable: false, tag: "girder");
+        collisionMap.AddObject(girderObstacle);
+        replicatedEntities = new ReplicatedStationEntities();
+        stationMapView?.SetEntities(replicatedEntities);
+        wrenchOwner = null;
+        wrenchWorldPosition = new Vector2(-1, 2);
+        fixtureWorldPosition = new Vector2(0, 2);
+        fixtureAnchored = true;
+        engineeringAirlockOpen = false;
+        smokeMetalOwner = 0;
+        smokeSheetCount = 2;
+        smokeGirderPlated = false;
+        snapshotTime = 0;
+        constructionSnapshotTime = 0;
+    }
+
+    private void ResetSharedWorld()
+    {
+        foreach (PlayerRuntime player in players.Values)
+            player.Avatar.QueueFree();
+        players.Clear();
+        sharedInteractionWorld.StateChanged -= OnSharedStateChanged;
+        sharedInteractionWorld.ConstructionStateChanged -= OnConstructionStateChanged;
+        sharedInteractionWorld.EngineeringAirlockStateChanged -= OnEngineeringAirlockStateChanged;
+        crewRoster = StationCrewJobCatalog.CreateRoster();
+        InitializeWorld();
+        localRoundStarted = false;
+        activeHandLabel.Text = "Active hand: rightHand · empty";
+        loadoutLabel.Text = "Crew loadout: awaiting role spawn";
+        chatLog.Clear();
+    }
+
     public override void _PhysicsProcess(double delta)
     {
         var multiplayer = GetMultiplayer();
@@ -99,6 +138,8 @@ public partial class StationPlaytestController : Node2D
             return;
 
         localPeerId = multiplayer.GetUniqueId();
+        DriveSmokeRoundRestart();
+        if (!localRoundStarted) return;
         if (PlaytestLaunchOptions.SmokeChat && !smokeChatStarted && players.Count >= 2 && localRoundStarted)
         {
             smokeChatStarted = true;
@@ -163,14 +204,14 @@ public partial class StationPlaytestController : Node2D
             {
                 snapshotTime %= SnapshotInterval;
                 foreach (PlayerRuntime player in players.Values)
-                    Rpc(nameof(ReceivePosition), player.PeerId, player.Position.X, player.Position.Y);
+                    Rpc(nameof(ReceivePosition), localRoundId, player.PeerId, player.Position.X, player.Position.Y);
             }
 
         }
         else
         {
             if (players.ContainsKey(localPeerId))
-                RpcId(1, nameof(SubmitMovementInput), direction.X, direction.Y);
+                RpcId(1, nameof(SubmitMovementInput), localRoundId, direction.X, direction.Y);
 
             foreach (PlayerRuntime player in players.Values)
             {
@@ -265,6 +306,7 @@ public partial class StationPlaytestController : Node2D
         }
         RoundStartResult result = roundLifecycle.TryStart(localPeerId);
         if (result != RoundStartResult.Started) return;
+        localRoundId = roundLifecycle.RoundId;
         localRoundStarted = true;
 
         CrewAssignmentResult assignment = crewRoster.TryAssign(localPeerId, PlaytestLaunchOptions.CrewJobId);
@@ -282,9 +324,36 @@ public partial class StationPlaytestController : Node2D
         AddPlayer(localPeerId, assignedJob, hostSpawn);
         startShiftButton.Disabled = true;
         startShiftButton.Text = "Shift started";
+        endShiftButton.Visible = true;
         SetStatus($"Shift started · joining crew can now spawn · {hostAddress}:{PlaytestLaunchOptions.Port}");
         GD.Print($"PLAYTEST_ROUND_STARTED host_job={assignedJob.Id}");
-        Rpc(nameof(ReceiveRoundStarted));
+        Rpc(nameof(ReceiveRoundStarted), localRoundId);
+        RefreshStatus();
+    }
+
+    private void EndShift()
+    {
+        if (!GetMultiplayer().IsServer() ||
+            roundLifecycle.TryEnd(localPeerId, localRoundId) != RoundEndResult.Ended) return;
+        localRoundStarted = false;
+        endShiftButton.Visible = false;
+        restartShiftButton.Visible = true;
+        SetStatus($"Shift {localRoundId} ended · review the station, then restart when ready.");
+        Rpc(nameof(ReceiveRoundEnded), localRoundId);
+        GD.Print($"PLAYTEST_ROUND_ENDED round={localRoundId}");
+    }
+
+    private void RestartShift()
+    {
+        if (!GetMultiplayer().IsServer() ||
+            roundLifecycle.TryRestart(localPeerId) != RoundRestartResult.Restarted) return;
+        localRoundId = roundLifecycle.RoundId;
+        ResetSharedWorld();
+        startShiftButton.Text = "Start shift";
+        startShiftButton.Disabled = false;
+        restartShiftButton.Visible = false;
+        Rpc(nameof(ReceiveRoundRestarted), localRoundId);
+        GD.Print($"PLAYTEST_ROUND_RESTARTED round={localRoundId} phase=PreRound");
         RefreshStatus();
     }
 
@@ -293,31 +362,59 @@ public partial class StationPlaytestController : Node2D
     {
         if (!GetMultiplayer().IsServer()) return;
         int peerId = (int)GetMultiplayer().GetRemoteSenderId();
-        RpcId(peerId, nameof(ReceiveRoundPhase), (int)roundLifecycle.Phase);
+        RpcId(peerId, nameof(ReceiveRoundPhase), (int)roundLifecycle.Phase, roundLifecycle.RoundId);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void ReceiveRoundPhase(int phase)
+    private void ReceiveRoundPhase(int phase, int roundId)
     {
+        if (roundId < localRoundId) return;
+        localRoundId = roundId;
         if (phase == (int)SharedRoundPhase.Started)
         {
             localRoundStarted = true;
             RequestCrewSpawnFromClient();
         }
+        else if (phase == (int)SharedRoundPhase.Ended)
+        {
+            localRoundStarted = false;
+            SetStatus($"Shift {roundId} ended · waiting for the host to restart.");
+        }
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void ReceiveRoundStarted()
+    private void ReceiveRoundStarted(int roundId)
     {
+        if (roundId < localRoundId) return;
+        localRoundId = roundId;
         localRoundStarted = true;
         RequestCrewSpawnFromClient();
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceiveRoundEnded(int roundId)
+    {
+        if (roundId != localRoundId) return;
+        localRoundStarted = false;
+        SetStatus($"Shift {roundId} ended · waiting for the host to restart.");
+        GD.Print($"PLAYTEST_ROUND_ENDED_CLIENT round={roundId}");
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceiveRoundRestarted(int roundId)
+    {
+        if (roundId <= localRoundId) return;
+        localRoundId = roundId;
+        ResetSharedWorld();
+        SetStatus($"Shift {roundId} ready · waiting for the host to start.");
+        GD.Print($"PLAYTEST_ROUND_RESTARTED_CLIENT round={roundId} crew={players.Count} metal={smokeSheetCount} plated={smokeGirderPlated}");
     }
 
     private void RequestCrewSpawnFromClient()
     {
         if (GetMultiplayer().IsServer()) return;
         SetStatus("Shift started · requesting your crew role…");
-        RpcId(1, nameof(RequestCrewSpawn), PlaytestLaunchOptions.CrewJobId);
+        RpcId(1, nameof(RequestCrewSpawn), localRoundId, PlaytestLaunchOptions.CrewJobId);
     }
 
     private void OnConnectionFailed()
@@ -333,12 +430,12 @@ public partial class StationPlaytestController : Node2D
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestCrewSpawn(int jobId)
+    private void RequestCrewSpawn(int roundId, int jobId)
     {
         if (!GetMultiplayer().IsServer()) return;
         int peerId = (int)GetMultiplayer().GetRemoteSenderId();
         if (peerId <= 1) return;
-        if (!roundLifecycle.CanRequestJob)
+        if (!roundLifecycle.CanRequestJob || roundId != roundLifecycle.RoundId)
         {
             RpcId(peerId, nameof(RejectCrewRequest), jobId, (int)CrewAssignmentResult.RoundNotStarted);
             return;
@@ -402,13 +499,13 @@ public partial class StationPlaytestController : Node2D
         if (GetMultiplayer().IsServer())
             RouteLocalSpeech(localPeerId, text);
         else
-            RpcId(1, nameof(RequestLocalSpeech), text);
+            RpcId(1, nameof(RequestLocalSpeech), localRoundId, text);
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestLocalSpeech(string message)
+    private void RequestLocalSpeech(int roundId, string message)
     {
-        if (!GetMultiplayer().IsServer()) return;
+        if (!GetMultiplayer().IsServer() || roundId != roundLifecycle.RoundId) return;
         RouteLocalSpeech((int)GetMultiplayer().GetRemoteSenderId(), message);
     }
 
@@ -458,9 +555,9 @@ public partial class StationPlaytestController : Node2D
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable)]
-    private void SubmitMovementInput(int deltaX, int deltaY)
+    private void SubmitMovementInput(int roundId, int deltaX, int deltaY)
     {
-        if (!GetMultiplayer().IsServer()) return;
+        if (!GetMultiplayer().IsServer() || roundId != roundLifecycle.RoundId) return;
         int senderId = (int)GetMultiplayer().GetRemoteSenderId();
         SetMovementInput(senderId, senderId, deltaX, deltaY);
     }
@@ -508,8 +605,9 @@ public partial class StationPlaytestController : Node2D
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable)]
-    private void ReceivePosition(int peerId, float x, float y)
+    private void ReceivePosition(int roundId, int peerId, float x, float y)
     {
+        if (roundId != localRoundId || !localRoundStarted) return;
         if (!players.TryGetValue(peerId, out PlayerRuntime? player)) return;
         player.TargetPosition = new Vector2(x, y);
         if (peerId == localPeerId)
@@ -541,6 +639,7 @@ public partial class StationPlaytestController : Node2D
 
     private void SetMovementInput(int ownerPeerId, int senderPeerId, int deltaX, int deltaY)
     {
+        if (!roundLifecycle.CanRequestJob) return;
         if (!MovementCommandAuthorization.IsValid(ownerPeerId, senderPeerId, deltaX, deltaY))
             return;
         if (!players.TryGetValue(ownerPeerId, out PlayerRuntime? player)) return;
@@ -581,7 +680,7 @@ public partial class StationPlaytestController : Node2D
             if (GetMultiplayer().IsServer())
                 ResolveActiveHandToggle(localPeerId);
             else
-                RpcId(1, nameof(RequestActiveHandToggle));
+                RpcId(1, nameof(RequestActiveHandToggle), localRoundId);
             return;
         }
 
@@ -591,7 +690,7 @@ public partial class StationPlaytestController : Node2D
             if (GetMultiplayer().IsServer())
                 ResolveSharedDrop(localPeerId);
             else
-                RpcId(1, nameof(RequestSharedDrop));
+                RpcId(1, nameof(RequestSharedDrop), localRoundId);
             return;
         }
 
@@ -607,28 +706,28 @@ public partial class StationPlaytestController : Node2D
         if (GetMultiplayer().IsServer())
             ResolveSharedInteraction(localPeerId, targetId.Value, (int)Intent.Help, altClick);
         else
-            RpcId(1, nameof(RequestSharedInteraction), targetId.Value, (int)Intent.Help, altClick);
+            RpcId(1, nameof(RequestSharedInteraction), localRoundId, targetId.Value, (int)Intent.Help, altClick);
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestSharedInteraction(int targetId, int intentValue, bool altClick)
+    private void RequestSharedInteraction(int roundId, int targetId, int intentValue, bool altClick)
     {
-        if (!GetMultiplayer().IsServer()) return;
+        if (!GetMultiplayer().IsServer() || roundId != roundLifecycle.RoundId) return;
         int senderId = (int)GetMultiplayer().GetRemoteSenderId();
         ResolveSharedInteraction(senderId, targetId, intentValue, altClick);
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestSharedDrop()
+    private void RequestSharedDrop(int roundId)
     {
-        if (!GetMultiplayer().IsServer()) return;
+        if (!GetMultiplayer().IsServer() || roundId != roundLifecycle.RoundId) return;
         ResolveSharedDrop((int)GetMultiplayer().GetRemoteSenderId());
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestActiveHandToggle()
+    private void RequestActiveHandToggle(int roundId)
     {
-        if (!GetMultiplayer().IsServer()) return;
+        if (!GetMultiplayer().IsServer() || roundId != roundLifecycle.RoundId) return;
         ResolveActiveHandToggle((int)GetMultiplayer().GetRemoteSenderId());
     }
 
@@ -684,7 +783,7 @@ public partial class StationPlaytestController : Node2D
         if (!smokeInteractionPickupRequested)
         {
             smokeInteractionPickupRequested = true;
-            RpcId(1, nameof(RequestSharedInteraction), SharedStationInventoryWorld.WrenchId,
+            RpcId(1, nameof(RequestSharedInteraction), localRoundId, SharedStationInventoryWorld.WrenchId,
                 (int)Intent.Help, false);
             GD.Print("PLAYTEST_INTERACTION_REQUEST pickup");
             return;
@@ -693,7 +792,7 @@ public partial class StationPlaytestController : Node2D
         if (wrenchOwner == localPeerId && !smokeInteractionUseRequested)
         {
             smokeInteractionUseRequested = true;
-            RpcId(1, nameof(RequestSharedInteraction), SharedStationInventoryWorld.FixtureId,
+            RpcId(1, nameof(RequestSharedInteraction), localRoundId, SharedStationInventoryWorld.FixtureId,
                 (int)Intent.Help, false);
             GD.Print("PLAYTEST_INTERACTION_REQUEST wrench-use");
             return;
@@ -702,7 +801,7 @@ public partial class StationPlaytestController : Node2D
         if (wrenchOwner == localPeerId && !fixtureAnchored && !smokeInteractionDropRequested)
         {
             smokeInteractionDropRequested = true;
-            RpcId(1, nameof(RequestSharedDrop));
+            RpcId(1, nameof(RequestSharedDrop), localRoundId);
             GD.Print("PLAYTEST_INTERACTION_REQUEST drop");
             return;
         }
@@ -722,7 +821,7 @@ public partial class StationPlaytestController : Node2D
         if (!smokeConstructionPickupRequested)
         {
             smokeConstructionPickupRequested = true;
-            RpcId(1, nameof(RequestSharedInteraction), SharedStationInventoryWorld.MetalSheetsId,
+            RpcId(1, nameof(RequestSharedInteraction), localRoundId, SharedStationInventoryWorld.MetalSheetsId,
                 (int)Intent.Help, false);
             GD.Print("PLAYTEST_CONSTRUCTION_REQUEST pickup-metal");
             return;
@@ -731,7 +830,7 @@ public partial class StationPlaytestController : Node2D
         if (smokeMetalOwner == localPeerId && !smokeConstructionStarted)
         {
             smokeConstructionStarted = true;
-            RpcId(1, nameof(RequestSharedInteraction), SharedStationInventoryWorld.GirderId,
+            RpcId(1, nameof(RequestSharedInteraction), localRoundId, SharedStationInventoryWorld.GirderId,
                 (int)Intent.Help, false);
             GD.Print("PLAYTEST_CONSTRUCTION_REQUEST plate-girder");
             return;
@@ -741,6 +840,41 @@ public partial class StationPlaytestController : Node2D
         {
             smokeConstructionCompleted = true;
             GD.Print("PLAYTEST_GIRDER_PLATING_OK engineer=true sheets_consumed=2 duration_seconds=4 replicated=true");
+        }
+    }
+
+    private void DriveSmokeRoundRestart()
+    {
+        if (!PlaytestLaunchOptions.SmokeRoundRestart || !GetMultiplayer().IsServer()) return;
+        if (smokeRoundRestartStage == 0 && players.Count >= 2 &&
+            roundLifecycle.Phase == SharedRoundPhase.Started &&
+            sharedInteractionWorld.ConstructionSnapshot.GirderPlated)
+        {
+            smokeRoundRestartStage = 1;
+            EndShift();
+            smokeRoundRestartAfterMsec = Time.GetTicksMsec() + 250;
+        }
+        else if (smokeRoundRestartStage == 1 && roundLifecycle.Phase == SharedRoundPhase.Ended &&
+                 Time.GetTicksMsec() >= smokeRoundRestartAfterMsec)
+        {
+            smokeRoundRestartStage = 2;
+            RestartShift();
+            smokeRoundRestartAfterMsec = Time.GetTicksMsec() + 250;
+        }
+        else if (smokeRoundRestartStage == 2 && roundLifecycle.Phase == SharedRoundPhase.PreRound &&
+                 Time.GetTicksMsec() >= smokeRoundRestartAfterMsec)
+        {
+            smokeRoundRestartStage = 3;
+            StartShift();
+        }
+        else if (smokeRoundRestartStage == 3 && roundLifecycle.Phase == SharedRoundPhase.Started &&
+                 players.Count >= 2 && !sharedInteractionWorld.ConstructionSnapshot.GirderPlated &&
+                 sharedInteractionWorld.ConstructionSnapshot.MetalSheetCount == 2 &&
+                 !sharedInteractionWorld.IsEngineeringAirlockOpen &&
+                 sharedInteractionWorld.Snapshot.WrenchOwner is null)
+        {
+            smokeRoundRestartStage = 4;
+            GD.Print($"PLAYTEST_ROUND_RESTART_OK round={localRoundId} crew={players.Count} metal=2 plated=false airlock=false wrench_owner=0");
         }
     }
 
@@ -763,7 +897,7 @@ public partial class StationPlaytestController : Node2D
         if (!smokeEngineeringAccessRequested)
         {
             smokeEngineeringAccessRequested = true;
-            RpcId(1, nameof(RequestSharedInteraction), SharedStationInventoryWorld.EngineeringAirlockId,
+            RpcId(1, nameof(RequestSharedInteraction), localRoundId, SharedStationInventoryWorld.EngineeringAirlockId,
                 (int)Intent.Help, false);
             GD.Print("PLAYTEST_ENGINEERING_ACCESS_REQUEST assistant_try");
         }
@@ -904,6 +1038,13 @@ public partial class StationPlaytestController : Node2D
     {
         SetConstructionView(ownerPeerId == 0 ? null : ownerPeerId, new Vector2(metalX, metalY), sheetCount,
             new Vector2(girderX, girderY), plated, workerPeerId == 0 ? null : workerPeerId, progressSeconds);
+        if (PlaytestLaunchOptions.SmokeRoundRestart && !GetMultiplayer().IsServer() &&
+            !smokeRoundRestartClientVerified && localRoundId == 2 && players.Count >= 2 &&
+            sheetCount == 2 && !plated)
+        {
+            smokeRoundRestartClientVerified = true;
+            GD.Print($"PLAYTEST_ROUND_RESTART_CLIENT_OK round={localRoundId} crew={players.Count} metal=2 plated=false");
+        }
         if (plated && GetMultiplayer().IsServer())
             GD.Print("PLAYTEST_GIRDER_PLATED host_state=true metal_sheets_remaining=0");
     }
@@ -950,7 +1091,7 @@ public partial class StationPlaytestController : Node2D
         var content = new VBoxContainer { CustomMinimumSize = new Vector2(320, 0) };
         panel.AddChild(content);
         var title = new Label { Text = "GODOTSTATION · CREW TEST" };
-        title.AddThemeFontSizeOverride("font_size", 20);
+        title.AddThemeFontSizeOverride("font_size", 18);
         content.AddChild(title);
         statusLabel = new Label { Text = connectionStatus, AutowrapMode = TextServer.AutowrapMode.WordSmart };
         statusLabel.CustomMinimumSize = new Vector2(320, 34);
@@ -958,6 +1099,12 @@ public partial class StationPlaytestController : Node2D
         startShiftButton = new Button { Text = "Start shift", Visible = false, Disabled = true };
         startShiftButton.Pressed += StartShift;
         content.AddChild(startShiftButton);
+        endShiftButton = new Button { Text = "End shift", Visible = false };
+        endShiftButton.Pressed += EndShift;
+        content.AddChild(endShiftButton);
+        restartShiftButton = new Button { Text = "Restart shift", Visible = false };
+        restartShiftButton.Pressed += RestartShift;
+        content.AddChild(restartShiftButton);
         content.AddChild(new Label
         {
             Text = $"WASD move · LAN UDP {PlaytestLaunchOptions.Port}",
@@ -976,7 +1123,7 @@ public partial class StationPlaytestController : Node2D
 
         chatLog = new RichTextLabel
         {
-            CustomMinimumSize = new Vector2(320, 60),
+            CustomMinimumSize = new Vector2(320, 48),
             BbcodeEnabled = false,
             ScrollActive = true,
             FitContent = false,
@@ -985,7 +1132,7 @@ public partial class StationPlaytestController : Node2D
         chatInput = new LineEdit
         {
             PlaceholderText = "Speak locally… (Enter)",
-            CustomMinimumSize = new Vector2(320, 36),
+            CustomMinimumSize = new Vector2(320, 32),
             MaxLength = 256,
         };
         chatInput.TextSubmitted += SubmitSpeech;
@@ -1033,7 +1180,12 @@ public partial class StationPlaytestController : Node2D
     {
         if (GetMultiplayer().IsServer())
         {
-            string phase = roundLifecycle.Phase == SharedRoundPhase.PreRound ? "Pre-round" : "Shift started";
+            string phase = roundLifecycle.Phase switch
+            {
+                SharedRoundPhase.PreRound => "Pre-round",
+                SharedRoundPhase.Started => "Shift started",
+                _ => "Shift ended",
+            };
             string hostAction = roundLifecycle.Phase == SharedRoundPhase.PreRound ? " · press Start shift when ready" : string.Empty;
             connectionStatus = $"{phase} · join {hostAddress}:{PlaytestLaunchOptions.Port} · crew {players.Count}/{MaximumPlayers}{hostAction}";
         }
