@@ -47,10 +47,12 @@ trace additional upstream systems it actually implements.
   server-resolved position updates.
 - Integrated Wave 9 slices now cover server-gated role spawn, local speech, a shared wrench/cart,
   metal pickup and timed girder plating, Engineer equipment/access, and client click targets
-  driven by replicated entity state. The exported LAN app is an early station loop. Full
-  Engineer machinery, mode-driven round outcome/report, failure/recovery, broader inventory/intent, and a
-  two-person ordinary-controls gate remain open. The [bounded SS13 source comparison](SS13_ESSENCE_REA.md)
-  now uses tgstation as the gameplay criterion and Unitystation as the porting bridge.
+  driven by replicated entity state. The power loop adds an Engineer fuel/generator/storage/APC
+  lamp failure-and-recovery task, verified by a two-peer smoke. It is an isolated playtest model,
+  not a station grid or source-game rate model. Mode-driven round outcome/report, survival,
+  broader inventory/intent, full machinery parity, and a two-person ordinary-controls gate remain
+  open. The [bounded SS13 source comparison](SS13_ESSENCE_REA.md) uses tgstation as the gameplay
+  criterion and Unitystation as the porting bridge.
 
 ## Delivery workflow and outcome ledger
 
@@ -66,15 +68,18 @@ trace additional upstream systems it actually implements.
 
 | Outcome | Current evidence | Status |
 | --- | --- | --- |
-| Integrated build | `c7269eaf79fb0a024ae55e670c12ccac97536afd` exported as `Godotstation-Integrated-c7269ea-Playtest.app`; five exported two-client smokes passed, including round restart. | Built; manual full-round gate open |
-| New player action | Wrench, cart, metal, girder, and Engineer airlock now share replicated positions/availability for rendering and click targeting. | Integrated in PR #32; ordinary-control two-player path unverified |
-| Full round | Host can start, end, and restart a shared shift; two clients respawn into fresh shared state. Engineer can plate a girder and open an access-controlled airlock. | **Open:** no sourced round outcome/report, failure/recovery, complete Engineer machinery loop, or two-person ordinary-controls pass |
+| Integrated build | `c1d2b64dc77ce4fb1f276ca782714a7b903c43d1` exported as `/private/tmp/Godotstation-Integrated-c1d2b64-Playtest.app`; universal runtime bundle passed headless startup. | Built; manual full-round gate open |
+| New player action | Wrench/cart and construction interactions remain; Engineer can also fuel/start a generator, enable storage output, observe APC lamp outage, and recover power. Two-peer smoke passed. | Integrated in PRs #32 and #37; ordinary-control two-player path unverified |
+| Full round | Host can start, end, and restart a shared shift; Engineer can plate a girder, access the engineering airlock, and complete the scripted power failure/recovery loop. | **Open:** no sourced round outcome/report, survival/incapacitation path, full power grid or machinery parity, or two-person ordinary-controls pass |
 | Bugs found during play | A client could click stale construction targets; the HUD covered the station after spawn. | Fixed in PRs #32 and #33; repeat human playtest needed |
 
-The app export still relies on a local untracked Godot export preset, and Godot reports an
-export cleanup exception after producing a working bundle. The local .NET 8 SDK cannot run
-the repository's net10 test target or `.slnx` full preflight without a newer SDK. These are
-reproducibility issues to resolve before calling the delivery pipeline complete.
+The export script now uses the tracked game solution, creates a
+temporary unsigned debug preset only when no local preset exists, refuses to overwrite an
+existing app, and validates the universal C# bundle with a headless startup. Godot still reports
+a temporary publish-directory cleanup exception after writing the app. The repository's test
+project targets .NET 10; the installed .NET 8 SDK cannot run that target directly. A temporary
+retarget ran 255 tests successfully with 8 skipped, then restored the project file. These
+environment and exporter limitations remain visible; the manual full-round gate is still open.
 
 ## Dependency-ordered milestones
 
