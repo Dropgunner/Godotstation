@@ -9,6 +9,7 @@ host_log="$log_dir/host.log"
 client_log="$log_dir/client.log"
 host_pid=""
 client_pid=""
+smoke_mode="${1:-movement}"
 
 cleanup() {
   if [[ -n "$client_pid" ]]; then kill "$client_pid" 2>/dev/null || true; fi
@@ -26,16 +27,32 @@ fi
 
 launch_host() {
   if [[ -n "$playtest_app" ]]; then
-    "$godot_bin" --headless --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-move --playtest-smoke-chat
+    if [[ "$smoke_mode" == "--interactions" ]]; then
+      "$godot_bin" --headless --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-interactions
+    else
+      "$godot_bin" --headless --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-move --playtest-smoke-chat
+    fi
   else
-    "$godot_bin" --headless --path "$repo_root/game" --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-move --playtest-smoke-chat
+    if [[ "$smoke_mode" == "--interactions" ]]; then
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-interactions
+    else
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-move --playtest-smoke-chat
+    fi
   fi
 }
 launch_client() {
   if [[ -n "$playtest_app" ]]; then
-    "$godot_bin" --headless --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-move --playtest-smoke-chat
+    if [[ "$smoke_mode" == "--interactions" ]]; then
+      "$godot_bin" --headless --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-interactions
+    else
+      "$godot_bin" --headless --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-move --playtest-smoke-chat
+    fi
   else
-    "$godot_bin" --headless --path "$repo_root/game" --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-move --playtest-smoke-chat
+    if [[ "$smoke_mode" == "--interactions" ]]; then
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-interactions
+    else
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-move --playtest-smoke-chat
+    fi
   fi
 }
 
@@ -57,18 +74,30 @@ launch_client >"$client_log" 2>&1 &
 client_pid=$!
 
 for _ in $(seq 1 100); do
-  if grep -q "PLAYTEST_ROSTER peers=2" "$host_log" && \
-     grep -q "PLAYTEST_HOST_READY port=7777 phase=PreRound" "$host_log" && \
-     grep -q "PLAYTEST_ROUND_STARTED host_job=20" "$host_log" && \
-     grep -q "PLAYTEST_LOCAL_CHAT_RELAYED sender=1 recipients=2" "$host_log" && \
-     [[ $(grep -c "PLAYTEST_LOCAL_CHAT_RELAYED sender=" "$host_log") -ge 2 ]] && \
-     grep -q "PLAYTEST_LOCAL_CHAT_RECEIVED speaker=1" "$client_log" && \
-     [[ $(grep -c "PLAYTEST_LOCAL_CHAT_RECEIVED speaker=" "$client_log") -ge 2 ]] && \
-     grep -q "PLAYTEST_PLAYER_SPAWNED peer=1" "$client_log" && \
-     grep -q "PLAYTEST_PLAYER_SPAWNED peer=1 job=20 role=Engineer" "$client_log" && \
-     grep -Eq "PLAYTEST_PLAYER_SPAWNED peer=[0-9]+ job=2 role=Assistant count=2" "$client_log" && \
-     grep -q "PLAYTEST_CLIENT_POSITION peer=" "$host_log" && \
-     grep -q "PLAYTEST_REMOTE_MOVE peer=" "$client_log"; then
+  ready=0
+  if [[ "$smoke_mode" == "--interactions" ]]; then
+    if grep -q "PLAYTEST_ROSTER peers=2" "$host_log" && \
+       grep -q "PLAYTEST_ROUND_STARTED host_job=20" "$host_log" && \
+       grep -q "PLAYTEST_SHARED_INTERACTION_OK pickup=true wrench_use=true dropped=true replicated=true" "$client_log" && \
+       [[ $(grep -c "PLAYTEST_INTERACTION_SERVER_STATE" "$host_log") -ge 3 ]]; then
+      ready=1
+    fi
+  elif grep -q "PLAYTEST_ROSTER peers=2" "$host_log" && \
+       grep -q "PLAYTEST_HOST_READY port=7777 phase=PreRound" "$host_log" && \
+       grep -q "PLAYTEST_ROUND_STARTED host_job=20" "$host_log" && \
+       grep -q "PLAYTEST_LOCAL_CHAT_RELAYED sender=1 recipients=2" "$host_log" && \
+       [[ $(grep -c "PLAYTEST_LOCAL_CHAT_RELAYED sender=" "$host_log") -ge 2 ]] && \
+       grep -q "PLAYTEST_LOCAL_CHAT_RECEIVED speaker=1" "$client_log" && \
+       [[ $(grep -c "PLAYTEST_LOCAL_CHAT_RECEIVED speaker=" "$client_log") -ge 2 ]] && \
+       grep -q "PLAYTEST_PLAYER_SPAWNED peer=1" "$client_log" && \
+       grep -q "PLAYTEST_PLAYER_SPAWNED peer=1 job=20 role=Engineer" "$client_log" && \
+       grep -Eq "PLAYTEST_PLAYER_SPAWNED peer=[0-9]+ job=2 role=Assistant count=2" "$client_log" && \
+       grep -q "PLAYTEST_CLIENT_POSITION peer=" "$host_log" && \
+       grep -q "PLAYTEST_REMOTE_MOVE peer=" "$client_log"; then
+    ready=1
+  fi
+
+  if (( ready )); then
     wait "$client_pid"
     client_pid=""
     wait "$host_pid"
@@ -78,7 +107,11 @@ for _ in $(seq 1 100); do
       echo "Godot reported a runtime error. Logs: $log_dir" >&2
       exit 1
     fi
-    echo "MULTIPLAYER_SMOKE_OK: shared shift started, distinct roles spawned, local speech routed, and movement replicated"
+    if [[ "$smoke_mode" == "--interactions" ]]; then
+      echo "MULTIPLAYER_INTERACTION_SMOKE_OK: remote peer picked up, used, and dropped the shared wrench; snapshots replicated"
+    else
+      echo "MULTIPLAYER_SMOKE_OK: shared shift started, distinct roles spawned, local speech routed, and movement replicated"
+    fi
     echo "Logs: $log_dir"
     exit 0
   fi
@@ -92,5 +125,5 @@ for _ in $(seq 1 100); do
 done
 
 cat "$host_log" "$client_log"
-echo "Two-peer movement smoke timed out. Logs: $log_dir" >&2
+echo "Two-peer $smoke_mode smoke timed out. Logs: $log_dir" >&2
 exit 1

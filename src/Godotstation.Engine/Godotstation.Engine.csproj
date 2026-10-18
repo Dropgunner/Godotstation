@@ -1,11 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Godotstation.Engine — the headless simulation core.
+    Godotstation.Engine — the headless simulation core. It may depend on the
+    engine-independent Godotstation.Common contracts, but never on Godot or Unity.
 
-    CARMACK RULE 1: This assembly references NOTHING but the BCL.
-    No Godot. No Unity. No Mirror. If a PackageReference ever appears in this
-    file, the build is wrong, not the rule.
+    No Godot. No Unity. No Mirror. Gameplay rules remain runnable without the editor.
   -->
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -15,5 +14,9 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <RootNamespace>Godotstation.Engine</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Godotstation.Common/Godotstation.Common.csproj" />
+  </ItemGroup>
 
 </Project>
