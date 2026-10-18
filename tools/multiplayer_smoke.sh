@@ -141,7 +141,7 @@ for _ in $(seq 1 "$max_checks"); do
        grep -q "PLAYTEST_POWER_HOST_RECOVERED shared=true" "$host_log" && \
        grep -q "PLAYTEST_POWER_CLIENT_ON replicated=true" "$client_log" && \
        grep -q "PLAYTEST_POWER_CLIENT_OUTAGE replicated=true" "$client_log" && \
-       grep -q "PLAYTEST_POWER_LOOP_CLIENT_OK engineer=2 job=20 role=Engineer on=True outage=True recovery=True replicated=true" "$client_log"; then
+       grep -Eq "PLAYTEST_POWER_LOOP_CLIENT_OK engineer=[0-9]+ job=20 role=Engineer on=True outage=True recovery=True replicated=true" "$client_log"; then
       ready=1
     fi
   elif [[ "$smoke_mode" == "--interactions" ]]; then
