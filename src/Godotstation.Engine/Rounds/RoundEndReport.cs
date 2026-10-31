@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
+using Godotstation.Engine.Entities;
 
 namespace Godotstation.Engine.Rounds;
 
@@ -36,6 +38,25 @@ public sealed class RoundEndReport
     public bool EngineeringAirlockOpen { get; }
     public bool GirderPlated { get; }
     public int MetalSheetsRemaining { get; }
+
+    /// <summary>Reads the tracked facts from the station's replicated entities by kind.</summary>
+    public static RoundEndReport Create(int roundId, double durationSeconds, IEnumerable<string> crewRoles,
+        IEnumerable<StationEntityState> station)
+    {
+        ArgumentNullException.ThrowIfNull(station);
+        List<StationEntityState> states = station.ToList();
+        bool Any(string kind, string field) => states.Any(state => state.Kind == kind && state.Flag(field));
+        return Create(roundId, durationSeconds, crewRoles,
+            Any(StationEntityKind.FuelGenerator, StationEntityField.Running),
+            Any(StationEntityKind.PowerStorage, StationEntityField.OutputEnabled),
+            Any(StationEntityKind.ApcLamp, StationEntityField.Powered),
+            states.Where(state => state.Kind == StationEntityKind.PowerStorage)
+                .Sum(state => state.Get(StationEntityField.StoredEnergy)),
+            Any(StationEntityKind.EngineeringAirlock, StationEntityField.Open),
+            Any(StationEntityKind.Girder, StationEntityField.Plated),
+            states.Where(state => state.Kind == StationEntityKind.MetalSheets)
+                .Sum(state => state.Count(StationEntityField.Amount)));
+    }
 
     public static RoundEndReport Create(int roundId, double durationSeconds, IEnumerable<string> crewRoles,
         bool generatorRunning, bool powerOutputEnabled, bool devicePowered, double storedEnergy,
