@@ -288,6 +288,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         };
         if (target == null) return false;
 
+        member.CurrentIntent = intent;
         if (!dispatcher.TryResolveClick(member, member.ActiveHandItem, target,
                 target.WorldPosition, intent, isAltClick, NetworkSide.Server)) return false;
         Changed();
@@ -414,7 +415,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         public bool HasTelekinesis => false;
         public bool IsAlive => true;
         public IInteractable? ActiveHandItem => ActiveHandSlot.Item as IInteractable;
-        public Intent CurrentIntent => Intent.Help;
+        public Intent CurrentIntent { get; set; } = Intent.Help;
         public PlayerEntity InteractionPlayer { get; }
     }
 
