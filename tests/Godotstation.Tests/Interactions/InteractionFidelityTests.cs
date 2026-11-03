@@ -438,13 +438,11 @@ namespace Godotstation.Tests.Interactions
 		#endregion
 
 		// =====================================================================
-		#region FC-9: The hand's item gets first refusal — deferred
+		#region FC-9: The hand's item gets first refusal
 
-		[Fact(Skip = "Wave 2: component resolution order lives in the dispatch chain (InteractionUtils), " +
-		             "sources not yet ported. Clause remains binding; see amendment A7.")]
-		public void Fc9_HeldItemHandlerRunsBeforeTargetHandler_FirstAcceptConsumes()
-		{
-		}
+		// Covered by DispatchOrderTests now that the dispatch chain is ported:
+		// HeldItemBeatsNonFirstTarget proves the held item's handler runs first and
+		// its accept consumes the click; the fall-through cases cover refusal.
 
 		#endregion
 

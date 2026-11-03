@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 godot_bin="${GODOT_BIN:-/Applications/Godot_mono.app/Contents/MacOS/Godot}"
 playtest_app="${PLAYTEST_APP:-}"
-log_dir="$(mktemp -d /private/tmp/godotstation-multiplayer-smoke.XXXXXX)"
+log_dir="$(mktemp -d "${TMPDIR:-/tmp}/godotstation-multiplayer-smoke.XXXXXX")"
 host_log="$log_dir/host.log"
 client_log="$log_dir/client.log"
 host_pid=""

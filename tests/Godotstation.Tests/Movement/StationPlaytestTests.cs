@@ -37,6 +37,30 @@ namespace Godotstation.Tests.Movement
         }
 
         [Fact]
+        public void LateJoiner_AfterDisconnect_SpawnsOnAFreeTile()
+        {
+            var spawns = StationPlaytestLayout.Spawns;
+            // Host, A and B joined at spawns 0, 1 and 2; A then disconnected.
+            var stillConnected = new[] { spawns[0], spawns[2] };
+
+            Assert.True(StationPlaytestLayout.TryFindFreeSpawn(stillConnected, out var spawn));
+            Assert.Equal(spawns[1], spawn);
+            Assert.DoesNotContain(spawn, stillConnected);
+        }
+
+        [Fact]
+        public void FreeSpawn_IgnoresSpawnsVacatedByMovementAndRefusesWhenAllAreOccupied()
+        {
+            var spawns = StationPlaytestLayout.Spawns;
+            var movedOff = new[] { new System.Numerics.Vector2(-3.4f, 0.2f), spawns[1], spawns[2], spawns[3] };
+            Assert.True(StationPlaytestLayout.TryFindFreeSpawn(movedOff, out var spawn));
+            Assert.Equal(spawns[0], spawn);
+
+            var nearlyOnSpawns = new[] { spawns[0] + new System.Numerics.Vector2(0.3f, -0.2f), spawns[1], spawns[2], spawns[3] };
+            Assert.False(StationPlaytestLayout.TryFindFreeSpawn(nearlyOnSpawns, out _));
+        }
+
+        [Fact]
         public void Disconnect_RemovesNonPushablePlayerObstacle()
         {
             var map = new CollisionMap();

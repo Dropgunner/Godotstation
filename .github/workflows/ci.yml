@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  preflight-and-smokes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "1"
+      GODOT_VERSION: 4.4.1-stable
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Preflight (boundaries, build, tests)
+        run: bash tools/preflight.sh
+
+      - name: Install Godot .NET
+        run: |
+          curl -sSLf -o "$RUNNER_TEMP/godot.zip" \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_mono_linux_x86_64.zip"
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP"
+          echo "GODOT_BIN=$RUNNER_TEMP/Godot_v${GODOT_VERSION}_mono_linux_x86_64/Godot_v${GODOT_VERSION}_mono_linux.x86_64" >> "$GITHUB_ENV"
+
+      - name: Import project and build C# assembly
+        run: |
+          "$GODOT_BIN" --headless --path game --import
+          "$GODOT_BIN" --headless --path game --build-solutions --quit
+
+      # One mode at a time: the smokes share UDP port 7777.
+      - name: Two-client smokes
+        run: |
+          for mode in movement --interactions --construction --engineering-access --round-restart --power-loop; do
+            echo "::group::smoke $mode"
+            bash tools/multiplayer_smoke.sh "$mode"
+            echo "::endgroup::"
+          done
