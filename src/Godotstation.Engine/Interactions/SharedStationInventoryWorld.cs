@@ -5,6 +5,7 @@ using System.Numerics;
 using Godotstation.Common.Interactions;
 using Godotstation.Engine.Access;
 using Godotstation.Engine.Construction;
+using Godotstation.Engine.Entities;
 using Godotstation.Engine.Inventory;
 using Godotstation.Engine.Movement;
 using Godotstation.Engine.Power;
@@ -16,93 +17,119 @@ namespace Godotstation.Engine.Interactions;
 
 /// <summary>
 /// Server-side playtest world that routes hand interactions through the shared
-/// interaction dispatcher and the real inventory move system.
+/// interaction dispatcher and the real inventory move system. Station objects
+/// are spawned from <see cref="StationEntityCatalog"/> by kind and replicated
+/// as <see cref="StationEntityState"/> through one change feed.
 /// </summary>
 public sealed class SharedStationInventoryWorld : IInventoryWorld
 {
-    public const int WrenchId = 9001;
-    public const int FixtureId = 9002;
-    public const int MetalSheetsId = 9003;
-    public const int GirderId = 9004;
-    public const int EngineeringAirlockId = 9005;
-    public const int GeneratorFuelId = 9006;
-    public const int GeneratorId = 9007;
-    public const int PowerStorageId = 9008;
-    public const int PoweredLampId = 9009;
-
     private readonly Dictionary<int, CrewMember> crew = new();
     private readonly Dictionary<ItemStorage, CrewMember> crewByStorage = new();
     private readonly InventorySystem inventory;
     private readonly InteractionDispatcher dispatcher;
     private readonly IReachabilityMap reachabilityMap;
-    private readonly SharedWorldItem wrench;
-    private readonly SharedWorldItem metalSheets;
-    private readonly SharedWorldFixture fixture;
-    private readonly SharedWorldFixture girder;
-    private readonly EngineeringAccessDoor engineeringAirlock;
-    private readonly SharedWorldItem generatorFuel;
-    private readonly SharedWorldFixture generator;
-    private readonly SharedWorldFixture powerStorage;
-    private readonly SharedWorldFixture poweredLamp;
+    private readonly List<StationEntity> entityOrder = new();
+    private readonly Dictionary<int, StationEntity> entities = new();
+    private readonly Dictionary<int, StationEntityState> lastPublished = new();
     private readonly StationPowerLoop powerLoop = new();
-    private readonly GirderPlatingTask platingTask = new();
-    private Vector2 girderPosition = new(2, 2);
-    private bool girderPlated;
-    private Vector2 fixturePosition = new(0, 2);
-    private bool fixtureAnchored = true;
 
-    public SharedStationInventoryWorld(IReachabilityMap? reachabilityMap = null)
+    public SharedStationInventoryWorld(IReachabilityMap? reachabilityMap = null,
+        IReadOnlyList<StationEntitySpawn>? spawns = null)
     {
         this.reachabilityMap = reachabilityMap ?? UnobstructedMap.Instance;
         inventory = new InventorySystem(this);
-        inventory.OnMovePerformed += _ => Changed();
+        inventory.OnMovePerformed += _ => PublishChanges();
         dispatcher = new InteractionDispatcher(this.reachabilityMap);
-        wrench = new SharedWorldItem(this, WrenchId, "wrench", new Vector2(-1, 2));
-        metalSheets = new SharedWorldItem(this, MetalSheetsId, "metal sheets", new Vector2(1, 2), new SharedMetalStack(2));
-        fixture = new SharedWorldFixture(FixtureId, "service cart", fixturePosition);
-        girder = new SharedWorldFixture(GirderId, "girder", girderPosition);
-        engineeringAirlock = new EngineeringAccessDoor(EngineeringAirlockId, new Vector2(8, -4));
-        generatorFuel = new SharedWorldItem(this, GeneratorFuelId, "generator fuel", new Vector2(7, -7), new SharedFuelStack(3));
-        generator = new SharedWorldFixture(GeneratorId, "fuel generator", new Vector2(8, -7));
-        powerStorage = new SharedWorldFixture(PowerStorageId, "power storage", new Vector2(9, -7));
-        poweredLamp = new SharedWorldFixture(PoweredLampId, "APC-powered lamp", new Vector2(10, -7));
-        dispatcher.RegisterHandler(new WrenchPickupHandler(this, wrench));
-        dispatcher.RegisterHandler(new WrenchPickupHandler(this, metalSheets));
-        dispatcher.RegisterHandler(new WrenchPickupHandler(this, generatorFuel));
-        dispatcher.RegisterHandler(new FixtureWrenchHandler(this, fixture, wrench));
-        dispatcher.RegisterHandler(new GirderPlatingHandler(this, girder, metalSheets));
-        dispatcher.RegisterHandler(new EngineeringDoorHandler(this, engineeringAirlock));
-        dispatcher.RegisterHandler(new GeneratorHandler(this, generator, generatorFuel));
-        dispatcher.RegisterHandler(new PowerStorageHandler(this, powerStorage));
+        foreach (StationEntitySpawn spawn in spawns ?? StationEntityCatalog.Playtest)
+            Spawn(spawn);
+        foreach (StationEntityState state in CaptureAll())
+            lastPublished[state.Id] = state;
     }
 
-    public event Action<SharedStationWorldSnapshot>? StateChanged;
-    public event Action<bool>? EngineeringAirlockStateChanged;
-    public event Action<StationPowerSnapshot>? PowerStateChanged;
+    /// <summary>Raised with only the entities whose replicated state differs from the last publish.</summary>
+    public event Action<IReadOnlyList<StationEntityState>>? EntitiesChanged;
 
-    public StationPowerSnapshot PowerSnapshot
+    /// <summary>Door tiles whose passability follows their entity's state.</summary>
+    public IEnumerable<(int X, int Y, IPassable Passable)> PassableTiles =>
+        entityOrder.OfType<AccessDoor>().Select(door =>
+            ((int)MathF.Round(door.WorldPosition.X), (int)MathF.Round(door.WorldPosition.Y), (IPassable)door));
+
+    public IReadOnlyList<StationEntityState> CaptureAll() => entityOrder.ConvertAll(entity => entity.Capture());
+
+    public StationEntityState? GetState(int entityId) =>
+        entities.TryGetValue(entityId, out StationEntity? entity) ? entity.Capture() : null;
+
+    /// <summary>The replicated starting state of a station, for clients that have not received a snapshot yet.</summary>
+    public static IReadOnlyList<StationEntityState> InitialStates(IReadOnlyList<StationEntitySpawn>? spawns = null) =>
+        new SharedStationInventoryWorld(spawns: spawns).CaptureAll();
+
+    /// <summary>Publishes every entity whose state changed since the previous publish.</summary>
+    public void PublishChanges()
     {
-        get
+        List<StationEntityState>? changed = null;
+        foreach (StationEntity entity in entityOrder)
         {
-            CrewMember? owner = generatorFuel.ItemSlot == null ? null : GetCrewForStorage(generatorFuel.ItemSlot.ItemStorage);
-            return new StationPowerSnapshot(owner?.PeerId, owner?.Position ?? generatorFuel.PositionInWorld,
-                generatorFuel.IsInWorld || generatorFuel.ItemSlot != null ? generatorFuel.Stackable?.Amount ?? 0 : 0,
-                powerLoop.GeneratorRunning, powerLoop.FuelSeconds,
-                powerLoop.StoredEnergy, powerLoop.OutputEnabled, powerLoop.DevicePowered);
+            StationEntityState state = entity.Capture();
+            if (lastPublished.TryGetValue(state.Id, out StationEntityState? previous) && previous.Equals(state))
+                continue;
+            lastPublished[state.Id] = state;
+            (changed ??= new List<StationEntityState>()).Add(state);
         }
+        if (changed != null) EntitiesChanged?.Invoke(changed);
     }
 
-    public IPassable EngineeringAirlockPassability => engineeringAirlock;
-    public bool IsEngineeringAirlockOpen => engineeringAirlock.IsOpen;
-
-    public SharedStationWorldSnapshot Snapshot
+    private void Spawn(StationEntitySpawn spawn)
     {
-        get
+        if (entities.ContainsKey(spawn.Id))
+            throw new ArgumentException($"Duplicate station entity id {spawn.Id}.", nameof(spawn));
+        StationEntity entity;
+        switch (spawn.Kind)
         {
-            CrewMember? owner = wrench.ItemSlot == null ? null : GetCrewForStorage(wrench.ItemSlot.ItemStorage);
-            Vector2 wrenchPosition = owner?.Position ?? wrench.PositionInWorld;
-            return new SharedStationWorldSnapshot(owner?.PeerId, wrenchPosition, fixturePosition, fixtureAnchored);
+            case StationEntityKind.Wrench:
+                entity = new ItemEntity(this, spawn, "wrench");
+                break;
+            case StationEntityKind.MetalSheets:
+                entity = new ItemEntity(this, spawn, "metal sheets", new SharedStack(spawn.Kind, spawn.Amount, "metal sheet"));
+                break;
+            case StationEntityKind.GeneratorFuel:
+                entity = new ItemEntity(this, spawn, "generator fuel", new SharedStack(spawn.Kind, spawn.Amount, "generator fuel"));
+                break;
+            case StationEntityKind.ServiceCart:
+                var cart = new ServiceCart(spawn);
+                dispatcher.RegisterHandler(new CartWrenchHandler(cart));
+                entity = cart;
+                break;
+            case StationEntityKind.Girder:
+                var girder = new Girder(spawn);
+                dispatcher.RegisterHandler(new GirderPlatingHandler(this, girder));
+                entity = girder;
+                break;
+            case StationEntityKind.EngineeringAirlock:
+                var door = new AccessDoor(spawn, "engineering airlock", StationClearance.Engine);
+                dispatcher.RegisterHandler(new AccessDoorHandler(this, door));
+                entity = door;
+                break;
+            case StationEntityKind.FuelGenerator:
+                var generator = new PowerNetworkEntity(spawn, "fuel generator", powerLoop);
+                dispatcher.RegisterHandler(new GeneratorHandler(this, generator));
+                entity = generator;
+                break;
+            case StationEntityKind.PowerStorage:
+                var storage = new PowerNetworkEntity(spawn, "power storage", powerLoop);
+                dispatcher.RegisterHandler(new PowerStorageHandler(this, storage));
+                entity = storage;
+                break;
+            case StationEntityKind.ApcLamp:
+                entity = new PowerNetworkEntity(spawn, "APC-powered lamp", powerLoop);
+                break;
+            default:
+                throw new ArgumentException($"Unknown station entity kind '{spawn.Kind}'.", nameof(spawn));
         }
+
+        if (entity is ItemEntity item)
+            dispatcher.RegisterHandler(new ItemPickupHandler(this, item));
+        entities.Add(entity.Id, entity);
+        entityOrder.Add(entity);
     }
 
     public bool AddActor(int peerId, Vector2 position) =>
@@ -164,6 +191,11 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         return false;
     }
 
+    /// <summary>True when the target is an access-restricted door this crew member lacks clearance for.</summary>
+    public bool IsAccessDenied(int peerId, int targetId) =>
+        entities.TryGetValue(targetId, out StationEntity? entity) && entity is AccessDoor door &&
+        !HasClearance(peerId, door.RequiredClearance);
+
     public string GetCrewLoadoutSummary(int peerId)
     {
         if (!crew.TryGetValue(peerId, out CrewMember? member)) return string.Empty;
@@ -186,17 +218,14 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
     public bool RemoveActor(int peerId)
     {
         if (!crew.TryGetValue(peerId, out CrewMember? member)) return false;
-        if (wrench.ItemSlot?.ItemStorage == member.Inventory)
-            inventory.ServerDrop(wrench.ItemSlot);
-        if (metalSheets.ItemSlot?.ItemStorage == member.Inventory)
-            inventory.ServerDrop(metalSheets.ItemSlot);
-        if (generatorFuel.ItemSlot?.ItemStorage == member.Inventory)
-            inventory.ServerDrop(generatorFuel.ItemSlot);
-        platingTask.Cancel(peerId);
+        foreach (ItemEntity item in entityOrder.OfType<ItemEntity>())
+            if (item.ItemSlot?.ItemStorage == member.Inventory)
+                inventory.ServerDrop(item.ItemSlot);
+        foreach (Girder girder in entityOrder.OfType<Girder>())
+            girder.Task.Cancel(peerId);
         crew.Remove(peerId);
         crewByStorage.Remove(member.Inventory);
-        PublishConstructionState();
-        PublishPowerState();
+        PublishChanges();
         return true;
     }
 
@@ -208,13 +237,14 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         return true;
     }
 
-    public bool SetFixturePosition(Vector2 position)
+    /// <summary>Moves a fixture that physics displaced, such as a pushed cart. Items move only through inventory.</summary>
+    public bool SetEntityPosition(int entityId, Vector2 position)
     {
-        if (!IsFinite(position)) return false;
-        if (fixturePosition == position) return true;
-        fixturePosition = position;
-        fixture.PlaceAt(position);
-        Changed();
+        if (!IsFinite(position) || !entities.TryGetValue(entityId, out StationEntity? entity) || entity is ItemEntity)
+            return false;
+        if (entity.WorldPosition == position) return true;
+        entity.PlaceAt(position);
+        PublishChanges();
         return true;
     }
 
@@ -237,128 +267,78 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         return member.Inventory.GetNamedItemSlot(hand)?.Item?.Name ?? string.Empty;
     }
 
-    public StationConstructionSnapshot ConstructionSnapshot
+    /// <summary>Advance this crew member's server-owned construction work and recheck its live prerequisites.</summary>
+    public void AdvanceConstruction(int peerId, double elapsedSeconds)
     {
-        get
+        if (!crew.TryGetValue(peerId, out CrewMember? member)) return;
+        foreach (Girder girder in entityOrder.OfType<Girder>())
         {
-            CrewMember? owner = metalSheets.ItemSlot == null ? null : GetCrewForStorage(metalSheets.ItemSlot.ItemStorage);
-            return new StationConstructionSnapshot(owner?.PeerId, owner?.Position ?? metalSheets.PositionInWorld,
-                girderPlated ? 0 : metalSheets.Stackable?.Amount ?? 0, girderPosition, girderPlated, platingTask.WorkerPeerId,
-                platingTask.ProgressSeconds);
+            if (girder.Task.WorkerPeerId != peerId) continue;
+            ItemEntity? sheets = member.ActiveHandSlot.Item is ItemEntity { Kind: StationEntityKind.MetalSheets } held
+                ? held
+                : null;
+            bool stillValid = sheets != null && IsReachable(member, girder);
+            bool completed = girder.Task.Advance(peerId, elapsedSeconds, stillValid, sheets?.Stackable?.Amount ?? 0);
+            if (completed)
+            {
+                if (!inventory.ServerConsume(member.ActiveHandSlot, GirderPlatingTask.RequiredSheets))
+                    throw new InvalidOperationException("Validated girder material could not be consumed.");
+                girder.Plated = true;
+            }
+            if (completed || !girder.Task.WorkerPeerId.HasValue)
+                PublishChanges();
         }
-    }
-
-    public event Action<StationConstructionSnapshot>? ConstructionStateChanged;
-
-    /// <summary>Advance the server-owned construction action and recheck its live prerequisites.</summary>
-    public void AdvanceConstruction(int peerId, double elapsedSeconds, bool publishProgress = true)
-    {
-        if (platingTask.WorkerPeerId != peerId || !crew.TryGetValue(peerId, out CrewMember? member)) return;
-        bool stillValid = ReferenceEquals(member.ActiveHandSlot.Item, metalSheets) &&
-            Validations.IsReachableByPositions(member.Position, girderPosition, true, reachabilityMap,
-                context: girder);
-        bool completed = platingTask.Advance(peerId, elapsedSeconds, stillValid,
-            metalSheets.Stackable?.Amount ?? 0);
-        if (completed)
-        {
-            if (!inventory.ServerConsume(member.ActiveHandSlot, GirderPlatingTask.RequiredSheets))
-                throw new InvalidOperationException("Validated girder material could not be consumed.");
-            girderPlated = true;
-        }
-        if (completed || !platingTask.WorkerPeerId.HasValue || publishProgress)
-            PublishConstructionState();
     }
 
     public bool TryInteract(int senderPeerId, int targetId, Intent intent, bool isAltClick)
     {
         if (!crew.TryGetValue(senderPeerId, out CrewMember? member) ||
             intent is not (Intent.Help or Intent.Disarm or Intent.Grab or Intent.Harm)) return false;
-
-        IInteractable? target = targetId switch
-        {
-            WrenchId when wrench.ItemSlot == null && wrench.IsInWorld => wrench,
-            MetalSheetsId when metalSheets.ItemSlot == null && metalSheets.IsInWorld => metalSheets,
-            GeneratorFuelId when generatorFuel.ItemSlot == null && generatorFuel.IsInWorld => generatorFuel,
-            FixtureId => fixture,
-            GirderId when !girderPlated => girder,
-            EngineeringAirlockId => engineeringAirlock,
-            GeneratorId => generator,
-            PowerStorageId => powerStorage,
-            _ => null,
-        };
-        if (target == null) return false;
+        if (!entities.TryGetValue(targetId, out StationEntity? target) || !target.CanBeTargeted) return false;
 
         if (!dispatcher.TryResolveClick(member, member.ActiveHandItem, target,
                 target.WorldPosition, intent, isAltClick, NetworkSide.Server)) return false;
-        Changed();
-        PublishConstructionState();
-        PublishPowerState();
+        PublishChanges();
         return true;
     }
 
-    /// <summary>Advance authoritative power simulation time on the host only.</summary>
-    public bool AdvancePower(double elapsedSeconds)
-    {
-        bool changed = powerLoop.Advance(elapsedSeconds);
-        if (changed) PublishPowerState();
-        return changed;
-    }
-
-    private bool TryLoadGeneratorFuel(int peerId)
-    {
-        if (!crew.TryGetValue(peerId, out CrewMember? member) ||
-            !ReferenceEquals(member.ActiveHandSlot.Item, generatorFuel) ||
-            generatorFuel.Stackable is not { Amount: > 0 } || !powerLoop.CanLoadFuel(1)) return false;
-        if (!inventory.ServerConsume(member.ActiveHandSlot, 1)) return false;
-        if (!powerLoop.TryLoadFuel(1)) throw new InvalidOperationException("Validated generator fuel could not be loaded.");
-        return true;
-    }
-
-    private bool CanToggleGenerator => powerLoop.GeneratorRunning || powerLoop.FuelSeconds > 0;
-
-    private void PublishPowerState() => PowerStateChanged?.Invoke(PowerSnapshot);
-
-    public bool CanCrewOpenEngineeringAirlock(int peerId) =>
-        HasClearance(peerId, StationClearance.Engine);
+    /// <summary>Advance authoritative power simulation time on the host only. Call <see cref="PublishChanges"/> to replicate it.</summary>
+    public bool AdvancePower(double elapsedSeconds) => powerLoop.Advance(elapsedSeconds);
 
     /// <summary>Drops only the current active-hand item, as the source inventory does.</summary>
     public bool TryDropActiveHand(int senderPeerId)
     {
         if (!crew.TryGetValue(senderPeerId, out CrewMember? member)) return false;
         ItemSlot? activeHand = member.ActiveHandSlot;
-        bool dropped = activeHand.Item != null && inventory.ServerDrop(activeHand);
-        if (dropped) PublishPowerState();
-        return dropped;
-    }
-
-    /// <summary>Compatibility helper for the current playtest's single shared wrench.</summary>
-    public bool TryDropWrench(int senderPeerId)
-    {
-        if (!crew.TryGetValue(senderPeerId, out CrewMember? member) ||
-            !ReferenceEquals(member.ActiveHandSlot.Item, wrench)) return false;
-        return inventory.ServerDrop(member.ActiveHandSlot);
+        return activeHand.Item != null && inventory.ServerDrop(activeHand);
     }
 
     private CrewMember? GetCrewForStorage(ItemStorage storage) =>
         crewByStorage.TryGetValue(storage.GetRootStorage(), out CrewMember? member) ? member : null;
 
-    private bool IsWrenchInActiveHand(int peerId) =>
-        crew.TryGetValue(peerId, out CrewMember? member) && ReferenceEquals(member.ActiveHandSlot.Item, wrench);
+    private bool IsReachable(CrewMember member, StationEntity target) =>
+        Validations.IsReachableByPositions(member.Position, target.WorldPosition, true, reachabilityMap, context: target);
 
-    private void ToggleFixture() => fixtureAnchored = !fixtureAnchored;
-
-    private bool TryStartGirderPlating(int peerId)
+    private bool TryStartGirderPlating(int peerId, Girder girder)
     {
         if (!crew.TryGetValue(peerId, out CrewMember? member) ||
-            !ReferenceEquals(member.ActiveHandSlot.Item, metalSheets))
+            member.ActiveHandSlot.Item is not ItemEntity { Kind: StationEntityKind.MetalSheets } sheets)
             return false;
-        return platingTask.TryStart(peerId, metalSheets.Stackable?.Amount ?? 0,
-            isReachable: Validations.IsReachableByPositions(member.Position, girderPosition, true,
-                reachabilityMap, context: girder));
+        return girder.Task.TryStart(peerId, sheets.Stackable?.Amount ?? 0, isReachable: IsReachable(member, girder));
     }
 
-    private void Changed() => StateChanged?.Invoke(Snapshot);
-    private void PublishConstructionState() => ConstructionStateChanged?.Invoke(ConstructionSnapshot);
+    private bool TryLoadGeneratorFuel(int peerId)
+    {
+        if (!crew.TryGetValue(peerId, out CrewMember? member) ||
+            member.ActiveHandSlot.Item is not ItemEntity { Kind: StationEntityKind.GeneratorFuel } fuel ||
+            fuel.Stackable is not { Amount: > 0 } || !powerLoop.CanLoadFuel(1)) return false;
+        if (!inventory.ServerConsume(member.ActiveHandSlot, 1)) return false;
+        if (!powerLoop.TryLoadFuel(1)) throw new InvalidOperationException("Validated generator fuel could not be loaded.");
+        return true;
+    }
+
+    private bool IsInActiveHand(int peerId, WorldEntity? item) =>
+        item != null && crew.TryGetValue(peerId, out CrewMember? member) && ReferenceEquals(member.ActiveHandSlot.Item, item);
 
     private static bool IsFinite(Vector2 value) => float.IsFinite(value.X) && float.IsFinite(value.Y);
 
@@ -366,17 +346,17 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
 
     public void DisappearFromWorld(IPickupable item)
     {
-        if (item is SharedWorldItem worldItem) worldItem.SetInWorld(false);
+        if (item is ItemEntity worldItem) worldItem.SetInWorld(false);
     }
 
     public void Despawn(IPickupable item)
     {
-        if (item is SharedWorldItem worldItem) worldItem.SetInWorld(false);
+        if (item is ItemEntity worldItem) worldItem.SetInWorld(false);
     }
 
     public void Drop(IPickupable item, ItemSlot fromSlot, Vector2? worldTargetVector)
     {
-        if (item is not SharedWorldItem worldItem) return;
+        if (item is not ItemEntity worldItem) return;
         CrewMember? member = GetCrewForStorage(fromSlot.ItemStorage);
         Vector2 position = member?.Position ?? Vector2.Zero;
         if (worldTargetVector.HasValue) position += worldTargetVector.Value;
@@ -418,20 +398,46 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         public PlayerEntity InteractionPlayer { get; }
     }
 
-    private sealed class SharedWorldItem : WorldEntity, IPickupable, IInteractable
+    /// <summary>Server half of one station entity: interaction target plus its replicated state.</summary>
+    private abstract class StationEntity : WorldEntity, IInteractable
+    {
+        protected StationEntity(StationEntitySpawn spawn, string name)
+        {
+            Id = spawn.Id;
+            Name = name;
+            Kind = spawn.Kind;
+            PlaceAt(spawn.Position);
+        }
+
+        public string Kind { get; }
+        string IInteractable.Id => Name;
+        public virtual Vector2 WorldPosition => AssumedWorldPosServer;
+        public WorldEntity InteractionEntity => this;
+        public virtual bool CanBeTargeted => true;
+        protected virtual int? Holder => null;
+        protected virtual StationEntityFlags Flags => StationEntityFlags.None;
+        protected virtual void WriteFields(Dictionary<string, double> fields) { }
+
+        public StationEntityState Capture()
+        {
+            var fields = new Dictionary<string, double>(StringComparer.Ordinal);
+            WriteFields(fields);
+            StationEntityFlags flags = Flags | (CanBeTargeted ? StationEntityFlags.Targetable : StationEntityFlags.None);
+            return new StationEntityState(Id, Kind, WorldPosition, Holder, flags, fields);
+        }
+    }
+
+    private sealed class ItemEntity : StationEntity, IPickupable
     {
         private readonly SharedStationInventoryWorld world;
         private ItemSlot? itemSlot;
 
-        public SharedWorldItem(SharedStationInventoryWorld world, int id, string name, Vector2 position,
-            IStackable? stackable = null)
+        public ItemEntity(SharedStationInventoryWorld world, StationEntitySpawn spawn, string name,
+            IStackable? stackable = null) : base(spawn, name)
         {
             this.world = world;
-            Id = id;
-            Name = name;
-            PositionInWorld = position;
+            PositionInWorld = spawn.Position;
             Stackable = stackable;
-            PlaceAt(position);
         }
 
         public ItemSlot? ItemSlot => itemSlot;
@@ -442,14 +448,20 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         public float ThrowSpeed => 6f;
         public float ThrowRange => 7f;
         public bool StickyMovement => false;
-        public string InteractionId => Name;
-        string IInteractable.Id => InteractionId;
-        public Vector2 WorldPosition => itemSlot == null
+        public override Vector2 WorldPosition => itemSlot == null
             ? PositionInWorld
             : world.GetCrewForStorage(itemSlot.ItemStorage)?.Position ?? PositionInWorld;
-        public WorldEntity InteractionEntity => this;
         public Vector2 PositionInWorld { get; private set; }
         public bool IsInWorld { get; private set; } = true;
+        private int RemainingAmount => IsInWorld || itemSlot != null ? Stackable?.Amount ?? 0 : 0;
+        public override bool CanBeTargeted => IsInWorld && itemSlot == null && (Stackable == null || RemainingAmount > 0);
+        protected override int? Holder => itemSlot == null ? null : world.GetCrewForStorage(itemSlot.ItemStorage)?.PeerId;
+        protected override StationEntityFlags Flags => StationEntityFlags.Item;
+
+        protected override void WriteFields(Dictionary<string, double> fields)
+        {
+            if (Stackable != null) fields[StationEntityField.Amount] = RemainingAmount;
+        }
 
         public void SetItemSlot(ItemSlot? slot)
         {
@@ -468,40 +480,64 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         }
     }
 
-    private sealed class SharedWorldFixture : WorldEntity, IInteractable
+    private sealed class ServiceCart(StationEntitySpawn spawn) : StationEntity(spawn, "service cart")
     {
-        public SharedWorldFixture(int id, string name, Vector2 position)
-        {
-            Id = id;
-            Name = name;
-            PlaceAt(position);
-        }
-
-        string IInteractable.Id => Name;
-        public Vector2 WorldPosition => AssumedWorldPosServer;
-        public WorldEntity InteractionEntity => this;
+        public bool Anchored { get; set; } = true;
+        protected override StationEntityFlags Flags =>
+            StationEntityFlags.Solid | (Anchored ? StationEntityFlags.None : StationEntityFlags.Pushable);
+        protected override void WriteFields(Dictionary<string, double> fields) =>
+            fields[StationEntityField.Anchored] = Anchored ? 1 : 0;
     }
 
-    private sealed class EngineeringAccessDoor : WorldEntity, IInteractable, IPassable
+    private sealed class Girder(StationEntitySpawn spawn) : StationEntity(spawn, "girder")
     {
-        public EngineeringAccessDoor(int id, Vector2 position)
+        public GirderPlatingTask Task { get; } = new();
+        public bool Plated { get; set; }
+        public override bool CanBeTargeted => !Plated;
+        protected override StationEntityFlags Flags => StationEntityFlags.Solid;
+
+        protected override void WriteFields(Dictionary<string, double> fields)
         {
-            Id = id;
-            Name = "engineering airlock";
-            PlaceAt(position);
+            fields[StationEntityField.Plated] = Plated ? 1 : 0;
+            fields[StationEntityField.Worker] = Task.WorkerPeerId ?? 0;
+            fields[StationEntityField.Progress] = Task.ProgressSeconds;
         }
+    }
 
+    private sealed class AccessDoor(StationEntitySpawn spawn, string name, StationClearance requiredClearance)
+        : StationEntity(spawn, name), IPassable
+    {
+        public StationClearance RequiredClearance { get; } = requiredClearance;
         public bool IsOpen { get; private set; }
-        public string InteractionId => Name;
-        string IInteractable.Id => InteractionId;
-        public Vector2 WorldPosition => AssumedWorldPosServer;
-        public WorldEntity InteractionEntity => this;
         public bool CanPass(PlayerMovementState state) => IsOpen;
+        public void Toggle() => IsOpen = !IsOpen;
+        protected override void WriteFields(Dictionary<string, double> fields) =>
+            fields[StationEntityField.Open] = IsOpen ? 1 : 0;
+    }
 
-        public bool Toggle()
+    /// <summary>A generator, storage unit or powered device on the playtest's single power loop.</summary>
+    private sealed class PowerNetworkEntity(StationEntitySpawn spawn, string name, StationPowerLoop loop)
+        : StationEntity(spawn, name)
+    {
+        public StationPowerLoop Loop { get; } = loop;
+        public override bool CanBeTargeted => Kind != StationEntityKind.ApcLamp;
+
+        protected override void WriteFields(Dictionary<string, double> fields)
         {
-            IsOpen = !IsOpen;
-            return IsOpen;
+            switch (Kind)
+            {
+                case StationEntityKind.FuelGenerator:
+                    fields[StationEntityField.Running] = Loop.GeneratorRunning ? 1 : 0;
+                    fields[StationEntityField.FuelSeconds] = Loop.FuelSeconds;
+                    break;
+                case StationEntityKind.PowerStorage:
+                    fields[StationEntityField.StoredEnergy] = Loop.StoredEnergy;
+                    fields[StationEntityField.OutputEnabled] = Loop.OutputEnabled ? 1 : 0;
+                    break;
+                default:
+                    fields[StationEntityField.Powered] = Loop.DevicePowered ? 1 : 0;
+                    break;
+            }
         }
     }
 
@@ -526,13 +562,15 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         public void SetItemSlot(ItemSlot? slot) => ItemSlot = slot;
     }
 
-    private sealed class SharedMetalStack(int initialAmount) : IStackable
+    /// <summary>A stack that only merges with stacks of the same entity kind.</summary>
+    private sealed class SharedStack(string kind, int initialAmount, string pieceName) : IStackable
     {
+        public string Kind { get; } = kind;
         public int Amount { get; private set; } = initialAmount;
-        public bool CanAccommodate(IPickupable other) => other.Stackable is SharedMetalStack;
+        public bool CanAccommodate(IPickupable other) => other.Stackable is SharedStack stack && stack.Kind == Kind;
         public void ServerCombine(IStackable other)
         {
-            if (other is not SharedMetalStack stack) return;
+            if (other is not SharedStack stack || stack.Kind != Kind) return;
             Amount += stack.Amount;
             stack.Amount = 0;
         }
@@ -544,39 +582,15 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         }
         public IPickupable ServerRemoveOne()
         {
-            if (Amount <= 0) throw new InvalidOperationException("Cannot split an empty metal stack.");
+            if (Amount <= 0) throw new InvalidOperationException($"Cannot split an empty {pieceName} stack.");
             Amount--;
-            return new LooseMetalSheet();
+            return new LooseStackPiece(pieceName);
         }
     }
 
-    private sealed class SharedFuelStack(int initialAmount) : IStackable
+    private sealed class LooseStackPiece(string name) : IPickupable
     {
-        public int Amount { get; private set; } = initialAmount;
-        public bool CanAccommodate(IPickupable other) => other.Stackable is SharedFuelStack;
-        public void ServerCombine(IStackable other)
-        {
-            if (other is not SharedFuelStack stack) return;
-            Amount += stack.Amount;
-            stack.Amount = 0;
-        }
-        public bool ServerConsume(int amountToConsume)
-        {
-            if (amountToConsume <= 0 || amountToConsume > Amount) return false;
-            Amount -= amountToConsume;
-            return true;
-        }
-        public IPickupable ServerRemoveOne()
-        {
-            if (Amount <= 0) throw new InvalidOperationException("Cannot split an empty fuel stack.");
-            Amount--;
-            return new LooseGeneratorFuel();
-        }
-    }
-
-    private sealed class LooseGeneratorFuel : IPickupable
-    {
-        public string Name => "generator fuel";
+        public string Name => name;
         public ItemSlot? ItemSlot { get; private set; }
         public bool IsBuckled => false;
         public IStackable? Stackable => null;
@@ -587,109 +601,6 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         public bool StickyMovement => false;
         public void SetItemSlot(ItemSlot? slot) => ItemSlot = slot;
     }
-
-    private sealed class LooseMetalSheet : IPickupable
-    {
-        public string Name => "metal sheet";
-        public ItemSlot? ItemSlot { get; private set; }
-        public bool IsBuckled => false;
-        public IStackable? Stackable => null;
-        public IEnumerable<ItemStorage> ItemStorages => Array.Empty<ItemStorage>();
-        public IEnumerable<IServerInventoryMove> MoveHooks => Array.Empty<IServerInventoryMove>();
-        public float ThrowSpeed => 6f;
-        public float ThrowRange => 7f;
-        public bool StickyMovement => false;
-        public void SetItemSlot(ItemSlot? slot) => ItemSlot = slot;
-    }
-
-    private sealed class GirderPlatingHandler(SharedStationInventoryWorld world,
-        SharedWorldFixture owner, SharedWorldItem metal)
-        : IOwnedInteractionHandler<HandApply>
-    {
-        public WorldEntity Owner { get; } = owner;
-        public bool IsFirstInteractable => false;
-        public int Priority => 0;
-
-        public bool WillInteract(HandApply interaction, NetworkSide side) =>
-            interaction.Performer != null && interaction.TargetObject == Owner &&
-            ReferenceEquals(interaction.HandObject, metal) && (metal.Stackable?.Amount ?? 0) >= GirderPlatingTask.RequiredSheets &&
-            !world.platingTask.IsComplete && !world.platingTask.WorkerPeerId.HasValue;
-
-        public void ServerPerformInteraction(HandApply interaction)
-        {
-            if (interaction.Performer != null && world.TryStartGirderPlating(interaction.Performer.Id))
-                world.PublishConstructionState();
-        }
-    }
-
-    private sealed class EngineeringDoorHandler(SharedStationInventoryWorld world,
-        EngineeringAccessDoor owner) : IOwnedInteractionHandler<HandApply>
-    {
-        public WorldEntity Owner { get; } = owner;
-        public bool IsFirstInteractable => true;
-        public int Priority => 0;
-
-        public bool WillInteract(HandApply interaction, NetworkSide side) =>
-            side == NetworkSide.Server && interaction.Performer != null &&
-            interaction.TargetObject == Owner && world.CanCrewOpenEngineeringAirlock(interaction.Performer.Id);
-
-        public void ServerPerformInteraction(HandApply interaction)
-        {
-            bool isOpen = owner.Toggle();
-            world.EngineeringAirlockStateChanged?.Invoke(isOpen);
-        }
-    }
-
-    private sealed class GeneratorHandler(SharedStationInventoryWorld world, SharedWorldFixture owner,
-        SharedWorldItem fuel) : IOwnedInteractionHandler<HandApply>
-    {
-        public WorldEntity Owner { get; } = owner;
-        public bool IsFirstInteractable => false;
-        public int Priority => 0;
-
-        public bool WillInteract(HandApply interaction, NetworkSide side)
-        {
-            if (side != NetworkSide.Server || interaction.Performer == null || interaction.TargetObject != Owner)
-                return false;
-            if (ReferenceEquals(interaction.HandObject, fuel))
-                return fuel.Stackable is { Amount: > 0 } && world.powerLoop.CanLoadFuel(1);
-            return interaction.HandObject == null && world.CanToggleGenerator;
-        }
-
-        public void ServerPerformInteraction(HandApply interaction)
-        {
-            if (interaction.Performer == null) return;
-            if (ReferenceEquals(interaction.HandObject, fuel))
-            {
-                if (world.TryLoadGeneratorFuel(interaction.Performer.Id)) world.PublishPowerState();
-            }
-            else if (world.powerLoop.TryToggleGenerator())
-                world.PublishPowerState();
-        }
-    }
-
-    private sealed class PowerStorageHandler(SharedStationInventoryWorld world, SharedWorldFixture owner)
-        : IOwnedInteractionHandler<HandApply>
-    {
-        public WorldEntity Owner { get; } = owner;
-        public bool IsFirstInteractable => false;
-        public int Priority => 0;
-
-        public bool WillInteract(HandApply interaction, NetworkSide side) =>
-            side == NetworkSide.Server && interaction.Performer != null && interaction.TargetObject == Owner &&
-            interaction.HandObject == null;
-
-        public void ServerPerformInteraction(HandApply interaction)
-        {
-            world.powerLoop.ToggleOutput();
-            world.PublishPowerState();
-        }
-    }
-
-    public sealed record StationConstructionSnapshot(int? MetalOwner, Vector2 MetalPosition, int MetalSheetCount,
-        Vector2 GirderPosition, bool GirderPlated, int? WorkerPeerId, double ProgressSeconds);
-    public sealed record StationPowerSnapshot(int? FuelOwner, Vector2 FuelPosition, int FuelStackCount,
-        bool GeneratorRunning, double FuelSeconds, double StoredEnergy, bool OutputEnabled, bool DevicePowered);
 
     private sealed class AcceptAllCapacity : IItemStorageCapacity
     {
@@ -697,7 +608,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         public bool CanFit(IPickupable toCheck, SlotIdentifier inSlot) => true;
     }
 
-    private sealed class WrenchPickupHandler(SharedStationInventoryWorld world, SharedWorldItem owner)
+    private sealed class ItemPickupHandler(SharedStationInventoryWorld world, ItemEntity owner)
         : IOwnedInteractionHandler<HandApply>
     {
         public WorldEntity Owner { get; } = owner;
@@ -716,8 +627,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         }
     }
 
-    private sealed class FixtureWrenchHandler(SharedStationInventoryWorld world,
-        SharedWorldFixture owner, SharedWorldItem wrench) : IOwnedInteractionHandler<HandApply>
+    private sealed class CartWrenchHandler(ServiceCart owner) : IOwnedInteractionHandler<HandApply>
     {
         public WorldEntity Owner { get; } = owner;
         public bool IsFirstInteractable => false;
@@ -725,9 +635,82 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
 
         public bool WillInteract(HandApply interaction, NetworkSide side) =>
             interaction.Performer != null && interaction.TargetObject == Owner &&
-            ReferenceEquals(interaction.HandObject, wrench) &&
-            world.IsWrenchInActiveHand(interaction.Performer.Id);
+            interaction.HandObject is ItemEntity { Kind: StationEntityKind.Wrench };
 
-        public void ServerPerformInteraction(HandApply interaction) => world.ToggleFixture();
+        public void ServerPerformInteraction(HandApply interaction) => owner.Anchored = !owner.Anchored;
+    }
+
+    private sealed class GirderPlatingHandler(SharedStationInventoryWorld world, Girder owner)
+        : IOwnedInteractionHandler<HandApply>
+    {
+        public WorldEntity Owner { get; } = owner;
+        public bool IsFirstInteractable => false;
+        public int Priority => 0;
+
+        public bool WillInteract(HandApply interaction, NetworkSide side) =>
+            interaction.Performer != null && interaction.TargetObject == Owner &&
+            interaction.HandObject is ItemEntity { Kind: StationEntityKind.MetalSheets } sheets &&
+            world.IsInActiveHand(interaction.Performer.Id, sheets) &&
+            (sheets.Stackable?.Amount ?? 0) >= GirderPlatingTask.RequiredSheets &&
+            !owner.Task.IsComplete && !owner.Task.WorkerPeerId.HasValue;
+
+        public void ServerPerformInteraction(HandApply interaction)
+        {
+            if (interaction.Performer != null) world.TryStartGirderPlating(interaction.Performer.Id, owner);
+        }
+    }
+
+    private sealed class AccessDoorHandler(SharedStationInventoryWorld world, AccessDoor owner)
+        : IOwnedInteractionHandler<HandApply>
+    {
+        public WorldEntity Owner { get; } = owner;
+        public bool IsFirstInteractable => true;
+        public int Priority => 0;
+
+        public bool WillInteract(HandApply interaction, NetworkSide side) =>
+            side == NetworkSide.Server && interaction.Performer != null &&
+            interaction.TargetObject == Owner && world.HasClearance(interaction.Performer.Id, owner.RequiredClearance);
+
+        public void ServerPerformInteraction(HandApply interaction) => owner.Toggle();
+    }
+
+    private sealed class GeneratorHandler(SharedStationInventoryWorld world, PowerNetworkEntity owner)
+        : IOwnedInteractionHandler<HandApply>
+    {
+        public WorldEntity Owner { get; } = owner;
+        public bool IsFirstInteractable => false;
+        public int Priority => 0;
+
+        public bool WillInteract(HandApply interaction, NetworkSide side)
+        {
+            if (side != NetworkSide.Server || interaction.Performer == null || interaction.TargetObject != Owner)
+                return false;
+            if (interaction.HandObject is ItemEntity { Kind: StationEntityKind.GeneratorFuel } fuel)
+                return fuel.Stackable is { Amount: > 0 } && owner.Loop.CanLoadFuel(1);
+            return interaction.HandObject == null && (owner.Loop.GeneratorRunning || owner.Loop.FuelSeconds > 0);
+        }
+
+        public void ServerPerformInteraction(HandApply interaction)
+        {
+            if (interaction.Performer == null) return;
+            if (interaction.HandObject is ItemEntity { Kind: StationEntityKind.GeneratorFuel })
+                world.TryLoadGeneratorFuel(interaction.Performer.Id);
+            else
+                owner.Loop.TryToggleGenerator();
+        }
+    }
+
+    private sealed class PowerStorageHandler(SharedStationInventoryWorld world, PowerNetworkEntity owner)
+        : IOwnedInteractionHandler<HandApply>
+    {
+        public WorldEntity Owner { get; } = owner;
+        public bool IsFirstInteractable => false;
+        public int Priority => 0;
+
+        public bool WillInteract(HandApply interaction, NetworkSide side) =>
+            side == NetworkSide.Server && interaction.Performer != null && interaction.TargetObject == Owner &&
+            interaction.HandObject == null && world.crew.ContainsKey(interaction.Performer.Id);
+
+        public void ServerPerformInteraction(HandApply interaction) => owner.Loop.ToggleOutput();
     }
 }

@@ -1,5 +1,6 @@
 using System.Linq;
 using Godotstation.Engine.Access;
+using Godotstation.Engine.Entities;
 using Godotstation.Engine.Interactions;
 using Godotstation.Engine.Inventory;
 using Godotstation.Engine.Movement;
@@ -48,12 +49,14 @@ public sealed class CrewLoadoutTests
         Assert.Contains("Engineer ID card", summary);
 
         bool? observedDoorState = null;
-        world.EngineeringAirlockStateChanged += state => observedDoorState = state;
-        Assert.True(world.TryInteract(7, SharedStationInventoryWorld.EngineeringAirlockId,
+        world.EntitiesChanged += changed => observedDoorState = changed
+            .Single(state => state.Id == StationEntityCatalog.EngineeringAirlockId).Flag(StationEntityField.Open);
+        Assert.True(world.TryInteract(7, StationEntityCatalog.EngineeringAirlockId,
             Godotstation.Common.Interactions.Intent.Help, false));
 
-        Assert.True(world.IsEngineeringAirlockOpen);
-        Assert.True(world.EngineeringAirlockPassability.CanPass(new PlayerMovementState()));
+        Assert.True(world.GetState(StationEntityCatalog.EngineeringAirlockId)!.Flag(StationEntityField.Open));
+        Assert.True(world.PassableTiles.Single().Passable.CanPass(new PlayerMovementState()));
+        Assert.Equal((8, -4), (world.PassableTiles.Single().X, world.PassableTiles.Single().Y));
         Assert.True(observedDoorState);
     }
 
@@ -65,9 +68,10 @@ public sealed class CrewLoadoutTests
             StationCrewJobCatalog.AssistantJobId));
 
         Assert.False(world.HasClearance(8, StationClearance.Engine));
-        Assert.False(world.TryInteract(8, SharedStationInventoryWorld.EngineeringAirlockId,
+        Assert.False(world.TryInteract(8, StationEntityCatalog.EngineeringAirlockId,
             Godotstation.Common.Interactions.Intent.Help, false));
-        Assert.False(world.IsEngineeringAirlockOpen);
-        Assert.False(world.EngineeringAirlockPassability.CanPass(new PlayerMovementState()));
+        Assert.False(world.GetState(StationEntityCatalog.EngineeringAirlockId)!.Flag(StationEntityField.Open));
+        Assert.True(world.IsAccessDenied(8, StationEntityCatalog.EngineeringAirlockId));
+        Assert.False(world.PassableTiles.Single().Passable.CanPass(new PlayerMovementState()));
     }
 }
