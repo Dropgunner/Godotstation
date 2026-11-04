@@ -59,6 +59,7 @@ public partial class StationMapView : Node2D
                 case StationEntityKind.FuelGenerator: DrawGenerator(entity, position); break;
                 case StationEntityKind.PowerStorage: DrawStorage(entity, position); break;
                 case StationEntityKind.ApcLamp: DrawLamp(entity, position); break;
+                case StationEntityKind.Crew: break; // StationCrewAvatar draws crew bodies
                 default: DrawUnknown(entity, position); break;
             }
         }

@@ -60,7 +60,7 @@ namespace Godotstation.Common.Interactions
 			var target = targetObject?.InteractionEntity;
 			player.PlaceAt(performer.WorldPosition);
 			player.HasTelekinesis = performer.HasTelekinesis;
-			player.ConsciousState = performer.IsAlive ? ConsciousState.Conscious : ConsciousState.Dead;
+			player.ConsciousState = performer.ConsciousState;
 			if (hand != null && handObject != null) hand.PlaceAt(handObject.WorldPosition);
 			if (target != null && targetObject != null) target.PlaceAt(targetObject.WorldPosition);
 			var local = new LocalPlayerContext

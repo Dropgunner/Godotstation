@@ -68,6 +68,17 @@ public partial class StationPlaytestController : Node2D
     private bool smokePowerHostSawOn;
     private bool smokePowerHostSawOutage;
     private string activeHandItemName = string.Empty;
+    private Label vitalsLabel = null!;
+    private Intent localIntent = Intent.Help;
+    private readonly HashSet<int> movementRefusalLogged = new();
+    private readonly HashSet<int> interactionRefusalLogged = new();
+    private ulong smokeSurvivalNextHitMsec;
+    private int smokeSurvivalHits;
+    private bool smokeSurvivalClientSawUnconscious;
+    private bool smokeSurvivalClientSawDead;
+    private bool smokeSurvivalClientRequestsSent;
+    private ulong smokeSurvivalClientMoveUntilMsec;
+    private bool smokeSurvivalCompleted;
     private bool localRoundStarted;
     private string connectionStatus = "Connecting…";
     private string hostAddress = "LAN IP unavailable";
@@ -122,6 +133,9 @@ public partial class StationPlaytestController : Node2D
         if (IsInstanceValid(roundEndReportDialog)) roundEndReportDialog.Hide();
         activeHandLabel.Text = "Active hand: rightHand · empty";
         loadoutLabel.Text = "Crew loadout: awaiting role spawn";
+        movementRefusalLogged.Clear();
+        interactionRefusalLogged.Clear();
+        UpdateVitalsLabel();
         chatLog.Clear();
     }
 
@@ -143,6 +157,7 @@ public partial class StationPlaytestController : Node2D
         DriveSmokeConstruction();
         DriveSmokeEngineeringAccess();
         DriveSmokePowerLoop();
+        DriveSmokeSurvival();
         var direction = ReadLocalInput();
 
         if (multiplayer.IsServer())
@@ -242,7 +257,7 @@ public partial class StationPlaytestController : Node2D
         RefreshStatus();
         if (PlaytestLaunchOptions.SmokeMove || PlaytestLaunchOptions.SmokeInteractions ||
             PlaytestLaunchOptions.SmokeConstruction || PlaytestLaunchOptions.SmokeEngineeringAccess ||
-            PlaytestLaunchOptions.SmokePowerLoop)
+            PlaytestLaunchOptions.SmokePowerLoop || PlaytestLaunchOptions.SmokeSurvival)
             CallDeferred(nameof(StartShift));
     }
 
@@ -317,6 +332,8 @@ public partial class StationPlaytestController : Node2D
             ? new Vector2(8f, -3f)
             : PlaytestLaunchOptions.SmokePowerLoop
             ? new Vector2(8f, -6f)
+            : PlaytestLaunchOptions.SmokeSurvival
+            ? new Vector2(0f, 1f)
             : new Vector2(spawn.X, spawn.Y);
         AddPlayer(localPeerId, assignedJob, hostSpawn);
         shiftStartedAtMsec = Time.GetTicksMsec();
@@ -494,7 +511,7 @@ public partial class StationPlaytestController : Node2D
             ? new Vector2(8f, -7f)
             : PlaytestLaunchOptions.SmokeConstruction
             ? new Vector2(1f, 1f)
-            : PlaytestLaunchOptions.SmokeInteractions
+            : PlaytestLaunchOptions.SmokeInteractions || PlaytestLaunchOptions.SmokeSurvival
             ? new Vector2(-1f, 1f)
             : new Vector2(spawnPoint.X, spawnPoint.Y);
         foreach (PlayerRuntime existing in players.Values)
@@ -671,9 +688,21 @@ public partial class StationPlaytestController : Node2D
         if (!MovementCommandAuthorization.IsValid(ownerPeerId, senderPeerId, deltaX, deltaY))
             return;
         if (!players.TryGetValue(ownerPeerId, out PlayerRuntime? player)) return;
+        if (!sharedInteractionWorld.CanActorMove(ownerPeerId))
+        {
+            // FC-SC-5: the server refuses movement from unconscious or dead crew; the engine decides.
+            player.DeltaX = 0;
+            player.DeltaY = 0;
+            if ((deltaX != 0 || deltaY != 0) && movementRefusalLogged.Add(ownerPeerId))
+                GD.Print($"PLAYTEST_MOVE_REFUSED peer={ownerPeerId} conscious={ConsciousStateOf(ownerPeerId)}");
+            return;
+        }
         player.DeltaX = deltaX;
         player.DeltaY = deltaY;
     }
+
+    private string ConsciousStateOf(int peerId) =>
+        (sharedInteractionWorld.GetCrewHealth(peerId)?.ConsciousState ?? ConsciousState.Conscious).ToString();
 
     private Vector2I ReadLocalInput()
     {
@@ -687,6 +716,8 @@ public partial class StationPlaytestController : Node2D
             if (smokeMoveStarted && Time.GetTicksMsec() < smokeMoveUntilMsec)
                 return Vector2I.Right;
         }
+        if (PlaytestLaunchOptions.SmokeSurvival && Time.GetTicksMsec() < smokeSurvivalClientMoveUntilMsec)
+            return Vector2I.Right;
 
         Vector2 direction = Godot.Input.GetVector("move_left", "move_right", "move_up", "move_down");
         return new Vector2I(Mathf.Sign(direction.X), Mathf.Sign(direction.Y));
@@ -712,6 +743,21 @@ public partial class StationPlaytestController : Node2D
             return;
         }
 
+        if (inputEvent is InputEventKey { Pressed: true, Echo: false } intentKey &&
+            intentKey.Keycode is Key.Key1 or Key.Key2 or Key.Key3 or Key.Key4)
+        {
+            // Unitystation KeybindManager defaults: 1 Help, 2 Disarm, 3 Grab, 4 Harm.
+            localIntent = intentKey.Keycode switch
+            {
+                Key.Key2 => Intent.Disarm,
+                Key.Key3 => Intent.Grab,
+                Key.Key4 => Intent.Harm,
+                _ => Intent.Help,
+            };
+            UpdateVitalsLabel();
+            return;
+        }
+
         if (inputEvent is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Q } &&
             localRoundStarted && players.ContainsKey(GetMultiplayer().GetUniqueId()))
         {
@@ -728,13 +774,35 @@ public partial class StationPlaytestController : Node2D
         Vector2 clickPosition = GetGlobalMousePosition();
         int? targetId = replicatedEntities.FindNearestTarget(
             new System.Numerics.Vector2(clickPosition.X, clickPosition.Y), 0.7f);
-        if (targetId is null) return;
+        if (targetId is null || targetId == StationEntityCatalog.CrewEntityId(localPeerId)) return;
+        if (!LocalCrewCanAct())
+        {
+            // Client-side hint only; the server refuses the same request through FC-4 regardless.
+            SetStatus($"You are {LocalConsciousState().ToString().ToLowerInvariant()} and cannot act.");
+            return;
+        }
 
         bool altClick = click.AltPressed;
         if (GetMultiplayer().IsServer())
-            ResolveSharedInteraction(localPeerId, targetId.Value, (int)Intent.Help, altClick);
+            ResolveSharedInteraction(localPeerId, targetId.Value, (int)localIntent, altClick);
         else
-            RpcId(1, nameof(RequestSharedInteraction), localRoundId, targetId.Value, (int)Intent.Help, altClick);
+            RpcId(1, nameof(RequestSharedInteraction), localRoundId, targetId.Value, (int)localIntent, altClick);
+    }
+
+    private ConsciousState LocalConsciousState() =>
+        replicatedEntities.TryGet(StationEntityCatalog.CrewEntityId(localPeerId), out StationEntityState? body)
+            ? (ConsciousState)body.Count(StationEntityField.Conscious)
+            : ConsciousState.Conscious;
+
+    private bool LocalCrewCanAct() => LocalConsciousState() is ConsciousState.Conscious or ConsciousState.BarelyConscious;
+
+    private void UpdateVitalsLabel()
+    {
+        if (!IsInstanceValid(vitalsLabel)) return;
+        double brute = replicatedEntities.TryGet(StationEntityCatalog.CrewEntityId(localPeerId), out StationEntityState? body)
+            ? body.Get(StationEntityField.Brute)
+            : 0;
+        vitalsLabel.Text = $"Vitals: {LocalConsciousState()} · brute {brute:0}/{Godotstation.Engine.Health.CrewHealthRules.MaxHealth:0} · intent {localIntent.ToString().ToUpperInvariant()} (keys 1-4)";
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -1025,6 +1093,9 @@ public partial class StationPlaytestController : Node2D
             bool accessDenied = sharedInteractionWorld.IsAccessDenied(senderId, targetId);
             if (GetMultiplayer().IsServer())
                 GD.Print($"PLAYTEST_INTERACTION_REJECTED peer={senderId} target={targetId} active_hand={sharedInteractionWorld.GetHandItemName(senderId, sharedInteractionWorld.GetActiveHand(senderId) ?? Godotstation.Engine.Inventory.NamedSlot.rightHand)}");
+            if (GetMultiplayer().IsServer() && !sharedInteractionWorld.CanActorMove(senderId) &&
+                interactionRefusalLogged.Add(senderId))
+                GD.Print($"PLAYTEST_INTERACTION_REFUSED_INCAPACITATED peer={senderId} conscious={ConsciousStateOf(senderId)}");
             if (accessDenied)
             {
                 if (GetMultiplayer().IsServer())
@@ -1100,6 +1171,7 @@ public partial class StationPlaytestController : Node2D
             StationEntityState? previous = replicatedEntities.TryGet(state.Id, out StationEntityState? known) ? known : null;
             bool wasOpen = previous?.Flag(StationEntityField.Open) ?? false;
             bool wasPlated = previous?.Flag(StationEntityField.Plated) ?? false;
+            if (state.Kind == StationEntityKind.Crew) ObserveCrewState(state, previous);
             if (state.Kind == StationEntityKind.Girder && state.Flag(StationEntityField.Plated) && !wasPlated && isServer)
                 GD.Print("PLAYTEST_GIRDER_PLATED host_state=true metal_sheets_remaining=0");
             if (state.Kind == StationEntityKind.EngineeringAirlock && state.Flag(StationEntityField.Open) && !wasOpen)
@@ -1118,6 +1190,66 @@ public partial class StationPlaytestController : Node2D
         SyncEntityObstacles(states);
         stationMapView?.RefreshEntities();
         if (isServer && PlaytestLaunchOptions.SmokePowerLoop) ObserveSmokePowerOnHost();
+    }
+
+    /// <summary>FC-SC-7: every peer applies the replicated crew status to the avatar, HUD and logs.</summary>
+    private void ObserveCrewState(StationEntityState state, StationEntityState? previous)
+    {
+        int peerId = StationEntityCatalog.PeerIdForCrewEntity(state.Id);
+        int conscious = state.Count(StationEntityField.Conscious);
+        if (previous != null && previous.Count(StationEntityField.Conscious) == conscious) return;
+        var consciousState = (ConsciousState)conscious;
+        if (players.TryGetValue(peerId, out PlayerRuntime? player) && player.Avatar is StationCrewAvatar avatar)
+            avatar.SetConsciousState(consciousState);
+        if (previous != null)
+            GD.Print($"PLAYTEST_CREW_STATE peer={peerId} conscious={consciousState} brute={state.Get(StationEntityField.Brute):0}");
+        if (peerId == localPeerId)
+        {
+            UpdateVitalsLabel();
+            if (consciousState is ConsciousState.Unconscious or ConsciousState.Dead)
+                SetStatus($"You are {consciousState.ToString().ToLowerInvariant()}. You cannot move or act until the shift restarts.");
+        }
+        if (PlaytestLaunchOptions.SmokeSurvival && !GetMultiplayer().IsServer() && peerId == localPeerId)
+        {
+            if (consciousState == ConsciousState.Unconscious) smokeSurvivalClientSawUnconscious = true;
+            if (consciousState == ConsciousState.Dead) smokeSurvivalClientSawDead = true;
+        }
+    }
+
+    private void DriveSmokeSurvival()
+    {
+        if (!PlaytestLaunchOptions.SmokeSurvival || !localRoundStarted || players.Count < 2 || smokeSurvivalCompleted) return;
+        ulong now = Time.GetTicksMsec();
+        if (GetMultiplayer().IsServer())
+        {
+            int victim = players.Keys.FirstOrDefault(peerId => peerId != localPeerId);
+            if (victim == 0) return;
+            Godotstation.Engine.Health.CrewHealth? health = sharedInteractionWorld.GetCrewHealth(victim);
+            if (health == null) return;
+            if (!health.IsDead)
+            {
+                if (now < smokeSurvivalNextHitMsec) return;
+                smokeSurvivalNextHitMsec = now + 150;
+                smokeSurvivalHits++;
+                ResolveSharedInteraction(localPeerId, StationEntityCatalog.CrewEntityId(victim), (int)Intent.Harm, false);
+                GD.Print($"PLAYTEST_SURVIVAL_HOST_HIT n={smokeSurvivalHits} brute={health.Brute:0} conscious={health.ConsciousState}");
+                return;
+            }
+            if (movementRefusalLogged.Contains(victim) && interactionRefusalLogged.Contains(victim))
+            {
+                smokeSurvivalCompleted = true;
+                GD.Print($"PLAYTEST_SURVIVAL_HOST_OK hits={smokeSurvivalHits} dead=true move_refused=true click_refused=true");
+            }
+            return;
+        }
+
+        if (!smokeSurvivalClientSawDead || smokeSurvivalClientRequestsSent) return;
+        // The dead peer keeps trying with ordinary requests; the server must refuse both.
+        smokeSurvivalClientRequestsSent = true;
+        smokeSurvivalClientMoveUntilMsec = now + 1500;
+        RpcId(1, nameof(RequestSharedInteraction), localRoundId, StationEntityCatalog.WrenchId, (int)Intent.Help, false);
+        smokeSurvivalCompleted = true;
+        GD.Print($"PLAYTEST_SURVIVAL_CLIENT_OK unconscious={smokeSurvivalClientSawUnconscious} dead={smokeSurvivalClientSawDead} replicated=true requests_sent=true");
     }
 
     /// <summary>Keeps one collision object per solid entity, pushable when the entity allows it.</summary>
@@ -1206,6 +1338,9 @@ public partial class StationPlaytestController : Node2D
         });
         activeHandLabel = new Label { Text = "Active hand: rightHand · empty" };
         content.AddChild(activeHandLabel);
+        vitalsLabel = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        content.AddChild(vitalsLabel);
+        UpdateVitalsLabel();
         loadoutLabel = new Label { Text = "Crew loadout: awaiting role spawn", AutowrapMode = TextServer.AutowrapMode.WordSmart };
         loadoutLabel.CustomMinimumSize = new Vector2(320, 48);
         content.AddChild(loadoutLabel);

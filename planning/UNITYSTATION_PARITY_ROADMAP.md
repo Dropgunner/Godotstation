@@ -49,9 +49,14 @@ trace additional upstream systems it actually implements.
   metal pickup and timed girder plating, Engineer equipment/access, and client click targets
   driven by replicated entity state. The power loop adds an Engineer fuel/generator/storage/APC
   lamp failure-and-recovery task, verified by a two-peer smoke. It is an isolated playtest model,
-  not a station grid or source-game rate model. Mode-driven round outcome/report, survival,
-  broader inventory/intent, full machinery parity, and a two-person ordinary-controls gate remain
-  open. The [bounded SS13 source comparison](SS13_ESSENCE_REA.md) uses tgstation as the gameplay
+  not a station grid or source-game rate model. A survival slice adds one brute pool per crew
+  member with Unitystation conscious-state thresholds, harm-intent unarmed hits through the
+  dispatcher, server-side movement/click refusal while unconscious or dead, replicated crew status,
+  and a casualty count in the round report, verified by a two-peer smoke
+  ([FidelityContract_SurvivalConsciousness.md](FidelityContract_SurvivalConsciousness.md)). It is
+  playtest-scaled (25 damage per hit) with no body parts, healing, ghosts, or crawling.
+  Mode-driven round outcome/report, broader inventory/intent, full machinery parity, and a
+  two-person ordinary-controls gate remain open. The [bounded SS13 source comparison](SS13_ESSENCE_REA.md) uses tgstation as the gameplay
   criterion and Unitystation as the porting bridge.
 
 ## Delivery workflow and outcome ledger
@@ -70,7 +75,7 @@ trace additional upstream systems it actually implements.
 | --- | --- | --- |
 | Integrated build | `c1d2b64dc77ce4fb1f276ca782714a7b903c43d1` exported as `/private/tmp/Godotstation-Integrated-c1d2b64-Playtest.app`; universal runtime bundle passed headless startup. | Built; manual full-round gate open |
 | New player action | Wrench/cart and construction interactions remain; Engineer can also fuel/start a generator, enable storage output, observe APC lamp outage, and recover power. Two-peer smoke passed. | Integrated in PRs #32 and #37; ordinary-control two-player path unverified |
-| Full round | Host can start, end, and restart a shared shift; Engineer can plate a girder, access the engineering airlock, and complete the scripted power failure/recovery loop. End sends both peers a fact-only report of tracked crew and station state. | **Open:** no mode-specific outcome/report, survival/incapacitation path, full power grid or machinery parity, or two-person ordinary-controls pass |
+| Full round | Host can start, end, and restart a shared shift; Engineer can plate a girder, access the engineering airlock, and complete the scripted power failure/recovery loop. End sends both peers a fact-only report of tracked crew and station state, now including crew casualties. Harm intent (key `4`) on a crew body applies 25 brute per hit; at 125/175/225 brute the body is BarelyConscious/Unconscious/Dead on every peer, and the server refuses the incapacitated peer's movement and clicks. `tools/multiplayer_smoke.sh --survival` passed on `534f4e2` (2026-11-04, Linux, Godot 4.4.1 mono); restart rebuilds fresh bodies. | **Open:** no mode-specific outcome/report, no healing/revival/ghost path, full power grid or machinery parity, or two-person ordinary-controls pass (kit: [PLAYTEST_KIT_Survival.md](PLAYTEST_KIT_Survival.md)) |
 | Bugs found during play | A client could click stale construction targets; the HUD covered the station after spawn. | Fixed in PRs #32 and #33; repeat human playtest needed |
 
 The export script now uses the tracked game solution, creates a
@@ -170,6 +175,14 @@ outcomes server authoritative and preserve the existing interaction contracts.
 
 **Exit evidence:** two clients can trigger and observe sourced outcomes; dead/ghost players
 cannot act on the physical world; tests cover state transitions and interaction restrictions.
+
+**Completed slice (2026-11-04, PR #44, branch `wave10/survival-consciousness`):** one brute
+pool per crew member with Unitystation's health thresholds, harm-intent unarmed hits resolved by
+the shared dispatcher, hand items dropped on falling, server-side refusal of movement and clicks
+while unconscious or dead, replicated crew status on every peer, casualties in the round report,
+and fresh bodies on restart. Automated evidence: 33 clause tests and the `--survival` two-peer
+smoke. Still open for P4: disarm/grab/help outcomes, crawling, healing and revival, a ghost
+observer, speech restriction while incapacitated, and the human ordinary-controls pass.
 
 ### P5 — Round identity and replayable social chaos
 

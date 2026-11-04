@@ -69,6 +69,8 @@ namespace Godotstation.Common.Interactions
 		bool IsGhosting { get; }
 		bool HasTelekinesis { get; }
 		bool IsAlive { get; }
+		/// <summary>Live health-derived state (FC-SC-4). Defaults to the two-valued IsAlive mapping.</summary>
+		ConsciousState ConsciousState => IsAlive ? ConsciousState.Conscious : ConsciousState.Dead;
 		IInteractable? ActiveHandItem { get; }
 		Intent CurrentIntent { get; }
 		PlayerEntity InteractionPlayer { get; }

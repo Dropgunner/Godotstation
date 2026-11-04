@@ -1,3 +1,8 @@
+using Godotstation.Engine.Interactions;
+using Godotstation.Engine.Entities;
+using Godotstation.Common.Interactions;
+using System.Numerics;
+using System.Collections.Generic;
 using System;
 using Godotstation.Engine.Rounds;
 using Xunit;
@@ -17,7 +22,8 @@ public sealed class RoundEndReportTests
         Assert.Equal("Shift 3 ended\nDuration: 1:01:01\nCrew roles present: Assistant, Engineer\n" +
                      "Generator: RUNNING\nPower storage output: ON · stored energy: 7.5\nAPC lamp: POWERED\n" +
                      "Engineering airlock: CLOSED\nGirder: PLATED · metal sheets remaining: 0\n" +
-                     "Not tracked in this prototype: game-mode victory, antagonist outcomes, evacuation, survival, or deaths.",
+                     "Crew casualties: 0\n" +
+                     "Not tracked in this prototype: game-mode victory, antagonist outcomes, evacuation, or revival.",
             report.ToDisplayText());
     }
 
@@ -42,5 +48,24 @@ public sealed class RoundEndReportTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => RoundEndReport.Create(roundId, duration,
             Array.Empty<string>(), false, false, false, 0, false, false, remainingSheets));
+    }
+    [Fact]
+    public void ReportCountsCasualties()
+    {
+        // FC-SC-8: dead crew bodies in the station snapshot are counted; living ones are not.
+        var dead = new Dictionary<string, double> { ["brute"] = 225, ["conscious"] = (int)ConsciousState.Dead };
+        var hurt = new Dictionary<string, double> { ["brute"] = 50, ["conscious"] = (int)ConsciousState.Conscious };
+        var station = new List<StationEntityState>(SharedStationInventoryWorld.InitialStates())
+        {
+            new(StationEntityCatalog.CrewEntityId(1), StationEntityKind.Crew, Vector2.Zero, null, StationEntityFlags.Targetable, hurt),
+            new(StationEntityCatalog.CrewEntityId(2), StationEntityKind.Crew, Vector2.One, null, StationEntityFlags.Targetable, dead),
+        };
+
+        RoundEndReport report = RoundEndReport.Create(2, 30, new[] { "Engineer", "Assistant" }, station);
+
+        Assert.Equal(1, report.CrewCasualties);
+        Assert.Contains("Crew casualties: 1", report.ToDisplayText());
+        Assert.Throws<ArgumentOutOfRangeException>(() => RoundEndReport.Create(1, 1, Array.Empty<string>(),
+            false, false, false, 0, false, false, 0, crewCasualties: -1));
     }
 }
