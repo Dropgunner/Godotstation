@@ -15,6 +15,8 @@ public static class StationEntityKind
     public const string FuelGenerator = "fuel-generator";
     public const string PowerStorage = "power-storage";
     public const string ApcLamp = "apc-lamp";
+    /// <summary>A crew member's body, replicated so every peer sees its status and can aim clicks at it (FC-SC-7).</summary>
+    public const string Crew = "crew";
 }
 
 /// <summary>Names of the small per-kind state values carried in <see cref="StationEntityState.Fields"/>.</summary>
@@ -31,6 +33,10 @@ public static class StationEntityField
     public const string StoredEnergy = "stored_energy";
     public const string OutputEnabled = "output_enabled";
     public const string Powered = "powered";
+    /// <summary>Crew brute damage pool (FC-SC-1).</summary>
+    public const string Brute = "brute";
+    /// <summary>Crew <see cref="Godotstation.Common.Interactions.ConsciousState"/> as an integer.</summary>
+    public const string Conscious = "conscious";
 }
 
 /// <summary>Where one entity starts the round. Stackable kinds use <see cref="Amount"/>.</summary>
@@ -48,6 +54,11 @@ public static class StationEntityCatalog
     public const int FuelGeneratorId = 9007;
     public const int PowerStorageId = 9008;
     public const int ApcLampId = 9009;
+
+    /// <summary>Crew bodies replicate under the negated peer id so they never collide with catalog ids.</summary>
+    public static int CrewEntityId(int peerId) => -peerId;
+    public static bool IsCrewEntityId(int entityId) => entityId < 0;
+    public static int PeerIdForCrewEntity(int entityId) => -entityId;
 
     public static IReadOnlyList<StationEntitySpawn> Playtest { get; } =
     [

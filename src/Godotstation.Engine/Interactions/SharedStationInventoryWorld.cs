@@ -6,6 +6,7 @@ using Godotstation.Common.Interactions;
 using Godotstation.Engine.Access;
 using Godotstation.Engine.Construction;
 using Godotstation.Engine.Entities;
+using Godotstation.Engine.Health;
 using Godotstation.Engine.Inventory;
 using Godotstation.Engine.Movement;
 using Godotstation.Engine.Power;
@@ -54,10 +55,30 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         entityOrder.OfType<AccessDoor>().Select(door =>
             ((int)MathF.Round(door.WorldPosition.X), (int)MathF.Round(door.WorldPosition.Y), (IPassable)door));
 
-    public IReadOnlyList<StationEntityState> CaptureAll() => entityOrder.ConvertAll(entity => entity.Capture());
+    /// <summary>Every station object followed by every crew body (FC-SC-7), in spawn/join order.</summary>
+    public IReadOnlyList<StationEntityState> CaptureAll()
+    {
+        List<StationEntityState> states = entityOrder.ConvertAll(entity => entity.Capture());
+        foreach (CrewMember member in crew.Values) states.Add(member.Capture());
+        return states;
+    }
 
-    public StationEntityState? GetState(int entityId) =>
-        entities.TryGetValue(entityId, out StationEntity? entity) ? entity.Capture() : null;
+    public StationEntityState? GetState(int entityId)
+    {
+        if (entities.TryGetValue(entityId, out StationEntity? entity)) return entity.Capture();
+        return StationEntityCatalog.IsCrewEntityId(entityId) &&
+               crew.TryGetValue(StationEntityCatalog.PeerIdForCrewEntity(entityId), out CrewMember? member)
+            ? member.Capture()
+            : null;
+    }
+
+    /// <summary>Brute damage and conscious state of one crew member, or null if the peer has no body.</summary>
+    public CrewHealth? GetCrewHealth(int peerId) =>
+        crew.TryGetValue(peerId, out CrewMember? member) ? member.Health : null;
+
+    /// <summary>FC-SC-5: unconscious and dead crew cannot move; the server adapter must consult this before resolving input.</summary>
+    public bool CanActorMove(int peerId) =>
+        crew.TryGetValue(peerId, out CrewMember? member) && CrewHealthRules.CanMove(member.Health.ConsciousState);
 
     /// <summary>The replicated starting state of a station, for clients that have not received a snapshot yet.</summary>
     public static IReadOnlyList<StationEntityState> InitialStates(IReadOnlyList<StationEntitySpawn>? spawns = null) =>
@@ -67,9 +88,8 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
     public void PublishChanges()
     {
         List<StationEntityState>? changed = null;
-        foreach (StationEntity entity in entityOrder)
+        foreach (StationEntityState state in CaptureAll())
         {
-            StationEntityState state = entity.Capture();
             if (lastPublished.TryGetValue(state.Id, out StationEntityState? previous) && previous.Equals(state))
                 continue;
             lastPublished[state.Id] = state;
@@ -150,9 +170,10 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
 
         var slots = slotNames.ConvertAll(SlotIdentifier.Named);
         var storage = new ItemStorage(slots, AcceptAllCapacity.Instance, name: $"crew-{peerId}");
-        var member = new CrewMember(peerId, position, storage, jobId);
+        var member = new CrewMember(this, peerId, position, storage, jobId);
         crew.Add(peerId, member);
         crewByStorage.Add(storage, member);
+        dispatcher.RegisterHandler(member.HarmHandler);
 
         if (profile != null)
         {
@@ -166,6 +187,8 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
                     throw new InvalidOperationException($"Could not equip {entry.DisplayName} in {entry.Slot}.");
             }
         }
+        // The new body joins the change feed at once (FC-SC-7), so later publishes carry only real changes.
+        PublishChanges();
         return true;
     }
 
@@ -223,9 +246,14 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
                 inventory.ServerDrop(item.ItemSlot);
         foreach (Girder girder in entityOrder.OfType<Girder>())
             girder.Task.Cancel(peerId);
+        dispatcher.UnregisterHandler(member.HarmHandler);
         crew.Remove(peerId);
         crewByStorage.Remove(member.Inventory);
         PublishChanges();
+        // The body leaves the world: publish one final untargetable state so clients stop aiming at it.
+        StationEntityState removed = member.Capture(targetable: false);
+        lastPublished.Remove(removed.Id);
+        EntitiesChanged?.Invoke(new[] { removed });
         return true;
     }
 
@@ -294,12 +322,39 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
     {
         if (!crew.TryGetValue(senderPeerId, out CrewMember? member) ||
             intent is not (Intent.Help or Intent.Disarm or Intent.Grab or Intent.Harm)) return false;
-        if (!entities.TryGetValue(targetId, out StationEntity? target) || !target.CanBeTargeted) return false;
+        IInteractable? target = ResolveTarget(targetId);
+        if (target == null) return false;
 
         if (!dispatcher.TryResolveClick(member, member.ActiveHandItem, target,
                 target.WorldPosition, intent, isAltClick, NetworkSide.Server)) return false;
         PublishChanges();
         return true;
+    }
+
+    /// <summary>Station objects by catalog id; crew bodies by negated peer id (FC-SC-7).</summary>
+    private IInteractable? ResolveTarget(int targetId)
+    {
+        if (entities.TryGetValue(targetId, out StationEntity? entity)) return entity.CanBeTargeted ? entity : null;
+        return StationEntityCatalog.IsCrewEntityId(targetId) &&
+               crew.TryGetValue(StationEntityCatalog.PeerIdForCrewEntity(targetId), out CrewMember? body)
+            ? body
+            : null;
+    }
+
+    /// <summary>
+    /// FC-SC-3/FC-SC-6: one unarmed hit of brute damage, resolved only through the harm handler.
+    /// Falling from Conscious drops both hands (PlayerHealthV2 lines 72–92).
+    /// </summary>
+    private void ApplyUnarmedHarm(CrewMember victim)
+    {
+        ConsciousState previous = victim.Health.ApplyBrute(CrewHealthRules.UnarmedBruteDamage);
+        victim.InteractionPlayer.ConsciousState = victim.Health.ConsciousState;
+        if (previous != ConsciousState.Conscious || victim.Health.ConsciousState == ConsciousState.Conscious) return;
+        foreach (InventoryNamedSlot hand in new[] { InventoryNamedSlot.leftHand, InventoryNamedSlot.rightHand })
+        {
+            ItemSlot? slot = victim.Inventory.GetNamedItemSlot(hand);
+            if (slot?.Item != null) inventory.ServerDrop(slot);
+        }
     }
 
     /// <summary>Advance authoritative power simulation time on the host only. Call <see cref="PublishChanges"/> to replicate it.</summary>
@@ -371,9 +426,9 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
 
     public void Vanish(IPickupable item) => DisappearFromWorld(item);
 
-    private sealed class CrewMember : IPerformer
+    private sealed class CrewMember : IPerformer, IInteractable
     {
-        public CrewMember(int peerId, Vector2 position, ItemStorage inventory, int jobId)
+        public CrewMember(SharedStationInventoryWorld world, int peerId, Vector2 position, ItemStorage inventory, int jobId)
         {
             PeerId = peerId;
             Position = position;
@@ -381,6 +436,24 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
             JobId = jobId;
             InteractionPlayer = new PlayerEntity { Id = peerId, Name = $"crew-{peerId}" };
             InteractionPlayer.PlaceAt(position);
+            HarmHandler = new CrewHarmHandler(world, this);
+        }
+
+        public CrewHealth Health { get; } = new();
+        public CrewHarmHandler HarmHandler { get; }
+        string IInteractable.Id => InteractionPlayer.Name;
+        public WorldEntity InteractionEntity => InteractionPlayer;
+
+        /// <summary>The body as every peer sees it: position, brute damage, and conscious state.</summary>
+        public StationEntityState Capture(bool targetable = true)
+        {
+            var fields = new Dictionary<string, double>(StringComparer.Ordinal)
+            {
+                [StationEntityField.Brute] = Health.Brute,
+                [StationEntityField.Conscious] = (int)Health.ConsciousState,
+            };
+            return new StationEntityState(StationEntityCatalog.CrewEntityId(PeerId), StationEntityKind.Crew, Position, null,
+                targetable ? StationEntityFlags.Targetable : StationEntityFlags.None, fields);
         }
 
         public int PeerId { get; }
@@ -392,10 +465,34 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         public Vector2 WorldPosition => Position;
         public bool IsGhosting => false;
         public bool HasTelekinesis => false;
-        public bool IsAlive => true;
+        public bool IsAlive => !Health.IsDead;
+        public ConsciousState ConsciousState => Health.ConsciousState;
         public IInteractable? ActiveHandItem => ActiveHandSlot.Item as IInteractable;
         public Intent CurrentIntent => Intent.Help;
         public PlayerEntity InteractionPlayer { get; }
+    }
+
+    /// <summary>
+    /// FC-SC-3: harm intent with an empty or full hand on another crew body is an unarmed hit
+    /// (WeaponNetworkActions.ServerPerformMeleeAttack, lines 93–156). Reach, obstruction and the
+    /// attacker's conscious state are already validated by the dispatcher before this runs.
+    /// </summary>
+    private sealed class CrewHarmHandler(SharedStationInventoryWorld world, CrewMember owner) : IOwnedInteractionHandler<HandApply>
+    {
+        public WorldEntity Owner { get; } = owner.InteractionPlayer;
+        public bool IsFirstInteractable => false;
+        public int Priority => 0;
+
+        public bool WillInteract(HandApply interaction, NetworkSide side) =>
+            interaction.Intent == Intent.Harm && interaction.Performer != null &&
+            interaction.TargetObject == Owner && interaction.Performer != Owner;
+
+        public void ServerPerformInteraction(HandApply interaction)
+        {
+            // TODO(fidelity): Unitystation gates melee on Validations.CheckState(x => x.CanMelee); whether
+            // soft-crit players may punch was not inspected, so FC-4's default (no soft crit) applies.
+            if (interaction.Performer != null) world.ApplyUnarmedHarm(owner);
+        }
     }
 
     /// <summary>Server half of one station entity: interaction target plus its replicated state.</summary>
