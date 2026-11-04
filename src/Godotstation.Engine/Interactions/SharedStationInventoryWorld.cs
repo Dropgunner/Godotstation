@@ -5,6 +5,7 @@ using System.Numerics;
 using Godotstation.Common.Interactions;
 using Godotstation.Engine.Access;
 using Godotstation.Engine.Construction;
+using Godotstation.Engine.Chat;
 using Godotstation.Engine.Entities;
 using Godotstation.Engine.Health;
 using Godotstation.Engine.Inventory;
@@ -79,6 +80,16 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
     /// <summary>FC-SC-5: unconscious and dead crew cannot move; the server adapter must consult this before resolving input.</summary>
     public bool CanActorMove(int peerId) =>
         crew.TryGetValue(peerId, out CrewMember? member) && CrewHealthRules.CanMove(member.Health.ConsciousState);
+
+    /// <summary>FC-SC-10: unconscious and dead crew cannot transmit local speech; the server adapter must consult this before routing.</summary>
+    public bool CanActorSpeak(int peerId) =>
+        crew.TryGetValue(peerId, out CrewMember? member) && LocalSpeechRules.CanSpeakLocally(member.Health.ConsciousState);
+
+    /// <summary>The refusal shown to a speaker whose body cannot speak, or null when <see cref="CanActorSpeak"/> is true.</summary>
+    public string? GetSpeechRefusal(int peerId) =>
+        crew.TryGetValue(peerId, out CrewMember? member)
+            ? LocalSpeechRules.RefusalReason(member.Health.ConsciousState)
+            : "because you have no body in this shift.";
 
     /// <summary>The replicated starting state of a station, for clients that have not received a snapshot yet.</summary>
     public static IReadOnlyList<StationEntityState> InitialStates(IReadOnlyList<StationEntitySpawn>? spawns = null) =>

@@ -72,6 +72,7 @@ public partial class StationPlaytestController : Node2D
     private Label vitalsLabel = null!;
     private readonly HashSet<int> movementRefusalLogged = new();
     private readonly HashSet<int> interactionRefusalLogged = new();
+    private readonly HashSet<int> speechRefusalLogged = new();
     private ulong smokeSurvivalNextHitMsec;
     private int smokeSurvivalHits;
     private bool smokeSurvivalClientSawUnconscious;
@@ -136,6 +137,7 @@ public partial class StationPlaytestController : Node2D
         loadoutLabel.Text = "Crew loadout: awaiting role spawn";
         movementRefusalLogged.Clear();
         interactionRefusalLogged.Clear();
+        speechRefusalLogged.Clear();
         UpdateVitalsLabel();
         chatLog.Clear();
     }
@@ -542,6 +544,13 @@ public partial class StationPlaytestController : Node2D
             return;
         }
 
+        if (!LocalCrewCanAct())
+        {
+            // Client-side hint only; the server refuses the same request through FC-SC-10 regardless.
+            SetStatus($"You can't talk {LocalSpeechRules.RefusalReason(LocalConsciousState())}");
+            return;
+        }
+
         if (GetMultiplayer().IsServer())
             RouteLocalSpeech(localPeerId, text);
         else
@@ -560,6 +569,18 @@ public partial class StationPlaytestController : Node2D
         if (!roundLifecycle.CanRequestJob || message.Length == 0 || message.Length > 256 ||
             message.IndexOfAny(['\r', '\n', '\0']) >= 0 || !players.TryGetValue(speakerPeerId, out PlayerRuntime? speaker))
             return;
+
+        if (!sharedInteractionWorld.CanActorSpeak(speakerPeerId))
+        {
+            // FC-SC-10: unconscious and dead crew cannot transmit local speech; Ghost/OOC channels are not ported.
+            string reason = sharedInteractionWorld.GetSpeechRefusal(speakerPeerId) ?? LocalSpeechRules.DeadReason;
+            Godotstation.Engine.Health.CrewHealth? health = sharedInteractionWorld.GetCrewHealth(speakerPeerId);
+            speechRefusalLogged.Add(speakerPeerId);
+            GD.Print($"PLAYTEST_SPEECH_REFUSED peer={speakerPeerId} conscious={health?.ConsciousState.ToString() ?? "None"}");
+            if (speakerPeerId == localPeerId) ReceiveSpeechRefused(reason);
+            else RpcId(speakerPeerId, nameof(ReceiveSpeechRefused), reason);
+            return;
+        }
 
         var listeners = new List<LocalChatListener>(players.Count);
         foreach (PlayerRuntime player in players.Values)
@@ -585,6 +606,13 @@ public partial class StationPlaytestController : Node2D
     {
         var movementState = new PlayerMovementState();
         return GridLineOfSight.IsClear(from, to, (x, y) => !collisionMap.IsPassable(x, y, movementState));
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceiveSpeechRefused(string reason)
+    {
+        SetStatus($"You can't talk {reason}");
+        GD.Print($"PLAYTEST_SPEECH_REFUSED_CLIENT reason=\"{reason}\"");
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -1230,19 +1258,21 @@ public partial class StationPlaytestController : Node2D
                 GD.Print($"PLAYTEST_SURVIVAL_HOST_HIT n={smokeSurvivalHits} brute={health.Brute:0} conscious={health.ConsciousState}");
                 return;
             }
-            if (movementRefusalLogged.Contains(victim) && interactionRefusalLogged.Contains(victim))
+            if (movementRefusalLogged.Contains(victim) && interactionRefusalLogged.Contains(victim) &&
+                speechRefusalLogged.Contains(victim))
             {
                 smokeSurvivalCompleted = true;
-                GD.Print($"PLAYTEST_SURVIVAL_HOST_OK hits={smokeSurvivalHits} dead=true move_refused=true click_refused=true");
+                GD.Print($"PLAYTEST_SURVIVAL_HOST_OK hits={smokeSurvivalHits} dead=true move_refused=true click_refused=true speech_refused=true");
             }
             return;
         }
 
         if (!smokeSurvivalClientSawDead || smokeSurvivalClientRequestsSent) return;
-        // The dead peer keeps trying with ordinary requests; the server must refuse both.
+        // The dead peer keeps trying with ordinary requests; the server must refuse all three.
         smokeSurvivalClientRequestsSent = true;
         smokeSurvivalClientMoveUntilMsec = now + 1500;
         RpcId(1, nameof(RequestSharedInteraction), localRoundId, StationEntityCatalog.WrenchId, (int)Intent.Help, false);
+        RpcId(1, nameof(RequestLocalSpeech), localRoundId, "SMOKE_DEAD_SPEECH");
         smokeSurvivalCompleted = true;
         GD.Print($"PLAYTEST_SURVIVAL_CLIENT_OK unconscious={smokeSurvivalClientSawUnconscious} dead={smokeSurvivalClientSawDead} replicated=true requests_sent=true");
     }

@@ -140,17 +140,20 @@ for _ in $(seq 1 "$max_checks"); do
       ready=1
     fi
   elif [[ "$smoke_mode" == "--survival" ]]; then
-    # FC-SC-3/4/5/7: host harms the client to Unconscious then Dead, both peers log each transition,
-    # and the dead peer's ordinary movement and click requests are refused by the server.
+    # FC-SC-3/4/5/7/10: host harms the client to Unconscious then Dead, both peers log each transition,
+    # and the dead peer's ordinary movement, click, and local speech requests are refused by the server.
     if grep -q "PLAYTEST_ROSTER peers=2" "$host_log" && \
        grep -Eq "PLAYTEST_CREW_STATE peer=[0-9]+ conscious=BarelyConscious brute=125" "$host_log" && \
        grep -Eq "PLAYTEST_CREW_STATE peer=[0-9]+ conscious=Unconscious brute=175" "$host_log" && \
        grep -Eq "PLAYTEST_CREW_STATE peer=[0-9]+ conscious=Dead brute=225" "$host_log" && \
        grep -Eq "PLAYTEST_MOVE_REFUSED peer=[0-9]+ conscious=Dead" "$host_log" && \
        grep -Eq "PLAYTEST_INTERACTION_REFUSED_INCAPACITATED peer=[0-9]+ conscious=Dead" "$host_log" && \
-       grep -q "PLAYTEST_SURVIVAL_HOST_OK hits=9 dead=true move_refused=true click_refused=true" "$host_log" && \
+       grep -Eq "PLAYTEST_SPEECH_REFUSED peer=[0-9]+ conscious=Dead" "$host_log" && \
+       ! grep -q "PLAYTEST_LOCAL_CHAT_RELAYED" "$host_log" && \
+       grep -q "PLAYTEST_SURVIVAL_HOST_OK hits=9 dead=true move_refused=true click_refused=true speech_refused=true" "$host_log" && \
        grep -Eq "PLAYTEST_CREW_STATE peer=[0-9]+ conscious=Unconscious brute=175" "$client_log" && \
        grep -Eq "PLAYTEST_CREW_STATE peer=[0-9]+ conscious=Dead brute=225" "$client_log" && \
+       grep -q 'PLAYTEST_SPEECH_REFUSED_CLIENT reason="because you are dead."' "$client_log" && \
        grep -q "PLAYTEST_SURVIVAL_CLIENT_OK unconscious=True dead=True replicated=true requests_sent=true" "$client_log"; then
       ready=1
     fi
@@ -209,7 +212,7 @@ for _ in $(seq 1 "$max_checks"); do
     elif [[ "$smoke_mode" == "--power-loop" ]]; then
       echo "MULTIPLAYER_POWER_LOOP_SMOKE_OK: Engineer fuel, generator, storage, replicated APC lamp outage, and recovery were observed by both peers"
     elif [[ "$smoke_mode" == "--survival" ]]; then
-      echo "MULTIPLAYER_SURVIVAL_SMOKE_OK: host harmed the client to unconscious then dead, both peers observed each state, and the server refused the dead peer's movement and click"
+      echo "MULTIPLAYER_SURVIVAL_SMOKE_OK: host harmed the client to unconscious then dead, both peers observed each state, and the server refused the dead peer's movement, click, and speech"
     elif [[ "$smoke_mode" == "--engineering-access" ]]; then
       echo "MULTIPLAYER_ENGINEERING_ACCESS_SMOKE_OK: Assistant ID was denied; Engineer ID opened the shared airlock on both clients"
     elif [[ "$smoke_mode" == "--interactions" ]]; then

@@ -11,7 +11,7 @@ using Xunit;
 
 namespace Godotstation.Tests.Interactions;
 
-/// <summary>FC-SC-3..7 and FC-SC-9 from planning/FidelityContract_SurvivalConsciousness.md.</summary>
+/// <summary>FC-SC-3..7, FC-SC-9 and FC-SC-10 from planning/FidelityContract_SurvivalConsciousness.md.</summary>
 public sealed class SharedStationSurvivalTests
 {
     private const int Attacker = 1;
@@ -134,6 +134,27 @@ public sealed class SharedStationSurvivalTests
         Hit(world, 2);
         Assert.False(world.CanActorMove(Victim));
         Assert.True(world.CanActorMove(Attacker));
+    }
+
+    [Fact]
+    public void UnconsciousAndDeadCrewCannotSpeak()
+    {
+        // FC-SC-10: speech follows the same live state as movement, but soft crit may still talk.
+        SharedStationInventoryWorld world = TwoAdjacentCrew();
+        Assert.True(world.CanActorSpeak(Victim));
+        Assert.Null(world.GetSpeechRefusal(Victim));
+        Assert.False(world.CanActorSpeak(99));
+        Assert.NotNull(world.GetSpeechRefusal(99));
+
+        Hit(world, 5);
+        Assert.True(world.CanActorSpeak(Victim), "BarelyConscious crew may still speak");
+        Hit(world, 2);
+        Assert.False(world.CanActorSpeak(Victim));
+        Assert.Equal(Godotstation.Engine.Chat.LocalSpeechRules.UnconsciousReason, world.GetSpeechRefusal(Victim));
+        Hit(world, 2);
+        Assert.False(world.CanActorSpeak(Victim));
+        Assert.Equal(Godotstation.Engine.Chat.LocalSpeechRules.DeadReason, world.GetSpeechRefusal(Victim));
+        Assert.True(world.CanActorSpeak(Attacker));
     }
 
     [Fact]
