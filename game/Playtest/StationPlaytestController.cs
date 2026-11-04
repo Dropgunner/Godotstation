@@ -30,6 +30,8 @@ public partial class StationPlaytestController : Node2D
     private readonly Dictionary<int, DynamicObject> entityObstacles = new();
     private Label statusLabel = null!;
     private Label activeHandLabel = null!;
+    private Label intentLabel = null!;
+    private readonly IntentSelection intentSelection = new();
     private Label loadoutLabel = null!;
     private Button startShiftButton = null!;
     private Button endShiftButton = null!;
@@ -121,6 +123,7 @@ public partial class StationPlaytestController : Node2D
         shiftStartedAtMsec = 0;
         if (IsInstanceValid(roundEndReportDialog)) roundEndReportDialog.Hide();
         activeHandLabel.Text = "Active hand: rightHand · empty";
+        intentSelection.Select(Intent.Help);
         loadoutLabel.Text = "Crew loadout: awaiting role spawn";
         chatLog.Clear();
     }
@@ -722,6 +725,14 @@ public partial class StationPlaytestController : Node2D
             return;
         }
 
+        if (inputEvent is InputEventKey { Pressed: true, Echo: false, CtrlPressed: false, AltPressed: false } intentKey &&
+            intentKey.Keycode < Key.Delete && localRoundStarted && players.ContainsKey(GetMultiplayer().GetUniqueId()) &&
+            intentSelection.TryApplyHotkey((char)(long)intentKey.Keycode))
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         if (inputEvent is not InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click ||
             !localRoundStarted || !players.ContainsKey(GetMultiplayer().GetUniqueId())) return;
 
@@ -731,10 +742,11 @@ public partial class StationPlaytestController : Node2D
         if (targetId is null) return;
 
         bool altClick = click.AltPressed;
+        int intent = (int)intentSelection.Current;
         if (GetMultiplayer().IsServer())
-            ResolveSharedInteraction(localPeerId, targetId.Value, (int)Intent.Help, altClick);
+            ResolveSharedInteraction(localPeerId, targetId.Value, intent, altClick);
         else
-            RpcId(1, nameof(RequestSharedInteraction), localRoundId, targetId.Value, (int)Intent.Help, altClick);
+            RpcId(1, nameof(RequestSharedInteraction), localRoundId, targetId.Value, intent, altClick);
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -791,6 +803,8 @@ public partial class StationPlaytestController : Node2D
         activeHandItemName = itemName;
         activeHandLabel.Text = $"Active hand: {hand.Value} · {(itemName.Length == 0 ? "empty" : itemName)}";
     }
+
+    private void UpdateIntentLabel(Intent intent) => intentLabel.Text = $"Intent: {intent.ToString().ToLowerInvariant()}";
 
     private void UpdateLoadoutLabel(string summary)
     {
@@ -1206,12 +1220,16 @@ public partial class StationPlaytestController : Node2D
         });
         activeHandLabel = new Label { Text = "Active hand: rightHand · empty" };
         content.AddChild(activeHandLabel);
+        intentLabel = new Label();
+        content.AddChild(intentLabel);
+        UpdateIntentLabel(intentSelection.Current);
+        intentSelection.Changed += UpdateIntentLabel;
         loadoutLabel = new Label { Text = "Crew loadout: awaiting role spawn", AutowrapMode = TextServer.AutowrapMode.WordSmart };
         loadoutLabel.CustomMinimumSize = new Vector2(320, 48);
         content.AddChild(loadoutLabel);
         content.AddChild(new Label
         {
-            Text = "Task: pick up metal, click girder, stay close 4s. Tab: hand; Q: drop.",
+            Text = "Task: pick up metal, click girder, stay close 4s. Tab: hand; Q: drop; 1-4 or F/G: intent.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         });
         content.AddChild(new Label

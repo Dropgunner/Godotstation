@@ -296,6 +296,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
             intent is not (Intent.Help or Intent.Disarm or Intent.Grab or Intent.Harm)) return false;
         if (!entities.TryGetValue(targetId, out StationEntity? target) || !target.CanBeTargeted) return false;
 
+        member.CurrentIntent = intent;
         if (!dispatcher.TryResolveClick(member, member.ActiveHandItem, target,
                 target.WorldPosition, intent, isAltClick, NetworkSide.Server)) return false;
         PublishChanges();
@@ -394,7 +395,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         public bool HasTelekinesis => false;
         public bool IsAlive => true;
         public IInteractable? ActiveHandItem => ActiveHandSlot.Item as IInteractable;
-        public Intent CurrentIntent => Intent.Help;
+        public Intent CurrentIntent { get; set; } = Intent.Help;
         public PlayerEntity InteractionPlayer { get; }
     }
 
