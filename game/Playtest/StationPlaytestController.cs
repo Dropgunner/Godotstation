@@ -30,6 +30,7 @@ public partial class StationPlaytestController : Node2D
     private readonly Dictionary<int, DynamicObject> entityObstacles = new();
     private Label statusLabel = null!;
     private Label activeHandLabel = null!;
+    private readonly IntentSelection intentSelection = new();
     private Label loadoutLabel = null!;
     private Button startShiftButton = null!;
     private Button endShiftButton = null!;
@@ -69,7 +70,6 @@ public partial class StationPlaytestController : Node2D
     private bool smokePowerHostSawOutage;
     private string activeHandItemName = string.Empty;
     private Label vitalsLabel = null!;
-    private Intent localIntent = Intent.Help;
     private readonly HashSet<int> movementRefusalLogged = new();
     private readonly HashSet<int> interactionRefusalLogged = new();
     private ulong smokeSurvivalNextHitMsec;
@@ -132,6 +132,7 @@ public partial class StationPlaytestController : Node2D
         shiftStartedAtMsec = 0;
         if (IsInstanceValid(roundEndReportDialog)) roundEndReportDialog.Hide();
         activeHandLabel.Text = "Active hand: rightHand · empty";
+        intentSelection.Select(Intent.Help);
         loadoutLabel.Text = "Crew loadout: awaiting role spawn";
         movementRefusalLogged.Clear();
         interactionRefusalLogged.Clear();
@@ -743,21 +744,6 @@ public partial class StationPlaytestController : Node2D
             return;
         }
 
-        if (inputEvent is InputEventKey { Pressed: true, Echo: false } intentKey &&
-            intentKey.Keycode is Key.Key1 or Key.Key2 or Key.Key3 or Key.Key4)
-        {
-            // Unitystation KeybindManager defaults: 1 Help, 2 Disarm, 3 Grab, 4 Harm.
-            localIntent = intentKey.Keycode switch
-            {
-                Key.Key2 => Intent.Disarm,
-                Key.Key3 => Intent.Grab,
-                Key.Key4 => Intent.Harm,
-                _ => Intent.Help,
-            };
-            UpdateVitalsLabel();
-            return;
-        }
-
         if (inputEvent is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Q } &&
             localRoundStarted && players.ContainsKey(GetMultiplayer().GetUniqueId()))
         {
@@ -765,6 +751,14 @@ public partial class StationPlaytestController : Node2D
                 ResolveSharedDrop(localPeerId);
             else
                 RpcId(1, nameof(RequestSharedDrop), localRoundId);
+            return;
+        }
+
+        if (inputEvent is InputEventKey { Pressed: true, Echo: false, CtrlPressed: false, AltPressed: false } intentKey &&
+            intentKey.Keycode < Key.Delete && localRoundStarted && players.ContainsKey(GetMultiplayer().GetUniqueId()) &&
+            intentSelection.TryApplyHotkey((char)(long)intentKey.Keycode))
+        {
+            GetViewport().SetInputAsHandled();
             return;
         }
 
@@ -783,10 +777,11 @@ public partial class StationPlaytestController : Node2D
         }
 
         bool altClick = click.AltPressed;
+        int intent = (int)intentSelection.Current;
         if (GetMultiplayer().IsServer())
-            ResolveSharedInteraction(localPeerId, targetId.Value, (int)localIntent, altClick);
+            ResolveSharedInteraction(localPeerId, targetId.Value, intent, altClick);
         else
-            RpcId(1, nameof(RequestSharedInteraction), localRoundId, targetId.Value, (int)localIntent, altClick);
+            RpcId(1, nameof(RequestSharedInteraction), localRoundId, targetId.Value, intent, altClick);
     }
 
     private ConsciousState LocalConsciousState() =>
@@ -802,7 +797,7 @@ public partial class StationPlaytestController : Node2D
         double brute = replicatedEntities.TryGet(StationEntityCatalog.CrewEntityId(localPeerId), out StationEntityState? body)
             ? body.Get(StationEntityField.Brute)
             : 0;
-        vitalsLabel.Text = $"Vitals: {LocalConsciousState()} · brute {brute:0}/{Godotstation.Engine.Health.CrewHealthRules.MaxHealth:0} · intent {localIntent.ToString().ToUpperInvariant()} (keys 1-4)";
+        vitalsLabel.Text = $"Vitals: {LocalConsciousState()} · brute {brute:0}/{Godotstation.Engine.Health.CrewHealthRules.MaxHealth:0} · intent {intentSelection.Current.ToString().ToUpperInvariant()} (1-4, F/G)";
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -1341,12 +1336,13 @@ public partial class StationPlaytestController : Node2D
         vitalsLabel = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
         content.AddChild(vitalsLabel);
         UpdateVitalsLabel();
+        intentSelection.Changed += _ => UpdateVitalsLabel();
         loadoutLabel = new Label { Text = "Crew loadout: awaiting role spawn", AutowrapMode = TextServer.AutowrapMode.WordSmart };
         loadoutLabel.CustomMinimumSize = new Vector2(320, 48);
         content.AddChild(loadoutLabel);
         content.AddChild(new Label
         {
-            Text = "Task: pick up metal, click girder, stay close 4s. Tab: hand; Q: drop.",
+            Text = "Task: pick up metal, click girder, stay close 4s. Tab: hand; Q: drop; 1-4 or F/G: intent.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         });
         content.AddChild(new Label

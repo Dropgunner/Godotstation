@@ -325,6 +325,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         IInteractable? target = ResolveTarget(targetId);
         if (target == null) return false;
 
+        member.CurrentIntent = intent;
         if (!dispatcher.TryResolveClick(member, member.ActiveHandItem, target,
                 target.WorldPosition, intent, isAltClick, NetworkSide.Server)) return false;
         PublishChanges();
@@ -468,7 +469,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         public bool IsAlive => !Health.IsDead;
         public ConsciousState ConsciousState => Health.ConsciousState;
         public IInteractable? ActiveHandItem => ActiveHandSlot.Item as IInteractable;
-        public Intent CurrentIntent => Intent.Help;
+        public Intent CurrentIntent { get; set; } = Intent.Help;
         public PlayerEntity InteractionPlayer { get; }
     }
 
