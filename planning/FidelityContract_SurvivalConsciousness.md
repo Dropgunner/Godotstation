@@ -111,6 +111,17 @@ Each clause names the test that fails when it is violated. Tests live in
   (`Validations.CheckState(x => x.CanMelee)` reads a PlayerState asset not inspected here); this
   slice keeps FC-4's default of refusing soft-crit interactions.
 
-## Verification log
+## Verification log (2026-11-04, Linux cloud session, .NET SDK 10.0.114, Godot 4.4.1.stable.mono)
 
-Filled in as evidence is produced; see the pull request for pasted command output.
+- Baseline on `main` `9e464ef`: `bash tools/preflight.sh` → `"build":"pass","test":"pass"`, 268 passed,
+  7 skipped; `tools/multiplayer_smoke.sh` → `MULTIPLAYER_SMOKE_OK`.
+- `60b4187` (engine rules + tests): `bash tools/preflight.sh` → `{"ok":true,...,"build":"pass","test":"pass",
+  "test_summary":"Passed! - Failed: 0, Passed: 301, Skipped: 7, Total: 308"}`.
+- `534f4e2` (adapter + smoke): `GODOT_BIN=$(command -v godot) bash tools/multiplayer_smoke.sh --survival` →
+  `MULTIPLAYER_SURVIVAL_SMOKE_OK`; host log shows `PLAYTEST_CREW_STATE ... BarelyConscious brute=125`,
+  `Unconscious brute=175`, `Dead brute=225`, `PLAYTEST_MOVE_REFUSED ... conscious=Dead`,
+  `PLAYTEST_INTERACTION_REFUSED_INCAPACITATED ... conscious=Dead`, `PLAYTEST_SURVIVAL_HOST_OK hits=9`;
+  client log shows the same three state lines and `PLAYTEST_SURVIVAL_CLIENT_OK unconscious=True dead=True`.
+  `--interactions` and `--round-restart` smokes still pass; preflight unchanged at 301 passed.
+- Not done: exported macOS app and the hands-on two-person run. See
+  [PLAYTEST_KIT_Survival.md](PLAYTEST_KIT_Survival.md).

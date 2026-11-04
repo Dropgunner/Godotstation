@@ -70,7 +70,9 @@ movement reaches the client.
 authoritative snapshots. `tools/multiplayer_smoke.sh --construction` checks a two-client
 metal pickup, four-second server action, sheet consumption, and replicated wall completion.
 `tools/multiplayer_smoke.sh --engineering-access` checks Assistant denial, Engineer ID
-authorization, and replicated airlock passability. A local macOS app can be exported with
+authorization, and replicated airlock passability. `tools/multiplayer_smoke.sh --survival` checks that
+harm-intent hits take a peer to unconscious then dead on both clients and that the server refuses
+the dead peer's movement and clicks (hands-on steps: `PLAYTEST_KIT_Survival.md`). A local macOS app can be exported with
 `GODOT_BIN=/path/to/Godot bash tools/export_playtest_macos.sh /path/to/Godotstation.app`.
 
 ## Feedback to collect
