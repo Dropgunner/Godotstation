@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using Godotstation.Common.Interactions;
 using Godotstation.Engine.Entities;
 
 namespace Godotstation.Engine.Rounds;
@@ -14,7 +15,7 @@ public sealed class RoundEndReport
 {
     private RoundEndReport(int roundId, double durationSeconds, IReadOnlyList<string> crewRoles,
         bool generatorRunning, bool powerOutputEnabled, bool devicePowered, double storedEnergy,
-        bool engineeringAirlockOpen, bool girderPlated, int metalSheetsRemaining)
+        bool engineeringAirlockOpen, bool girderPlated, int metalSheetsRemaining, int crewCasualties)
     {
         RoundId = roundId;
         DurationSeconds = durationSeconds;
@@ -26,6 +27,7 @@ public sealed class RoundEndReport
         EngineeringAirlockOpen = engineeringAirlockOpen;
         GirderPlated = girderPlated;
         MetalSheetsRemaining = metalSheetsRemaining;
+        CrewCasualties = crewCasualties;
     }
 
     public int RoundId { get; }
@@ -38,6 +40,8 @@ public sealed class RoundEndReport
     public bool EngineeringAirlockOpen { get; }
     public bool GirderPlated { get; }
     public int MetalSheetsRemaining { get; }
+    /// <summary>FC-SC-8: crew bodies that were Dead when the round ended.</summary>
+    public int CrewCasualties { get; }
 
     /// <summary>Reads the tracked facts from the station's replicated entities by kind.</summary>
     public static RoundEndReport Create(int roundId, double durationSeconds, IEnumerable<string> crewRoles,
@@ -55,12 +59,14 @@ public sealed class RoundEndReport
             Any(StationEntityKind.EngineeringAirlock, StationEntityField.Open),
             Any(StationEntityKind.Girder, StationEntityField.Plated),
             states.Where(state => state.Kind == StationEntityKind.MetalSheets)
-                .Sum(state => state.Count(StationEntityField.Amount)));
+                .Sum(state => state.Count(StationEntityField.Amount)),
+            states.Count(state => state.Kind == StationEntityKind.Crew &&
+                                  state.Count(StationEntityField.Conscious) == (int)ConsciousState.Dead));
     }
 
     public static RoundEndReport Create(int roundId, double durationSeconds, IEnumerable<string> crewRoles,
         bool generatorRunning, bool powerOutputEnabled, bool devicePowered, double storedEnergy,
-        bool engineeringAirlockOpen, bool girderPlated, int metalSheetsRemaining)
+        bool engineeringAirlockOpen, bool girderPlated, int metalSheetsRemaining, int crewCasualties = 0)
     {
         ArgumentNullException.ThrowIfNull(crewRoles);
         if (roundId <= 0) throw new ArgumentOutOfRangeException(nameof(roundId));
@@ -69,6 +75,7 @@ public sealed class RoundEndReport
         if (!double.IsFinite(storedEnergy) || storedEnergy < 0)
             throw new ArgumentOutOfRangeException(nameof(storedEnergy));
         if (metalSheetsRemaining < 0) throw new ArgumentOutOfRangeException(nameof(metalSheetsRemaining));
+        if (crewCasualties < 0) throw new ArgumentOutOfRangeException(nameof(crewCasualties));
 
         var roleSnapshot = new List<string>();
         foreach (string role in crewRoles)
@@ -80,7 +87,7 @@ public sealed class RoundEndReport
 
         return new RoundEndReport(roundId, durationSeconds, roleSnapshot.AsReadOnly(), generatorRunning,
             powerOutputEnabled, devicePowered, storedEnergy, engineeringAirlockOpen, girderPlated,
-            metalSheetsRemaining);
+            metalSheetsRemaining, crewCasualties);
     }
 
     public string ToDisplayText()
@@ -96,7 +103,8 @@ public sealed class RoundEndReport
             $"APC lamp: {(DevicePowered ? "POWERED" : "OFF")}",
             $"Engineering airlock: {(EngineeringAirlockOpen ? "OPEN" : "CLOSED")}",
             $"Girder: {(GirderPlated ? "PLATED" : "UNPLATED")} · metal sheets remaining: {MetalSheetsRemaining}",
-            "Not tracked in this prototype: game-mode victory, antagonist outcomes, evacuation, survival, or deaths.");
+            $"Crew casualties: {CrewCasualties}",
+            "Not tracked in this prototype: game-mode victory, antagonist outcomes, evacuation, or revival.");
     }
 
     private static string FormatDuration(double durationSeconds)

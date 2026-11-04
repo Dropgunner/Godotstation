@@ -27,7 +27,9 @@ fi
 
 launch_host() {
   if [[ -n "$playtest_app" ]]; then
-    if [[ "$smoke_mode" == "--power-loop" ]]; then
+    if [[ "$smoke_mode" == "--survival" ]]; then
+      "$godot_bin" --headless --quit-after 900 -- --playtest-host --playtest-jobid=20 --playtest-smoke-survival
+    elif [[ "$smoke_mode" == "--power-loop" ]]; then
       "$godot_bin" --headless --quit-after 4800 -- --playtest-host --playtest-jobid=2 --playtest-smoke-power-loop
     elif [[ "$smoke_mode" == "--round-restart" ]]; then
       "$godot_bin" --headless --quit-after 900 -- --playtest-host --playtest-jobid=20 --playtest-smoke-construction --playtest-smoke-round-restart
@@ -41,7 +43,9 @@ launch_host() {
       "$godot_bin" --headless --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-move --playtest-smoke-chat
     fi
   else
-    if [[ "$smoke_mode" == "--power-loop" ]]; then
+    if [[ "$smoke_mode" == "--survival" ]]; then
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 900 -- --playtest-host --playtest-jobid=20 --playtest-smoke-survival
+    elif [[ "$smoke_mode" == "--power-loop" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 4800 -- --playtest-host --playtest-jobid=2 --playtest-smoke-power-loop
     elif [[ "$smoke_mode" == "--round-restart" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 900 -- --playtest-host --playtest-jobid=20 --playtest-smoke-construction --playtest-smoke-round-restart
@@ -58,7 +62,9 @@ launch_host() {
 }
 launch_client() {
   if [[ -n "$playtest_app" ]]; then
-    if [[ "$smoke_mode" == "--power-loop" ]]; then
+    if [[ "$smoke_mode" == "--survival" ]]; then
+      "$godot_bin" --headless --quit-after 900 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-survival
+    elif [[ "$smoke_mode" == "--power-loop" ]]; then
       "$godot_bin" --headless --quit-after 4800 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-power-loop
     elif [[ "$smoke_mode" == "--round-restart" ]]; then
       "$godot_bin" --headless --quit-after 900 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-construction --playtest-smoke-round-restart
@@ -72,7 +78,9 @@ launch_client() {
       "$godot_bin" --headless --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-move --playtest-smoke-chat
     fi
   else
-    if [[ "$smoke_mode" == "--power-loop" ]]; then
+    if [[ "$smoke_mode" == "--survival" ]]; then
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 900 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-survival
+    elif [[ "$smoke_mode" == "--power-loop" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 4800 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-power-loop
     elif [[ "$smoke_mode" == "--round-restart" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 900 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-construction --playtest-smoke-round-restart
@@ -110,6 +118,7 @@ if [[ "$smoke_mode" == "--construction" ]]; then max_checks=200; fi
 if [[ "$smoke_mode" == "--round-restart" ]]; then max_checks=200; fi
 if [[ "$smoke_mode" == "--power-loop" ]]; then max_checks=900; fi
 if [[ "$smoke_mode" == "--engineering-access" ]]; then max_checks=100; fi
+if [[ "$smoke_mode" == "--survival" ]]; then max_checks=200; fi
 for _ in $(seq 1 "$max_checks"); do
   ready=0
   if [[ "$smoke_mode" == "--round-restart" ]]; then
@@ -128,6 +137,21 @@ for _ in $(seq 1 "$max_checks"); do
     if grep -q "PLAYTEST_ROSTER peers=2" "$host_log" && \
        grep -q "PLAYTEST_GIRDER_PLATED host_state=true metal_sheets_remaining=0" "$host_log" && \
        grep -q "PLAYTEST_GIRDER_PLATING_OK engineer=true sheets_consumed=2 duration_seconds=4 replicated=true" "$client_log"; then
+      ready=1
+    fi
+  elif [[ "$smoke_mode" == "--survival" ]]; then
+    # FC-SC-3/4/5/7: host harms the client to Unconscious then Dead, both peers log each transition,
+    # and the dead peer's ordinary movement and click requests are refused by the server.
+    if grep -q "PLAYTEST_ROSTER peers=2" "$host_log" && \
+       grep -Eq "PLAYTEST_CREW_STATE peer=[0-9]+ conscious=BarelyConscious brute=125" "$host_log" && \
+       grep -Eq "PLAYTEST_CREW_STATE peer=[0-9]+ conscious=Unconscious brute=175" "$host_log" && \
+       grep -Eq "PLAYTEST_CREW_STATE peer=[0-9]+ conscious=Dead brute=225" "$host_log" && \
+       grep -Eq "PLAYTEST_MOVE_REFUSED peer=[0-9]+ conscious=Dead" "$host_log" && \
+       grep -Eq "PLAYTEST_INTERACTION_REFUSED_INCAPACITATED peer=[0-9]+ conscious=Dead" "$host_log" && \
+       grep -q "PLAYTEST_SURVIVAL_HOST_OK hits=9 dead=true move_refused=true click_refused=true" "$host_log" && \
+       grep -Eq "PLAYTEST_CREW_STATE peer=[0-9]+ conscious=Unconscious brute=175" "$client_log" && \
+       grep -Eq "PLAYTEST_CREW_STATE peer=[0-9]+ conscious=Dead brute=225" "$client_log" && \
+       grep -q "PLAYTEST_SURVIVAL_CLIENT_OK unconscious=True dead=True replicated=true requests_sent=true" "$client_log"; then
       ready=1
     fi
   elif [[ "$smoke_mode" == "--engineering-access" ]]; then
@@ -184,6 +208,8 @@ for _ in $(seq 1 "$max_checks"); do
       echo "MULTIPLAYER_CONSTRUCTION_SMOKE_OK: engineer picked up two sheets, completed the four-second girder task, and both clients observed the wall"
     elif [[ "$smoke_mode" == "--power-loop" ]]; then
       echo "MULTIPLAYER_POWER_LOOP_SMOKE_OK: Engineer fuel, generator, storage, replicated APC lamp outage, and recovery were observed by both peers"
+    elif [[ "$smoke_mode" == "--survival" ]]; then
+      echo "MULTIPLAYER_SURVIVAL_SMOKE_OK: host harmed the client to unconscious then dead, both peers observed each state, and the server refused the dead peer's movement and click"
     elif [[ "$smoke_mode" == "--engineering-access" ]]; then
       echo "MULTIPLAYER_ENGINEERING_ACCESS_SMOKE_OK: Assistant ID was denied; Engineer ID opened the shared airlock on both clients"
     elif [[ "$smoke_mode" == "--interactions" ]]; then
