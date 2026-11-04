@@ -1,4 +1,5 @@
 using Godot;
+using Godotstation.Common.Interactions;
 using Godotstation.Engine.Movement;
 
 namespace Godotstation.Game.Playtest;
@@ -10,6 +11,8 @@ public partial class StationCrewAvatar : Node2D
     private bool isLocal;
     private string displayName = string.Empty;
     private string jobName = string.Empty;
+    private Label? nameLabel;
+    private ConsciousState consciousState = ConsciousState.Conscious;
 
     public void Configure(int ownerPeerId, bool local, string playerName, string assignedJobName)
     {
@@ -40,7 +43,7 @@ public partial class StationCrewAvatar : Node2D
         };
         AddChild(head);
 
-        var nameLabel = new Label
+        nameLabel = new Label
         {
             Text = $"{displayName}\n{jobName.ToUpperInvariant()}",
             Position = new Vector2(-48f, -40f),
@@ -51,6 +54,7 @@ public partial class StationCrewAvatar : Node2D
         nameLabel.AddThemeFontSizeOverride("font_size", 13);
         nameLabel.AddThemeColorOverride("font_color", Colors.White);
         AddChild(nameLabel);
+        ApplyConsciousState();
 
         if (!isLocal) return;
         var camera = new Camera2D
@@ -64,6 +68,26 @@ public partial class StationCrewAvatar : Node2D
         camera.LimitRight = StationPlaytestLayout.MaxX;
         camera.LimitBottom = StationPlaytestLayout.MaxY;
         AddChild(camera);
+    }
+
+    /// <summary>Presentation only: tint and caption follow the server's replicated conscious state (FC-SC-7).</summary>
+    public void SetConsciousState(ConsciousState state)
+    {
+        consciousState = state;
+        if (IsInsideTree()) ApplyConsciousState();
+    }
+
+    private void ApplyConsciousState()
+    {
+        (Color tint, string caption) = consciousState switch
+        {
+            ConsciousState.BarelyConscious => (new Color(1f, 0.85f, 0.55f), "\nBARELY CONSCIOUS"),
+            ConsciousState.Unconscious => (new Color(0.6f, 0.6f, 0.7f), "\nUNCONSCIOUS"),
+            ConsciousState.Dead => (new Color(0.45f, 0.2f, 0.2f), "\nDEAD"),
+            _ => (Colors.White, string.Empty),
+        };
+        Modulate = tint;
+        if (nameLabel != null) nameLabel.Text = $"{displayName}\n{jobName.ToUpperInvariant()}{caption}";
     }
 
     private static Vector2[] MakeCircle(float radius, int segments)
