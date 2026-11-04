@@ -13,7 +13,7 @@ Unitystation parity. Damage per hit is playtest-scaled (25 instead of 5); see
 
 ```sh
 cd /path/to/Godotstation
-git fetch origin && git switch wave10/survival-consciousness
+git fetch origin && git switch claude/happy-goldberg-p9okwk
 GODOT_BIN=/Applications/Godot_mono.app/Contents/MacOS/Godot \
   bash tools/export_playtest_macos.sh /private/tmp/Godotstation-Survival.app
 ```
@@ -44,7 +44,7 @@ Launch from two Terminal windows instead of `open -n`, so the `PLAYTEST_*` marke
 1. In A choose the **Engineer** role and **Host Station**. It waits in pre-round on UDP 7777.
 2. In B choose **Assistant**, enter `127.0.0.1` (or the host Mac's LAN IPv4), and **Join Station**.
 3. In A press **Start shift**. Both windows show two crew avatars. The HUD shows a new line
-   `Vitals: Conscious · brute 0/100 · intent HELP (keys 1-4)`.
+   `Vitals: Conscious · brute 0/100 · intent HELP (1-4, F/G)`.
 
 ## 3. The harm → unconscious → dead path (ordinary controls)
 
@@ -63,8 +63,12 @@ left-click acts on the nearest target within about 0.7 tiles.
    click an object: nothing happens, and A's terminal prints `PLAYTEST_MOVE_REFUSED` and
    `PLAYTEST_INTERACTION_REFUSED_INCAPACITATED` for B's peer id.
 5. **Two more hits (9 total).** B's avatar turns dark red with `DEAD`. Further hits change
-   nothing. B still sees the station and chat but cannot move, pick up, or use anything.
-6. **Try to cheat as B.** Press `4` in B and click A's avatar: refused (B is dead).
+   nothing. B still sees the station and chat but cannot move, pick up, use anything, or speak.
+6. **Try to cheat as B.** Press `4` in B and click A's avatar: refused (B is dead). Type a line
+   in B's chat box and press Enter: nothing appears in either window and B's status line reads
+   `You can't talk because you are dead.` (while unconscious it reads `... because you're not
+   conscious or lack the energy to speak.`). A's terminal prints `PLAYTEST_SPEECH_REFUSED` for
+   B's peer id only if the request reached the host; the client refuses locally first.
 7. **End the shift** in A. Both windows receive the round report; it now contains
    `Crew casualties: 1`.
 8. **Restart the shift** in A, then re-request roles in B. Both avatars are back to normal tint,
@@ -83,6 +87,7 @@ PLAYTEST_CREW_STATE peer=<B> conscious=Unconscious brute=175
 PLAYTEST_CREW_STATE peer=<B> conscious=Dead brute=225
 PLAYTEST_MOVE_REFUSED peer=<B> conscious=Unconscious    (or Dead)
 PLAYTEST_INTERACTION_REFUSED_INCAPACITATED peer=<B> conscious=Unconscious    (or Dead)
+PLAYTEST_SPEECH_REFUSED peer=<B> conscious=Dead    (only when a request reaches the host)
 PLAYTEST_ROUND_ENDED round=1
 PLAYTEST_ROUND_RESTARTED round=2 phase=PreRound
 ```
@@ -96,7 +101,7 @@ The refusal markers are printed once per peer per shift, on the host only.
 Write one line per observation into the roadmap ledger's "Bugs found during play" row or a GitHub
 issue: build commit (`git rev-parse --short HEAD`), which step (3.1–3.8), what each window
 showed, and the relevant log lines. Attach both `.log` files. Known limitations that are not bugs:
-no crawl speed, no ghost mob, speech still works while unconscious or dead, no healing or revival.
+no crawl speed, no ghost mob, no dead/ghost chat channel, no healing or revival.
 
 ## 6. Clean restart
 

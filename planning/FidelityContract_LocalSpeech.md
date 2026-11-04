@@ -21,6 +21,9 @@ channel parity.
 4. Closed wall tiles block speech; an open corridor/door tile does not.
 5. Speech stays on the local channel; it is never broadcast to every peer by default.
 6. The UI renders player text without interpreting it as BBCode.
+7. The server refuses speech from an unconscious or dead crew body and tells the speaker why; see
+   FC-SC-10 in [FidelityContract_SurvivalConsciousness.md](FidelityContract_SurvivalConsciousness.md).
+   Dead players have no Ghost/OOC channel yet.
 
 ## Verification
 
@@ -28,3 +31,5 @@ channel parity.
   doorway line.
 - `tools/multiplayer_smoke.sh` verifies two connected crew members each hear each other's
   locally routed speech in addition to role assignment and movement replication.
+- `tools/multiplayer_smoke.sh --survival` verifies the server refuses and does not relay a dead
+  peer's speech.

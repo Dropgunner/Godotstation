@@ -38,6 +38,16 @@ needed for this slice and is not cited.
 - **Dead actors.** `Player/PlayerScript.cs` lines 509–520 (`IsDeadOrGhost`) and 571–573 (a dead
   player may transmit only Ghost/OOC chat). `LivingHealthMasterBase.cs` lines 2479–2481 give other
   players only "critical condition" / "dead" examine text, not numbers.
+- **Speech while incapacitated (read 2026-11-04 for FC-SC-10).** Unitystation `Core/Chat/Chat.cs`
+  lines 346–356 (`CorrectDeadGhostChannel`) force a dead body's message onto `ChatChannel.Ghost`; the
+  `//Crit players can't talk` branch at line 350 only returns, so at this commit an `UNCONSCIOUS`
+  body's local speech is **not** actually dropped there. `PlayerScript.GetAvailableChannelsMask`
+  lines 571–573 mask a dead body to `Ghost | OOC`. `Chat.CannotSpeakReason` lines 375–394 give the
+  texts "because you're not conscious or lack the energy to speak." (`UNCONSCIOUS` or
+  `BARELY_CONSCIOUS`) and "because you are dead.". tgstation `f37d36c295c4bf991b72647281352f3bd471b335`
+  `code/modules/mob/living/living_say.dm` lines 146–153: `stat == DEAD` routes to `say_dead` and
+  returns; `IS_UNCONSCIOUS(src)` (the `TRAIT_KNOCKEDOUT` trait, `code/__DEFINES/mobs.dm` line 1122)
+  drops the message unless it is a hard-crit whisper; `SOFT_CRIT` speaks normally.
 
 ## Contract implemented in Godotstation
 
@@ -81,6 +91,15 @@ Each clause names the test that fails when it is violated. Tests live in
 9. **FC-SC-9 Reset on restart.** A round restart creates fresh crew bodies: after
    `SharedRoundLifecycle.TryRestart` the adapter rebuilds the shared world and every re-added crew
    member starts `Conscious` with `brute = 0`. *Test:* `SharedStationSurvivalTests.RestartRestoresFullHealth`.
+10. **FC-SC-10 Speech refusal.** The server routes local speech only from a crew body whose live
+    state is `Conscious` or `BarelyConscious`. An `Unconscious` or `Dead` speaker's message is not
+    relayed to anyone, including the speaker, and the speaker receives the Unitystation refusal text
+    for their state. Ghost, OOC, and deadchat channels are not ported, so a dead player has no
+    channel at all in this slice. *Tests:* `LocalSpeechRulesTests.OnlyConsciousAndSoftCritCrewSpeak`,
+    `LocalSpeechRulesTests.RefusalTextMatchesUnitystationCannotSpeakReason`,
+    `SharedStationSurvivalTests.UnconsciousAndDeadCrewCannotSpeak`; `tools/multiplayer_smoke.sh --survival`
+    requires `PLAYTEST_SPEECH_REFUSED ... conscious=Dead` on the host, the refusal on the client, and
+    no `PLAYTEST_LOCAL_CHAT_RELAYED` line.
 
 ## Deviations (deliberate, playtest-scaled)
 
@@ -97,14 +116,19 @@ Each clause names the test that fails when it is violated. Tests live in
   existing camera. The dispatcher's `IsGhosting` short-circuit stays unused by this slice.
 - **Self-harm is refused.** Upstream validation does not forbid it explicitly; this slice refuses a
   harm click on one's own body to keep misclicks from being self-damaging in a two-person test.
+- **Unconscious speech is refused on the tgstation criterion.** Unitystation's pinned `Chat.cs`
+  comments that crit players cannot talk but does not enforce it for local speech; tgstation drops
+  the message. The roadmap names tgstation as the gameplay criterion, so this slice refuses it and
+  reuses Unitystation's refusal text. Dead speech is refused by both sources once their Ghost/OOC
+  and deadchat channels are excluded.
 
 ## Known gaps before parity claims
 
 - No body parts, organs, bleeding, oxygen, clone, radiation, stamina, armor, block, trauma, or
   weapon damage: only one brute pool and unarmed hits. Disarm and Grab intents on crew do nothing.
 - No revival, healing, medical items, or `OnRevive` path; death ends the peer's agency for the round.
-- Speech while unconscious or dead is not restricted (upstream limits dead players to Ghost/OOC).
-  The interaction contract already lists chat incapacity handling as open.
+- Dead players have no Ghost/OOC/deadchat channel, so they cannot communicate at all; upstream
+  gives them a dead-only channel. Whisper/deathgasp in hard crit is not ported.
 - `RoundEndReport` casualty count is a mechanical extension of the existing fact-only report; no
   Unitystation or tgstation round-outcome rule was traced for it.
 - `// TODO(fidelity)` questions recorded in code: whether `BarelyConscious` crew may melee
@@ -125,3 +149,16 @@ Each clause names the test that fails when it is violated. Tests live in
   `--interactions` and `--round-restart` smokes still pass; preflight unchanged at 301 passed.
 - Not done: exported macOS app and the hands-on two-person run. See
   [PLAYTEST_KIT_Survival.md](PLAYTEST_KIT_Survival.md).
+
+## Verification log (2026-11-04, integration branch `claude/happy-goldberg-p9okwk`, Linux cloud session, .NET SDK 10.0.403, Godot 4.4.1.stable.mono)
+
+- `d0c683f` (PR #44 merged on `main` `9e464ef`, then PR #42 merged on top with one
+  `IntentSelection` owning the local intent): `bash tools/preflight.sh` → `"build":"pass","test":"pass"`,
+  318 passed, 7 skipped; `dotnet build game/Godotstation.Game.sln` → 0 warnings, 0 errors; all seven
+  smokes passed in sequence: `movement`, `--interactions`, `--construction`, `--engineering-access`,
+  `--round-restart`, `--survival`, `--power-loop`.
+- `6fe8c6d` (FC-SC-10): preflight → 324 passed, 7 skipped. `--survival` → `MULTIPLAYER_SURVIVAL_SMOKE_OK`;
+  host log `PLAYTEST_SPEECH_REFUSED peer=2000314477 conscious=Dead` and
+  `PLAYTEST_SURVIVAL_HOST_OK hits=9 dead=true move_refused=true click_refused=true speech_refused=true`,
+  no `PLAYTEST_LOCAL_CHAT_RELAYED`; client log `PLAYTEST_SPEECH_REFUSED_CLIENT reason="because you are dead."`.
+  `movement` (which carries the two-peer chat exchange) still → `MULTIPLAYER_SMOKE_OK`.
