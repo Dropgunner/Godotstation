@@ -82,6 +82,40 @@ Each clause names the test that fails when it is violated. Tests live in
    `SharedRoundLifecycle.TryRestart` the adapter rebuilds the shared world and every re-added crew
    member starts `Conscious` with `brute = 0`. *Test:* `SharedStationSurvivalTests.RestartRestoresFullHealth`.
 
+## Addendum (2026-11-05): bruise-pack treatment, the first recovery path
+
+Source, same commit, under `UnityProject/Assets/Scripts/US13/`: `Items/Medical/HealsTheLiving.cs`
+(`WillInteract` requires `DefaultWillInteract.Default`, a target with `LivingHealthMasterBase`, and
+`Intent.Help`; `ServerApplyHeal` calls `HealDamage(null, 40, healType, ...)` and
+`stackable.ServerConsume(1)`; self-treatment instead runs a 5-second `SelfHeal` progress action).
+`UnityProject/Assets/Prefabs/Items/Medical/Basic Treatments/Bruise Pack.prefab` sets
+`initialAmount`/`maxAmount` 6 and `healType: 0`; `HealthV2/HealthEnums.cs` line 58 maps 0 to
+`Brute`. `LivingHealthMasterBase.CalculateOverallHealth` (lines 1148–1209) re-derives the conscious
+state from health after damage changes, so healing above a threshold restores the better state.
+
+10. **FC-HL-1 Item.** The playtest station spawns one bruise-pack stack (`kind = bruise-pack`, id 9010)
+    with 6 uses; each application heals 40 brute. *Tests:* `BruisePackHealingTests.StationSpawnsOneSixUseBruisePack`,
+    `BruisePackHealingTests.UsesRunOutAfterSixApplications`.
+11. **FC-HL-2 Heal rule.** Healing removes brute (never below 0) from a living body and re-derives
+    its conscious state with the FC-SC-1 thresholds. A dead body is not healed. *Tests:*
+    `BruisePackHealingTests.HealRulesRemoveBruteAndRederiveState`, `BruisePackHealingTests.DeadBodiesAreNotHealed`.
+12. **FC-HL-3 Application path.** A Help-intent `HandApply` with the pack in the active hand on
+    another living, injured crew body resolves through the dispatcher's reach/obstruction/performer
+    validation, heals once, and consumes one use. Wrong intent, no damage, out of reach, or a dead
+    body is refused and consumes nothing. *Tests:* `BruisePackHealingTests.HelpIntentWithPackHealsFortyAndConsumesOneUse`,
+    `BruisePackHealingTests.PackIsRefusedOnUninjuredDeadSelfOrWrongIntent`, `BruisePackHealingTests.OutOfReachTreatmentIsRefused`.
+13. **FC-HL-4 Recovery.** An unconscious crew member treated back to `Conscious` can move and act
+    again, and every peer sees the new state through the FC-SC-7 replication. *Tests:*
+    `BruisePackHealingTests.HealingRevivesAnUnconsciousCrewmateToMovement`; smoke
+    `tools/multiplayer_smoke.sh --recovery`.
+14. **FC-HL-5 No self-treatment yet.** Applying the pack to one's own body is refused (deviation below).
+
+Deviations for this addendum: self-treatment (upstream: 5-second progress action) is not ported;
+healing targets the whole body instead of the aimed body part; the pack does not stop bleeding or
+heal trauma (neither exists here). Open question: upstream `CalculateOverallHealth` would re-derive
+state for a healed corpse above −100 unless the heart/brain path keeps it dead; that organ model is
+not ported, so this slice keeps FC-SC-2 and refuses to heal dead bodies.
+
 ## Deviations (deliberate, playtest-scaled)
 
 - **Damage per unarmed hit is 25, not Unitystation's 5.** Thresholds are kept at source values, so
@@ -102,7 +136,8 @@ Each clause names the test that fails when it is violated. Tests live in
 
 - No body parts, organs, bleeding, oxygen, clone, radiation, stamina, armor, block, trauma, or
   weapon damage: only one brute pool and unarmed hits. Disarm and Grab intents on crew do nothing.
-- No revival, healing, medical items, or `OnRevive` path; death ends the peer's agency for the round.
+- Only one medical item (bruise pack, FC-HL); no revival or `OnRevive` path, so death still ends
+  the peer's agency for the round.
 - Dead-speaker routing is now covered by FC-LS-7/8 in
   [FidelityContract_LocalSpeech.md](FidelityContract_LocalSpeech.md); crit (unconscious) speech
   is still allowed pending the open question recorded there.
@@ -124,5 +159,9 @@ Each clause names the test that fails when it is violated. Tests live in
   `PLAYTEST_INTERACTION_REFUSED_INCAPACITATED ... conscious=Dead`, `PLAYTEST_SURVIVAL_HOST_OK hits=9`;
   client log shows the same three state lines and `PLAYTEST_SURVIVAL_CLIENT_OK unconscious=True dead=True`.
   `--interactions` and `--round-restart` smokes still pass; preflight unchanged at 301 passed.
+- 2026-11-05 follow-ups on branch `claude/project-thread-vq7vru`: preflight 314 passed / 7 skipped;
+  `--survival` (now also checks Ghost-channel speech), `--recovery`, `--interactions`,
+  `--construction`, `--round-restart`, `--engineering-access`, `--power-loop`, and the default smoke all print
+  their `*_SMOKE_OK` line on Linux with Godot 4.4.1 mono.
 - Not done: exported macOS app and the hands-on two-person run. See
   [PLAYTEST_KIT_Survival.md](PLAYTEST_KIT_Survival.md).

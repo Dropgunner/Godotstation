@@ -15,6 +15,8 @@ public static class StationEntityKind
     public const string FuelGenerator = "fuel-generator";
     public const string PowerStorage = "power-storage";
     public const string ApcLamp = "apc-lamp";
+    /// <summary>A stack of bruise packs (Unitystation Bruise Pack.prefab with HealsTheLiving).</summary>
+    public const string BruisePack = "bruise-pack";
     /// <summary>A crew member's body, replicated so every peer sees its status and can aim clicks at it (FC-SC-7).</summary>
     public const string Crew = "crew";
 }
@@ -54,6 +56,7 @@ public static class StationEntityCatalog
     public const int FuelGeneratorId = 9007;
     public const int PowerStorageId = 9008;
     public const int ApcLampId = 9009;
+    public const int BruisePackId = 9010;
 
     /// <summary>Crew bodies replicate under the negated peer id so they never collide with catalog ids.</summary>
     public static int CrewEntityId(int peerId) => -peerId;
@@ -71,5 +74,6 @@ public static class StationEntityCatalog
         new(FuelGeneratorId, StationEntityKind.FuelGenerator, new Vector2(8, -7)),
         new(PowerStorageId, StationEntityKind.PowerStorage, new Vector2(9, -7)),
         new(ApcLampId, StationEntityKind.ApcLamp, new Vector2(10, -7)),
+        new(BruisePackId, StationEntityKind.BruisePack, new Vector2(1, 1), Amount: Health.CrewHealthRules.BruisePackUses),
     ];
 }

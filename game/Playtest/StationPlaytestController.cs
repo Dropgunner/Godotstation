@@ -79,6 +79,9 @@ public partial class StationPlaytestController : Node2D
     private bool smokeSurvivalClientRequestsSent;
     private ulong smokeSurvivalClientMoveUntilMsec;
     private bool smokeSurvivalCompleted;
+    private int smokeRecoveryTreatments;
+    private bool smokeRecoveryClientSawRecovery;
+    private Vector2 smokeRecoveryVictimPosition;
     private bool localRoundStarted;
     private string connectionStatus = "Connecting…";
     private string hostAddress = "LAN IP unavailable";
@@ -722,7 +725,7 @@ public partial class StationPlaytestController : Node2D
                 return Vector2I.Right;
         }
         if (PlaytestLaunchOptions.SmokeSurvival && Time.GetTicksMsec() < smokeSurvivalClientMoveUntilMsec)
-            return Vector2I.Right;
+            return PlaytestLaunchOptions.SmokeRecovery ? Vector2I.Left : Vector2I.Right; // recovery: the host stands to the right
 
         Vector2 direction = Godot.Input.GetVector("move_left", "move_right", "move_up", "move_down");
         return new Vector2I(Mathf.Sign(direction.X), Mathf.Sign(direction.Y));
@@ -1211,13 +1214,19 @@ public partial class StationPlaytestController : Node2D
         if (peerId == localPeerId)
         {
             UpdateVitalsLabel();
-            if (consciousState is ConsciousState.Unconscious or ConsciousState.Dead)
-                SetStatus($"You are {consciousState.ToString().ToLowerInvariant()}. You cannot move or act until the shift restarts.");
+            if (consciousState == ConsciousState.Dead)
+                SetStatus("You are dead. You cannot move or act until the shift restarts.");
+            else if (consciousState == ConsciousState.Unconscious)
+                SetStatus("You are unconscious. A crewmate can treat you with the bruise pack (help intent).");
+            else if (previous != null && (ConsciousState)previous.Count(StationEntityField.Conscious) == ConsciousState.Unconscious)
+                SetStatus($"You came round ({consciousState}). You can move again.");
         }
         if (PlaytestLaunchOptions.SmokeSurvival && !GetMultiplayer().IsServer() && peerId == localPeerId)
         {
             if (consciousState == ConsciousState.Unconscious) smokeSurvivalClientSawUnconscious = true;
             if (consciousState == ConsciousState.Dead) smokeSurvivalClientSawDead = true;
+            if (consciousState == ConsciousState.Conscious && smokeSurvivalClientSawUnconscious)
+                smokeRecoveryClientSawRecovery = true;
         }
     }
 
@@ -1225,6 +1234,11 @@ public partial class StationPlaytestController : Node2D
     {
         if (!PlaytestLaunchOptions.SmokeSurvival || !localRoundStarted || players.Count < 2 || smokeSurvivalCompleted) return;
         ulong now = Time.GetTicksMsec();
+        if (PlaytestLaunchOptions.SmokeRecovery)
+        {
+            DriveSmokeRecovery(now);
+            return;
+        }
         if (GetMultiplayer().IsServer())
         {
             int victim = players.Keys.FirstOrDefault(peerId => peerId != localPeerId);
@@ -1257,6 +1271,52 @@ public partial class StationPlaytestController : Node2D
         RpcId(1, nameof(RequestLocalSpeech), localRoundId, "SMOKE_DEAD_SPEECH");
         smokeSurvivalCompleted = true;
         GD.Print($"PLAYTEST_SURVIVAL_CLIENT_OK unconscious={smokeSurvivalClientSawUnconscious} dead={smokeSurvivalClientSawDead} replicated=true requests_sent=true");
+    }
+
+    /// <summary>FC-HL-4 smoke: knock the client unconscious, treat it twice, and see it move again.</summary>
+    private void DriveSmokeRecovery(ulong now)
+    {
+        if (GetMultiplayer().IsServer())
+        {
+            int victim = players.Keys.FirstOrDefault(peerId => peerId != localPeerId);
+            Godotstation.Engine.Health.CrewHealth? health = victim == 0 ? null : sharedInteractionWorld.GetCrewHealth(victim);
+            if (health == null || now < smokeSurvivalNextHitMsec) return;
+            smokeSurvivalNextHitMsec = now + 150;
+            if (smokeRecoveryTreatments == 0 && health.ConsciousState != ConsciousState.Unconscious)
+            {
+                smokeSurvivalHits++;
+                ResolveSharedInteraction(localPeerId, StationEntityCatalog.CrewEntityId(victim), (int)Intent.Harm, false);
+                return;
+            }
+            if (sharedInteractionWorld.GetState(StationEntityCatalog.BruisePackId)?.Holder != localPeerId)
+            {
+                ResolveSharedInteraction(localPeerId, StationEntityCatalog.BruisePackId, (int)Intent.Help, false);
+                return;
+            }
+            if (health.ConsciousState != ConsciousState.Conscious)
+            {
+                smokeRecoveryTreatments++;
+                ResolveSharedInteraction(localPeerId, StationEntityCatalog.CrewEntityId(victim), (int)Intent.Help, false);
+                GD.Print($"PLAYTEST_RECOVERY_TREATED n={smokeRecoveryTreatments} brute={health.Brute:0} conscious={health.ConsciousState} " +
+                         $"pack_uses={sharedInteractionWorld.GetState(StationEntityCatalog.BruisePackId)?.Count(StationEntityField.Amount)}");
+                if (health.ConsciousState == ConsciousState.Conscious && players.TryGetValue(victim, out PlayerRuntime? patient))
+                    smokeRecoveryVictimPosition = patient.Position;
+                return;
+            }
+            if (players.TryGetValue(victim, out PlayerRuntime? moved) &&
+                moved.Position.DistanceSquaredTo(smokeRecoveryVictimPosition) > 0.08f)
+            {
+                smokeSurvivalCompleted = true;
+                GD.Print($"PLAYTEST_RECOVERY_HOST_OK hits={smokeSurvivalHits} treatments={smokeRecoveryTreatments} conscious=Conscious moved_after=true");
+            }
+            return;
+        }
+
+        if (!smokeRecoveryClientSawRecovery || smokeSurvivalClientRequestsSent) return;
+        smokeSurvivalClientRequestsSent = true;
+        smokeSurvivalClientMoveUntilMsec = now + 1500;
+        smokeSurvivalCompleted = true;
+        GD.Print($"PLAYTEST_RECOVERY_CLIENT_OK unconscious={smokeSurvivalClientSawUnconscious} recovered=true moving=true");
     }
 
     /// <summary>Keeps one collision object per solid entity, pushable when the entity allows it.</summary>

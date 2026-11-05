@@ -114,6 +114,11 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
             case StationEntityKind.GeneratorFuel:
                 entity = new ItemEntity(this, spawn, "generator fuel", new SharedStack(spawn.Kind, spawn.Amount, "generator fuel"));
                 break;
+            case StationEntityKind.BruisePack:
+                var pack = new ItemEntity(this, spawn, "bruise pack", new SharedStack(spawn.Kind, spawn.Amount, "bruise pack"));
+                dispatcher.RegisterHandler(new BruisePackHandler(this, pack));
+                entity = pack;
+                break;
             case StationEntityKind.ServiceCart:
                 var cart = new ServiceCart(spawn);
                 dispatcher.RegisterHandler(new CartWrenchHandler(cart));
@@ -355,6 +360,21 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
             ItemSlot? slot = victim.Inventory.GetNamedItemSlot(hand);
             if (slot?.Item != null) inventory.ServerDrop(slot);
         }
+    }
+
+    /// <summary>
+    /// FC-HL-1/2/3: one bruise pack application on another living crew member's body, consuming one use.
+    /// A patient healed past a threshold regains the better conscious state, and with it movement and input.
+    /// </summary>
+    private bool TryApplyBruisePack(int performerPeerId, ItemEntity pack, CrewMember patient)
+    {
+        if (!crew.TryGetValue(performerPeerId, out CrewMember? medic) ||
+            !ReferenceEquals(medic.ActiveHandSlot.Item, pack) || pack.Stackable is not { Amount: > 0 } ||
+            !patient.Health.HealBrute(CrewHealthRules.BruisePackHeal)) return false;
+        patient.InteractionPlayer.ConsciousState = patient.Health.ConsciousState;
+        if (!inventory.ServerConsume(medic.ActiveHandSlot, 1))
+            throw new InvalidOperationException("Validated bruise pack could not be consumed.");
+        return true;
     }
 
     /// <summary>Advance authoritative power simulation time on the host only. Call <see cref="PublishChanges"/> to replicate it.</summary>
@@ -722,6 +742,39 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
                 world.crew.TryGetValue(interaction.Performer.Id, out CrewMember? member))
                 world.inventory.ServerAdd(owner, member.ActiveHandSlot);
         }
+    }
+
+    /// <summary>
+    /// FC-HL-3: HealsTheLiving lives on the held item; it accepts a Help-intent HandApply on a living
+    /// body that has brute damage. Reach, obstruction and the medic's conscious state are validated by
+    /// the dispatcher first (DefaultWillInteract.Default).
+    /// </summary>
+    private sealed class BruisePackHandler(SharedStationInventoryWorld world, ItemEntity owner)
+        : IOwnedInteractionHandler<HandApply>
+    {
+        public WorldEntity Owner { get; } = owner;
+        public bool IsFirstInteractable => false;
+        public int Priority => 0;
+
+        public bool WillInteract(HandApply interaction, NetworkSide side) =>
+            interaction.Intent == Intent.Help && interaction.Performer != null &&
+            interaction.HandObject == Owner && owner.Stackable is { Amount: > 0 } &&
+            world.IsInActiveHand(interaction.Performer.Id, owner) &&
+            world.TryGetPatient(interaction.TargetObject, out CrewMember? patient) &&
+            patient!.PeerId != interaction.Performer.Id && !patient.Health.IsDead && patient.Health.Brute > 0;
+
+        public void ServerPerformInteraction(HandApply interaction)
+        {
+            if (interaction.Performer != null && world.TryGetPatient(interaction.TargetObject, out CrewMember? patient))
+                world.TryApplyBruisePack(interaction.Performer.Id, owner, patient!);
+        }
+    }
+
+    private bool TryGetPatient(WorldEntity? target, out CrewMember? patient)
+    {
+        patient = target is PlayerEntity body && crew.TryGetValue(body.Id, out CrewMember? member) &&
+                  ReferenceEquals(member.InteractionPlayer, body) ? member : null;
+        return patient != null;
     }
 
     private sealed class CartWrenchHandler(ServiceCart owner) : IOwnedInteractionHandler<HandApply>

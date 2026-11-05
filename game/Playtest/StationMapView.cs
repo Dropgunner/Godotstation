@@ -59,6 +59,7 @@ public partial class StationMapView : Node2D
                 case StationEntityKind.FuelGenerator: DrawGenerator(entity, position); break;
                 case StationEntityKind.PowerStorage: DrawStorage(entity, position); break;
                 case StationEntityKind.ApcLamp: DrawLamp(entity, position); break;
+                case StationEntityKind.BruisePack: DrawBruisePack(entity, position); break;
                 case StationEntityKind.Crew: break; // StationCrewAvatar draws crew bodies
                 default: DrawUnknown(entity, position); break;
             }
@@ -113,6 +114,18 @@ public partial class StationMapView : Node2D
             new Color("#aebbc2"), true);
         DrawString(ThemeDB.FallbackFont, position + new Vector2(-0.5f, 0.47f),
             $"METAL ×{sheets}", HorizontalAlignment.Left, -1, 1, new Color("#e3edf1"));
+    }
+
+    private void DrawBruisePack(StationEntityState entity, Vector2 position)
+    {
+        int uses = entity.Count(StationEntityField.Amount);
+        if (uses <= 0) return;
+        if (entity.Holder != null) position += new Vector2(-0.35f, 0.15f);
+        DrawRect(new Rect2(position - new Vector2(0.2f, 0.15f), new Vector2(0.4f, 0.3f)), new Color("#f2f2f2"), true);
+        DrawRect(new Rect2(position - new Vector2(0.04f, 0.11f), new Vector2(0.08f, 0.22f)), new Color("#d94a4a"), true);
+        DrawRect(new Rect2(position - new Vector2(0.11f, 0.04f), new Vector2(0.22f, 0.08f)), new Color("#d94a4a"), true);
+        DrawString(ThemeDB.FallbackFont, position + new Vector2(-0.6f, 0.47f),
+            $"BRUISE PACK ×{uses}", HorizontalAlignment.Left, -1, 1, new Color("#ffd6d6"));
     }
 
     private void DrawGirder(StationEntityState entity, Vector2 position)
