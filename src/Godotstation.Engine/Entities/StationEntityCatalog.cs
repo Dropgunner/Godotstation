@@ -39,6 +39,10 @@ public static class StationEntityField
     public const string Brute = "brute";
     /// <summary>Crew <see cref="Godotstation.Common.Interactions.ConsciousState"/> as an integer.</summary>
     public const string Conscious = "conscious";
+    /// <summary>1 while the crew member's player observes as a ghost (FC-GH-1).</summary>
+    public const string Ghost = "ghost";
+    public const string GhostX = "ghost_x";
+    public const string GhostY = "ghost_y";
 }
 
 /// <summary>Where one entity starts the round. Stackable kinds use <see cref="Amount"/>.</summary>

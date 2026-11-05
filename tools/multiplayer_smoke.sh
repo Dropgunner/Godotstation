@@ -173,6 +173,9 @@ for _ in $(seq 1 "$max_checks"); do
        grep -q "PLAYTEST_SURVIVAL_CLIENT_OK unconscious=True dead=True replicated=true requests_sent=true" "$client_log" && \
        grep -Eq "PLAYTEST_LOCAL_CHAT_RELAYED sender=[0-9]+ recipients=1 channel=GHOST" "$host_log" && \
        grep -Eq "PLAYTEST_LOCAL_CHAT_RECEIVED speaker=[0-9]+ channel=GHOST" "$client_log" && \
+       grep -Eq "PLAYTEST_GHOST_SPAWNED peer=[0-9]+" "$host_log" && \
+       grep -Eq "PLAYTEST_GHOST_MOVED peer=[0-9]+" "$host_log" && \
+       grep -Eq "PLAYTEST_GHOST_OBSERVED peer=[0-9]+ local=True" "$client_log" && \
        ! grep -q "channel=GHOST" <(grep "PLAYTEST_LOCAL_CHAT_RECEIVED" "$host_log"); then
       ready=1
     fi
@@ -233,7 +236,7 @@ for _ in $(seq 1 "$max_checks"); do
     elif [[ "$smoke_mode" == "--recovery" ]]; then
       echo "MULTIPLAYER_RECOVERY_SMOKE_OK: host knocked the client unconscious, treated it twice with the bruise pack, both peers saw it come round, and it moved again"
     elif [[ "$smoke_mode" == "--survival" ]]; then
-      echo "MULTIPLAYER_SURVIVAL_SMOKE_OK: host harmed the client to unconscious then dead, both peers observed each state, and the server refused the dead peer's movement and click; the dead peer's speech reached only the Ghost channel"
+      echo "MULTIPLAYER_SURVIVAL_SMOKE_OK: host harmed the client to unconscious then dead, both peers observed each state, and the server refused the dead peer's movement and click; the dead peer's speech reached only the Ghost channel, and moving made the dead peer a ghost"
     elif [[ "$smoke_mode" == "--engineering-access" ]]; then
       echo "MULTIPLAYER_ENGINEERING_ACCESS_SMOKE_OK: Assistant ID was denied; Engineer ID opened the shared airlock on both clients"
     elif [[ "$smoke_mode" == "--interactions" ]]; then

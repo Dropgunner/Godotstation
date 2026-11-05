@@ -9,7 +9,8 @@ public sealed record LocalChatListener(
     int PeerId,
     Vector2 Position,
     float HearingRange = 14f,
-    ConsciousState State = ConsciousState.Conscious);
+    ConsciousState State = ConsciousState.Conscious,
+    bool IsGhost = false);
 
 /// <summary>The chat channel a crew member's spoken line is carried on.</summary>
 public enum SpeechChannel
@@ -58,8 +59,14 @@ public static class LocalSpeechRouter
         }
 
         var hearing = all.FindAll(l => l.PeerId == speakerPeerId || l.State != ConsciousState.Dead);
-        return new SpeechRoute(SpeechChannel.Local,
-            FindListeners(speakerPeerId, speechPosition, hearing, hasLineOfSight));
+        var inRange = new HashSet<int>(FindListeners(speakerPeerId, speechPosition, hearing, hasLineOfSight));
+        // FC-GH-3: ChatRelay.PropagateChatToClients keeps every ghost ("send all to ghosts") before range checks.
+        var local = new List<int>();
+        var added = new HashSet<int>();
+        foreach (LocalChatListener listener in all)
+            if ((inRange.Contains(listener.PeerId) || (listener.IsGhost && listener.PeerId > 0)) && added.Add(listener.PeerId))
+                local.Add(listener.PeerId);
+        return new SpeechRoute(SpeechChannel.Local, local.AsReadOnly());
     }
 
     public static IReadOnlyList<int> FindListeners(

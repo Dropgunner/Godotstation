@@ -45,8 +45,8 @@ channels to `Ghost | OOC` and its receive channels to a list that omits `Local`;
 Open question (not decided here): whether upstream silences crit speech elsewhere (for example
 through `Mind.IsMute`, whose setter was not inspected). `Chat.CannotSpeakReason` has text for
 unconscious speakers, which hints that it may. Until that is traced, FC-LS-9 keeps the code-path
-behaviour. Deviation: upstream dead players normally become ghosts that hear all local speech;
-this port has no ghost mob yet, so a dead peer stays a dead body and follows the dead-body masks.
+behaviour. A dead peer who has moved becomes a ghost and then hears all Local speech (FC-GH-3 in
+`FidelityContract_SurvivalConsciousness.md`); a dead peer who has not moved follows the dead-body masks.
 
 ## Verification
 

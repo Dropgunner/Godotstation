@@ -116,6 +116,37 @@ heal trauma (neither exists here). Open question: upstream `CalculateOverallHeal
 state for a healed corpse above −100 unless the heart/brain path keeps it dead; that organ model is
 not ported, so this slice keeps FC-SC-2 and refuses to heal dead bodies.
 
+## Addendum (2026-11-05): ghost observer
+
+Source, same commit, under `UnityProject/Assets/Scripts/US13/`:
+`Player/MovementV2/MovementSynchronisation.cs` lines 1146–1149 (a dead player whose normal move
+fails calls `Mind.CmdSpawnPlayerGhost`); `Player/GhostMove.cs` (`MoveSpeed = 8`;
+`ReceivePlayerMoveAction` moves the ghost one step per input with no collision check);
+`Core/Chat/ChatRelay.cs` lines 134–138 (Local/Action/Combat messages are always kept for ghosts,
+"send all to ghosts", before range and wall checks); `Common/Interactions/InteractionDispatcher.cs`
+already refuses clicks from a performer whose `IsGhosting` is true (port of FC-5).
+
+15. **FC-GH-1 Becoming a ghost.** A dead crew member's movement input leaves the body as a ghost at
+    the body's tile, once. Living crew cannot ghost. The body stays where it fell and keeps
+    FC-SC-5's movement refusal. *Test:* `GhostObserverTests.OnlyTheDeadBecomeGhostsAndOnlyOnce`.
+16. **FC-GH-2 Ghost movement.** The ghost moves at 8 tiles per second in the input direction through
+    walls, doors, and bodies. *Tests:* `GhostObserverTests.GhostMovesThroughWallsButBodyStays`,
+    `GhostObserverTests.GhostStaysInsideStationBounds`.
+17. **FC-GH-3 Ghost hearing.** A ghost receives every Local message regardless of range or walls;
+    a dead body that has not ghosted still does not (FC-LS-8). *Test:*
+    `GhostObserverTests.GhostsHearAllLocalSpeechRegardlessOfRangeOrWalls`.
+18. **FC-GH-4 No ghost interaction.** Every click from a ghost is refused by the dispatcher.
+    *Test:* `GhostObserverTests.GhostCannotInteract`.
+19. **FC-GH-5 Replication.** The crew body's entity state carries `ghost`, `ghost_x`, `ghost_y`
+    (rounded to 0.1). The local player's ghost is drawn and followed by the camera. *Test:*
+    `GhostObserverTests.GhostStateReplicatesOnTheCrewBody`; smoke `--survival` checks
+    `PLAYTEST_GHOST_SPAWNED`, `PLAYTEST_GHOST_MOVED`, and the client's `PLAYTEST_GHOST_OBSERVED ... local=True`.
+
+Deviations for this addendum: the ghost is clamped to the playtest map bounds (upstream can leave the
+matrix); ghosts are not drawn for other players (upstream ghosts are invisible to the living but
+visible to other ghosts); there is no re-enter-body, orbit, ghost-role, or fast-fly (Shift) control;
+a ghost moves continuously instead of tile-by-tile steps.
+
 ## Deviations (deliberate, playtest-scaled)
 
 - **Damage per unarmed hit is 25, not Unitystation's 5.** Thresholds are kept at source values, so
@@ -126,9 +157,8 @@ not ported, so this slice keeps FC-SC-2 and refuses to heal dead bodies.
   receives `brute` and `conscious` for every body. Recorded here as a simplification.
 - **BarelyConscious crew move at normal speed.** Upstream switches to crawling; crawl speed and
   prone sprites are not ported.
-- **Dead bodies stay in the world as the peer's avatar with no ghost mob.** Upstream spawns a ghost
-  when a dead player moves. Here the dead peer simply cannot act; observing continues through the
-  existing camera. The dispatcher's `IsGhosting` short-circuit stays unused by this slice.
+- **Dead bodies stay in the world as the peer's avatar.** Since the 2026-11-05 ghost addendum
+  (FC-GH-1..5), the dead peer's first move spawns a ghost observer, as upstream does.
 - **Self-harm is refused.** Upstream validation does not forbid it explicitly; this slice refuses a
   harm click on one's own body to keep misclicks from being self-damaging in a two-person test.
 

@@ -71,6 +71,8 @@ left-click acts on the nearest target within about 0.7 tiles.
 5. **Two more hits (9 total).** B's avatar turns dark red with `DEAD`. Further hits change
    nothing. B still sees the station and chat but cannot move, pick up, or use anything.
    If B types in chat now, A does not see it: dead speech goes to the `[GHOST]` channel only.
+   If B presses WASD, B leaves the body as a pale `GHOST` that flies through walls; the camera
+   follows it, B hears A's speech from anywhere, and B still cannot click anything. A does not see the ghost.
 6. **Try to cheat as B.** Press `4` in B and click A's avatar: refused (B is dead).
 7. **End the shift** in A. Both windows receive the round report; it now contains
    `Crew casualties: 1`.

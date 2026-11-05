@@ -172,6 +172,14 @@ public partial class StationPlaytestController : Node2D
             sharedInteractionWorld.AdvancePower(step);
             foreach (PlayerRuntime player in players.Values)
             {
+                if (sharedInteractionWorld.TryMoveGhost(player.PeerId, player.GhostDeltaX, player.GhostDeltaY, step) &&
+                    !player.HasLoggedGhostMovement &&
+                    sharedInteractionWorld.GetGhostPosition(player.PeerId) is System.Numerics.Vector2 ghostAt &&
+                    System.Numerics.Vector2.Distance(ghostAt, new System.Numerics.Vector2(player.Position.X, player.Position.Y)) > 1f)
+                {
+                    player.HasLoggedGhostMovement = true;
+                    GD.Print($"PLAYTEST_GHOST_MOVED peer={player.PeerId} x={ghostAt.X:0.0} y={ghostAt.Y:0.0}");
+                }
                 float x = player.Position.X;
                 float y = player.Position.Y;
                 var intent = new MoveIntent
@@ -568,7 +576,8 @@ public partial class StationPlaytestController : Node2D
             listeners.Add(new LocalChatListener(player.PeerId,
                 new System.Numerics.Vector2(player.Position.X, player.Position.Y),
                 LocalSpeechRouter.DefaultHearingRange,
-                CrewConsciousState(player.PeerId)));
+                CrewConsciousState(player.PeerId),
+                sharedInteractionWorld.IsGhost(player.PeerId)));
 
         System.Numerics.Vector2 origin = new(speaker.Position.X, speaker.Position.Y);
         SpeechRoute route = LocalSpeechRouter.Route(speakerPeerId, CrewConsciousState(speakerPeerId), origin,
@@ -703,6 +712,11 @@ public partial class StationPlaytestController : Node2D
             player.DeltaY = 0;
             if ((deltaX != 0 || deltaY != 0) && movementRefusalLogged.Add(ownerPeerId))
                 GD.Print($"PLAYTEST_MOVE_REFUSED peer={ownerPeerId} conscious={ConsciousStateOf(ownerPeerId)}");
+            // FC-GH-1/2: a dead player's move leaves the body as a ghost; later moves steer the ghost.
+            if ((deltaX != 0 || deltaY != 0) && sharedInteractionWorld.TryBecomeGhost(ownerPeerId))
+                GD.Print($"PLAYTEST_GHOST_SPAWNED peer={ownerPeerId}");
+            player.GhostDeltaX = sharedInteractionWorld.IsGhost(ownerPeerId) ? deltaX : 0;
+            player.GhostDeltaY = sharedInteractionWorld.IsGhost(ownerPeerId) ? deltaY : 0;
             return;
         }
         player.DeltaX = deltaX;
@@ -1204,6 +1218,7 @@ public partial class StationPlaytestController : Node2D
     private void ObserveCrewState(StationEntityState state, StationEntityState? previous)
     {
         int peerId = StationEntityCatalog.PeerIdForCrewEntity(state.Id);
+        ObserveGhost(peerId, state, previous);
         int conscious = state.Count(StationEntityField.Conscious);
         if (previous != null && previous.Count(StationEntityField.Conscious) == conscious) return;
         var consciousState = (ConsciousState)conscious;
@@ -1215,7 +1230,7 @@ public partial class StationPlaytestController : Node2D
         {
             UpdateVitalsLabel();
             if (consciousState == ConsciousState.Dead)
-                SetStatus("You are dead. You cannot move or act until the shift restarts.");
+                SetStatus("You are dead. Move to leave your body as a ghost; ghosts hear everyone but cannot act.");
             else if (consciousState == ConsciousState.Unconscious)
                 SetStatus("You are unconscious. A crewmate can treat you with the bruise pack (help intent).");
             else if (previous != null && (ConsciousState)previous.Count(StationEntityField.Conscious) == ConsciousState.Unconscious)
@@ -1228,6 +1243,21 @@ public partial class StationPlaytestController : Node2D
             if (consciousState == ConsciousState.Conscious && smokeSurvivalClientSawUnconscious)
                 smokeRecoveryClientSawRecovery = true;
         }
+    }
+
+    /// <summary>FC-GH-5: the local ghost is drawn from the replicated crew-body fields.</summary>
+    private void ObserveGhost(int peerId, StationEntityState state, StationEntityState? previous)
+    {
+        bool isGhost = state.Flag(StationEntityField.Ghost);
+        if (isGhost && previous?.Flag(StationEntityField.Ghost) != true)
+            GD.Print($"PLAYTEST_GHOST_OBSERVED peer={peerId} local={peerId == localPeerId}");
+        if (peerId != localPeerId || !players.TryGetValue(peerId, out PlayerRuntime? player) ||
+            player.Avatar is not StationCrewAvatar avatar) return;
+        avatar.SetGhostPosition(isGhost
+            ? new Vector2((float)state.Get(StationEntityField.GhostX), (float)state.Get(StationEntityField.GhostY))
+            : null);
+        if (isGhost && previous?.Flag(StationEntityField.Ghost) != true)
+            SetStatus("You are a ghost. You can fly through walls and hear all local speech; only the dead hear you.");
     }
 
     private void DriveSmokeSurvival()
@@ -1513,6 +1543,9 @@ public partial class StationPlaytestController : Node2D
         public int DeltaY { get; set; }
         public bool HasLoggedMovement { get; set; }
         public bool HasLoggedRemoteMovement { get; set; }
+        public int GhostDeltaX { get; set; }
+        public int GhostDeltaY { get; set; }
+        public bool HasLoggedGhostMovement { get; set; }
     }
 
     private sealed class StationReachabilityMap(CollisionMap map) : IReachabilityMap

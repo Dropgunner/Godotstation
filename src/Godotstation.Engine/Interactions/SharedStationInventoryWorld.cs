@@ -262,6 +262,45 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         return true;
     }
 
+    /// <summary>
+    /// FC-GH-1: a dead crew member who tries to move leaves the body as a ghost at the body's tile
+    /// (MovementSynchronisation: "Can't do normal move, so check to see if dead" → CmdSpawnPlayerGhost).
+    /// The body stays where it fell. Returns true only on the transition.
+    /// </summary>
+    public bool TryBecomeGhost(int peerId)
+    {
+        if (!crew.TryGetValue(peerId, out CrewMember? member) || !member.Health.IsDead || member.GhostPosition.HasValue)
+            return false;
+        member.GhostPosition = member.Position;
+        PublishChanges();
+        return true;
+    }
+
+    public bool IsGhost(int peerId) => crew.TryGetValue(peerId, out CrewMember? member) && member.GhostPosition.HasValue;
+
+    public Vector2? GetGhostPosition(int peerId) =>
+        crew.TryGetValue(peerId, out CrewMember? member) ? member.GhostPosition : null;
+
+    /// <summary>
+    /// FC-GH-2: a ghost moves at <see cref="GhostMoveSpeed"/> tiles per second in the input direction,
+    /// through walls, doors and bodies (GhostMove.ReceivePlayerMoveAction does no collision check),
+    /// kept inside the station bounds. Publish with <see cref="PublishChanges"/>.
+    /// </summary>
+    public bool TryMoveGhost(int peerId, int deltaX, int deltaY, double elapsedSeconds)
+    {
+        if (!crew.TryGetValue(peerId, out CrewMember? member) || member.GhostPosition is not Vector2 position ||
+            !double.IsFinite(elapsedSeconds) || elapsedSeconds <= 0 || (deltaX == 0 && deltaY == 0)) return false;
+        var direction = Vector2.Normalize(new Vector2(Math.Sign(deltaX), Math.Sign(deltaY)));
+        Vector2 next = position + direction * (float)(GhostMoveSpeed * elapsedSeconds);
+        next = Vector2.Clamp(next, new Vector2(StationPlaytestLayout.MinX, StationPlaytestLayout.MinY),
+            new Vector2(StationPlaytestLayout.MaxX, StationPlaytestLayout.MaxY));
+        member.GhostPosition = next;
+        return next != position;
+    }
+
+    /// <summary>GhostMove.MoveSpeed default (8 world units per second).</summary>
+    public const float GhostMoveSpeed = 8f;
+
     public bool SetActorPosition(int peerId, Vector2 position)
     {
         if (!IsFinite(position) || !crew.TryGetValue(peerId, out CrewMember? member)) return false;
@@ -472,6 +511,13 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
                 [StationEntityField.Brute] = Health.Brute,
                 [StationEntityField.Conscious] = (int)Health.ConsciousState,
             };
+            if (GhostPosition is Vector2 ghost)
+            {
+                fields[StationEntityField.Ghost] = 1;
+                // Snap replicated ghost positions to tenths so a drifting ghost does not publish every frame.
+                fields[StationEntityField.GhostX] = Math.Round(ghost.X, 1);
+                fields[StationEntityField.GhostY] = Math.Round(ghost.Y, 1);
+            }
             return new StationEntityState(StationEntityCatalog.CrewEntityId(PeerId), StationEntityKind.Crew, Position, null,
                 targetable ? StationEntityFlags.Targetable : StationEntityFlags.None, fields);
         }
@@ -483,7 +529,8 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         public InventoryNamedSlot ActiveHand { get; set; } = InventoryNamedSlot.rightHand;
         public ItemSlot ActiveHandSlot => Inventory.GetNamedItemSlot(ActiveHand)!;
         public Vector2 WorldPosition => Position;
-        public bool IsGhosting => false;
+        public Vector2? GhostPosition { get; set; }
+        public bool IsGhosting => GhostPosition.HasValue;
         public bool HasTelekinesis => false;
         public bool IsAlive => !Health.IsDead;
         public ConsciousState ConsciousState => Health.ConsciousState;
