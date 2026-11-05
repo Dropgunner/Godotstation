@@ -564,21 +564,26 @@ public partial class StationPlaytestController : Node2D
         foreach (PlayerRuntime player in players.Values)
             listeners.Add(new LocalChatListener(player.PeerId,
                 new System.Numerics.Vector2(player.Position.X, player.Position.Y),
-                LocalSpeechRouter.DefaultHearingRange));
+                LocalSpeechRouter.DefaultHearingRange,
+                CrewConsciousState(player.PeerId)));
 
         System.Numerics.Vector2 origin = new(speaker.Position.X, speaker.Position.Y);
-        IReadOnlyList<int> recipients = LocalSpeechRouter.FindListeners(speakerPeerId, origin, listeners,
-            HasLocalLineOfSight);
-        foreach (int recipient in recipients)
+        SpeechRoute route = LocalSpeechRouter.Route(speakerPeerId, CrewConsciousState(speakerPeerId), origin,
+            listeners, HasLocalLineOfSight);
+        string channel = route.Channel == SpeechChannel.Ghost ? "GHOST" : "LOCAL";
+        foreach (int recipient in route.Recipients)
         {
             if (recipient == 1)
-                AppendSpeech(speakerPeerId, speaker.Job.Name, message);
+                AppendSpeech(channel, speakerPeerId, speaker.Job.Name, message);
             else
-                RpcId(recipient, nameof(ReceiveLocalSpeech), speakerPeerId, speaker.Job.Name, message);
+                RpcId(recipient, nameof(ReceiveLocalSpeech), channel, speakerPeerId, speaker.Job.Name, message);
         }
 
-        GD.Print($"PLAYTEST_LOCAL_CHAT_RELAYED sender={speakerPeerId} recipients={recipients.Count}");
+        GD.Print($"PLAYTEST_LOCAL_CHAT_RELAYED sender={speakerPeerId} recipients={route.Recipients.Count} channel={channel}");
     }
+
+    private ConsciousState CrewConsciousState(int peerId) =>
+        sharedInteractionWorld.GetCrewHealth(peerId)?.ConsciousState ?? ConsciousState.Conscious;
 
     private bool HasLocalLineOfSight(System.Numerics.Vector2 from, System.Numerics.Vector2 to)
     {
@@ -587,16 +592,16 @@ public partial class StationPlaytestController : Node2D
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void ReceiveLocalSpeech(int speakerPeerId, string jobName, string message)
+    private void ReceiveLocalSpeech(string channel, int speakerPeerId, string jobName, string message)
     {
-        AppendSpeech(speakerPeerId, jobName, message);
+        AppendSpeech(channel == "GHOST" ? "GHOST" : "LOCAL", speakerPeerId, jobName, message);
     }
 
-    private void AppendSpeech(int speakerPeerId, string jobName, string message)
+    private void AppendSpeech(string channel, int speakerPeerId, string jobName, string message)
     {
-        chatLog.AppendText($"[LOCAL] Crew {speakerPeerId} · {jobName}: {message}\n");
+        chatLog.AppendText($"[{channel}] Crew {speakerPeerId} · {jobName}: {message}\n");
         chatLog.ScrollToLine(Math.Max(0, chatLog.GetLineCount() - 1));
-        GD.Print($"PLAYTEST_LOCAL_CHAT_RECEIVED speaker={speakerPeerId}");
+        GD.Print($"PLAYTEST_LOCAL_CHAT_RECEIVED speaker={speakerPeerId} channel={channel}");
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable)]
@@ -1248,6 +1253,8 @@ public partial class StationPlaytestController : Node2D
         smokeSurvivalClientRequestsSent = true;
         smokeSurvivalClientMoveUntilMsec = now + 1500;
         RpcId(1, nameof(RequestSharedInteraction), localRoundId, StationEntityCatalog.WrenchId, (int)Intent.Help, false);
+        // FC-LS-7: a dead speaker's line is carried on the Ghost channel and the living host must not hear it.
+        RpcId(1, nameof(RequestLocalSpeech), localRoundId, "SMOKE_DEAD_SPEECH");
         smokeSurvivalCompleted = true;
         GD.Print($"PLAYTEST_SURVIVAL_CLIENT_OK unconscious={smokeSurvivalClientSawUnconscious} dead={smokeSurvivalClientSawDead} replicated=true requests_sent=true");
     }

@@ -151,7 +151,10 @@ for _ in $(seq 1 "$max_checks"); do
        grep -q "PLAYTEST_SURVIVAL_HOST_OK hits=9 dead=true move_refused=true click_refused=true" "$host_log" && \
        grep -Eq "PLAYTEST_CREW_STATE peer=[0-9]+ conscious=Unconscious brute=175" "$client_log" && \
        grep -Eq "PLAYTEST_CREW_STATE peer=[0-9]+ conscious=Dead brute=225" "$client_log" && \
-       grep -q "PLAYTEST_SURVIVAL_CLIENT_OK unconscious=True dead=True replicated=true requests_sent=true" "$client_log"; then
+       grep -q "PLAYTEST_SURVIVAL_CLIENT_OK unconscious=True dead=True replicated=true requests_sent=true" "$client_log" && \
+       grep -Eq "PLAYTEST_LOCAL_CHAT_RELAYED sender=[0-9]+ recipients=1 channel=GHOST" "$host_log" && \
+       grep -Eq "PLAYTEST_LOCAL_CHAT_RECEIVED speaker=[0-9]+ channel=GHOST" "$client_log" && \
+       ! grep -q "channel=GHOST" <(grep "PLAYTEST_LOCAL_CHAT_RECEIVED" "$host_log"); then
       ready=1
     fi
   elif [[ "$smoke_mode" == "--engineering-access" ]]; then
@@ -209,7 +212,7 @@ for _ in $(seq 1 "$max_checks"); do
     elif [[ "$smoke_mode" == "--power-loop" ]]; then
       echo "MULTIPLAYER_POWER_LOOP_SMOKE_OK: Engineer fuel, generator, storage, replicated APC lamp outage, and recovery were observed by both peers"
     elif [[ "$smoke_mode" == "--survival" ]]; then
-      echo "MULTIPLAYER_SURVIVAL_SMOKE_OK: host harmed the client to unconscious then dead, both peers observed each state, and the server refused the dead peer's movement and click"
+      echo "MULTIPLAYER_SURVIVAL_SMOKE_OK: host harmed the client to unconscious then dead, both peers observed each state, and the server refused the dead peer's movement and click; the dead peer's speech reached only the Ghost channel"
     elif [[ "$smoke_mode" == "--engineering-access" ]]; then
       echo "MULTIPLAYER_ENGINEERING_ACCESS_SMOKE_OK: Assistant ID was denied; Engineer ID opened the shared airlock on both clients"
     elif [[ "$smoke_mode" == "--interactions" ]]; then

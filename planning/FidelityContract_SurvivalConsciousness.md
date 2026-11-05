@@ -103,8 +103,9 @@ Each clause names the test that fails when it is violated. Tests live in
 - No body parts, organs, bleeding, oxygen, clone, radiation, stamina, armor, block, trauma, or
   weapon damage: only one brute pool and unarmed hits. Disarm and Grab intents on crew do nothing.
 - No revival, healing, medical items, or `OnRevive` path; death ends the peer's agency for the round.
-- Speech while unconscious or dead is not restricted (upstream limits dead players to Ghost/OOC).
-  The interaction contract already lists chat incapacity handling as open.
+- Dead-speaker routing is now covered by FC-LS-7/8 in
+  [FidelityContract_LocalSpeech.md](FidelityContract_LocalSpeech.md); crit (unconscious) speech
+  is still allowed pending the open question recorded there.
 - `RoundEndReport` casualty count is a mechanical extension of the existing fact-only report; no
   Unitystation or tgstation round-outcome rule was traced for it.
 - `// TODO(fidelity)` questions recorded in code: whether `BarelyConscious` crew may melee

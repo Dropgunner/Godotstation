@@ -181,8 +181,11 @@ pool per crew member with Unitystation's health thresholds, harm-intent unarmed 
 the shared dispatcher, hand items dropped on falling, server-side refusal of movement and clicks
 while unconscious or dead, replicated crew status on every peer, casualties in the round report,
 and fresh bodies on restart. Automated evidence: 33 clause tests and the `--survival` two-peer
-smoke. Still open for P4: disarm/grab/help outcomes, crawling, healing and revival, a ghost
-observer, speech restriction while incapacitated, and the human ordinary-controls pass.
+smoke. Follow-up slice (2026-11-05): a dead crew member's speech is carried on the Ghost
+channel and reaches only dead crew, and dead crew stop hearing living Local speech (FC-LS-7/8,
+`IncapacitatedSpeechTests`, `--survival` smoke). Still open for P4: disarm/grab/help outcomes,
+crawling, healing and revival, a ghost observer, the crit-speech question in FC-LS-9, and the
+human ordinary-controls pass.
 
 ### P5 — Round identity and replayable social chaos
 
