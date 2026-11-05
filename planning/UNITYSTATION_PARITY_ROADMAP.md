@@ -73,12 +73,13 @@ trace additional upstream systems it actually implements.
 
 | Outcome | Current evidence | Status |
 | --- | --- | --- |
-| Integrated build | `c1d2b64dc77ce4fb1f276ca782714a7b903c43d1` exported as `/private/tmp/Godotstation-Integrated-c1d2b64-Playtest.app`; universal runtime bundle passed headless startup. | Built; manual full-round gate open |
+| Integrated build | `c1d2b64dc77ce4fb1f276ca782714a7b903c43d1` exported as `/private/tmp/Godotstation-Integrated-c1d2b64-Playtest.app`; universal runtime bundle passed headless startup. 2026-11-05: `543fab1` (PR #45 stacked on #44, not integrated) cross-exported on Linux with an ad-hoc signature as `Godotstation-543fab1-Playtest-macOS.zip` (universal binary, both C# runtimes present); not yet launched on a Mac. | Built; manual full-round gate open |
 | New player action | Wrench/cart and construction interactions remain; Engineer can also fuel/start a generator, enable storage output, observe APC lamp outage, and recover power. Two-peer smoke passed. | Integrated in PRs #32 and #37; ordinary-control two-player path unverified |
 | Full round | Host can start, end, and restart a shared shift; Engineer can plate a girder, access the engineering airlock, and complete the scripted power failure/recovery loop. End sends both peers a fact-only report of tracked crew and station state, now including crew casualties. Harm intent (key `4`) on a crew body applies 25 brute per hit; at 125/175/225 brute the body is BarelyConscious/Unconscious/Dead on every peer, and the server refuses the incapacitated peer's movement and clicks. `tools/multiplayer_smoke.sh --survival` passed on `534f4e2` (2026-11-04, Linux, Godot 4.4.1 mono); restart rebuilds fresh bodies. | **Open:** no mode-specific outcome/report, no revival/ghost path (bruise-pack treatment of unconscious crew passed `--recovery` on the 2026-11-05 branch `claude/project-thread-vq7vru`), full power grid or machinery parity, or two-person ordinary-controls pass (kit: [PLAYTEST_KIT_Survival.md](PLAYTEST_KIT_Survival.md)) |
 | Bugs found during play | A client could click stale construction targets; the HUD covered the station after spawn. | Fixed in PRs #32 and #33; repeat human playtest needed |
 
-The export script now uses the tracked game solution, creates a
+The export script can also cross-export from Linux: it then signs ad-hoc and skips the macOS-only
+startup check, printing `MACOS_PLAYTEST_STARTUP_SKIPPED`. The export script now uses the tracked game solution, creates a
 temporary unsigned debug preset only when no local preset exists, refuses to overwrite an
 existing app, and validates the universal C# bundle with a headless startup. Godot still reports
 a temporary publish-directory cleanup exception after writing the app. The repository's test
