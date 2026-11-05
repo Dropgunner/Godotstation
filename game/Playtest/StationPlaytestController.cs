@@ -8,8 +8,10 @@ using Godotstation.Common.Interactions;
 using Godotstation.Engine.Chat;
 using Godotstation.Engine.Entities;
 using Godotstation.Engine.Interactions;
+using Godotstation.Engine.Maps;
 using Godotstation.Engine.Movement;
 using Godotstation.Engine.Rounds;
+using Godotstation.Game.Maps;
 
 namespace Godotstation.Game.Playtest;
 
@@ -27,6 +29,8 @@ public partial class StationPlaytestController : Node2D
     private SharedStationInventoryWorld sharedInteractionWorld = null!;
     private ReplicatedStationEntities replicatedEntities = new();
     private StationMapView stationMapView = null!;
+    private StationMap stationMap = StationMaps.CreateDefault();
+    private string stationMapJson = string.Empty;
     private readonly Dictionary<int, DynamicObject> entityObstacles = new();
     private Label statusLabel = null!;
     private Label activeHandLabel = null!;
@@ -75,6 +79,7 @@ public partial class StationPlaytestController : Node2D
     public override void _Ready()
     {
         SetMultiplayerAuthority(1);
+        if (PlaytestLaunchOptions.IsHost) LoadHostMap();
         InitializeWorld();
         BuildStationView();
         BuildHud();
@@ -92,11 +97,53 @@ public partial class StationPlaytestController : Node2D
             JoinHost(PlaytestLaunchOptions.Address);
     }
 
+    /// <summary>The host decides the map; it is replicated to every client as they connect.</summary>
+    private void LoadHostMap()
+    {
+        stationMap = StationMapLibrary.ResolveLaunchMap(out string source, out string note);
+        stationMapJson = StationMapJson.Serialize(stationMap);
+        if (note.Length > 0)
+        {
+            GD.PrintErr($"PLAYTEST_MAP_FALLBACK reason=\"{note}\"");
+            connectionStatus = note;
+        }
+        GD.Print($"PLAYTEST_MAP_LOADED name=\"{stationMap.Name}\" source={source} walls={stationMap.WallCount} spawns={stationMap.Spawns.Count} entities={stationMap.Entities.Count}");
+    }
+
+    /// <summary>Server-sent map for a joining client: validated, then the world is rebuilt on it before any spawn arrives.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceiveStationMap(string json)
+    {
+        if (GetMultiplayer().IsServer()) return;
+        if (!StationMapJson.TryParse(json, out StationMap map, out string error))
+        {
+            GD.PrintErr($"PLAYTEST_MAP_REJECTED reason=\"{error}\"");
+            SetStatus($"The host sent an unreadable map: {error}");
+            return;
+        }
+        StationMapProblem? firstError = StationMapValidator.Validate(map).FirstOrDefault(problem => problem.IsError);
+        if (firstError != null)
+        {
+            GD.PrintErr($"PLAYTEST_MAP_REJECTED reason=\"{firstError}\"");
+            SetStatus($"The host's map is not playable: {firstError}");
+            return;
+        }
+        foreach (PlayerRuntime player in players.Values)
+            player.Avatar.QueueFree();
+        players.Clear();
+        sharedInteractionWorld.EntitiesChanged -= OnEntitiesChanged;
+        stationMap = map;
+        stationMapJson = json;
+        InitializeWorld();
+        stationMapView.SetMap(stationMap);
+        GD.Print($"PLAYTEST_MAP_RECEIVED name=\"{map.Name}\" walls={map.WallCount} spawns={map.Spawns.Count} entities={map.Entities.Count}");
+    }
+
     private void InitializeWorld()
     {
-        collisionMap = StationPlaytestLayout.CreateCollisionMap();
+        collisionMap = stationMap.CreateCollisionMap();
         movementProcessor = new MovementProcessor(collisionMap);
-        sharedInteractionWorld = new SharedStationInventoryWorld(new StationReachabilityMap(collisionMap));
+        sharedInteractionWorld = new SharedStationInventoryWorld(new StationReachabilityMap(collisionMap), stationMap.Entities);
         sharedInteractionWorld.EntitiesChanged += OnEntitiesChanged;
         foreach ((int x, int y, IPassable passable) in sharedInteractionWorld.PassableTiles)
             collisionMap.SetTile(x, y, passable);
@@ -265,6 +312,7 @@ public partial class StationPlaytestController : Node2D
     {
         if (!GetMultiplayer().IsServer()) return;
         GD.Print($"PLAYTEST_PEER_CONNECTED peer={peerId}");
+        RpcId(peerId, nameof(ReceiveStationMap), stationMapJson);
         RefreshStatus();
     }
 
@@ -312,7 +360,12 @@ public partial class StationPlaytestController : Node2D
             return;
         }
 
-        var spawn = StationPlaytestLayout.Spawns[0];
+        if (stationMap.Spawns.Count == 0)
+        {
+            SetStatus("This map has no crew spawn; the shift cannot start.");
+            return;
+        }
+        var spawn = stationMap.Spawns[0];
         Vector2 hostSpawn = PlaytestLaunchOptions.SmokeEngineeringAccess
             ? new Vector2(8f, -3f)
             : PlaytestLaunchOptions.SmokePowerLoop
@@ -472,7 +525,7 @@ public partial class StationPlaytestController : Node2D
             return;
         }
         System.Numerics.Vector2 spawnPoint = default;
-        if (players.Count >= MaximumPlayers || !StationPlaytestLayout.TryFindFreeSpawn(
+        if (players.Count >= MaximumPlayers || !stationMap.TryFindFreeSpawn(
                 players.Values.Select(player => new System.Numerics.Vector2(player.Position.X, player.Position.Y)),
                 out spawnPoint))
         {
@@ -653,7 +706,7 @@ public partial class StationPlaytestController : Node2D
 
         var avatar = new StationCrewAvatar { Name = $"Crew_{peerId}", Position = position };
         avatar.Configure(peerId, peerId == GetMultiplayer().GetUniqueId(),
-            peerId == 1 ? "CREW · HOST" : $"CREW · {players.Count + 1}", job.Name);
+            peerId == 1 ? "CREW · HOST" : $"CREW · {players.Count + 1}", job.Name, stationMap.Bounds);
         AddChild(avatar);
 
         var obstacle = new DynamicObject(Mathf.RoundToInt(position.X), Mathf.RoundToInt(position.Y),
@@ -696,6 +749,7 @@ public partial class StationPlaytestController : Node2D
     {
         EnsureMovementActions();
         stationMapView = new StationMapView();
+        stationMapView.SetMap(stationMap);
         stationMapView.SetEntities(replicatedEntities);
         AddChild(stationMapView);
     }

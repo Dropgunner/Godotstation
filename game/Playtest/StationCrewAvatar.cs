@@ -1,4 +1,5 @@
 using Godot;
+using Godotstation.Engine.Maps;
 using Godotstation.Engine.Movement;
 
 namespace Godotstation.Game.Playtest;
@@ -10,13 +11,17 @@ public partial class StationCrewAvatar : Node2D
     private bool isLocal;
     private string displayName = string.Empty;
     private string jobName = string.Empty;
+    private StationMapBounds cameraBounds = new(StationPlaytestLayout.MinX, StationPlaytestLayout.MinY,
+        StationPlaytestLayout.MaxX, StationPlaytestLayout.MaxY);
 
-    public void Configure(int ownerPeerId, bool local, string playerName, string assignedJobName)
+    public void Configure(int ownerPeerId, bool local, string playerName, string assignedJobName,
+        StationMapBounds? bounds = null)
     {
         peerId = ownerPeerId;
         isLocal = local;
         displayName = playerName;
         jobName = assignedJobName;
+        if (bounds != null) cameraBounds = bounds;
     }
 
     public override void _Ready()
@@ -59,10 +64,10 @@ public partial class StationCrewAvatar : Node2D
             Zoom = new Vector2(32, 32),
             Enabled = true,
         };
-        camera.LimitLeft = StationPlaytestLayout.MinX;
-        camera.LimitTop = StationPlaytestLayout.MinY;
-        camera.LimitRight = StationPlaytestLayout.MaxX;
-        camera.LimitBottom = StationPlaytestLayout.MaxY;
+        camera.LimitLeft = cameraBounds.MinX;
+        camera.LimitTop = cameraBounds.MinY;
+        camera.LimitRight = cameraBounds.MaxX;
+        camera.LimitBottom = cameraBounds.MaxY;
         AddChild(camera);
     }
 

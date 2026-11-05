@@ -27,7 +27,9 @@ fi
 
 launch_host() {
   if [[ -n "$playtest_app" ]]; then
-    if [[ "$smoke_mode" == "--power-loop" ]]; then
+    if [[ "$smoke_mode" == "--custom-map" ]]; then
+      "$godot_bin" --headless --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-move --playtest-smoke-chat --playtest-map=res://maps/example_outpost.json
+    elif [[ "$smoke_mode" == "--power-loop" ]]; then
       "$godot_bin" --headless --quit-after 4800 -- --playtest-host --playtest-jobid=2 --playtest-smoke-power-loop
     elif [[ "$smoke_mode" == "--round-restart" ]]; then
       "$godot_bin" --headless --quit-after 900 -- --playtest-host --playtest-jobid=20 --playtest-smoke-construction --playtest-smoke-round-restart
@@ -41,7 +43,9 @@ launch_host() {
       "$godot_bin" --headless --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-move --playtest-smoke-chat
     fi
   else
-    if [[ "$smoke_mode" == "--power-loop" ]]; then
+    if [[ "$smoke_mode" == "--custom-map" ]]; then
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-move --playtest-smoke-chat --playtest-map=res://maps/example_outpost.json
+    elif [[ "$smoke_mode" == "--power-loop" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 4800 -- --playtest-host --playtest-jobid=2 --playtest-smoke-power-loop
     elif [[ "$smoke_mode" == "--round-restart" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 900 -- --playtest-host --playtest-jobid=20 --playtest-smoke-construction --playtest-smoke-round-restart
@@ -58,7 +62,9 @@ launch_host() {
 }
 launch_client() {
   if [[ -n "$playtest_app" ]]; then
-    if [[ "$smoke_mode" == "--power-loop" ]]; then
+    if [[ "$smoke_mode" == "--custom-map" ]]; then
+      "$godot_bin" --headless --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-move --playtest-smoke-chat
+    elif [[ "$smoke_mode" == "--power-loop" ]]; then
       "$godot_bin" --headless --quit-after 4800 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-power-loop
     elif [[ "$smoke_mode" == "--round-restart" ]]; then
       "$godot_bin" --headless --quit-after 900 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-construction --playtest-smoke-round-restart
@@ -72,7 +78,9 @@ launch_client() {
       "$godot_bin" --headless --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-move --playtest-smoke-chat
     fi
   else
-    if [[ "$smoke_mode" == "--power-loop" ]]; then
+    if [[ "$smoke_mode" == "--custom-map" ]]; then
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-move --playtest-smoke-chat
+    elif [[ "$smoke_mode" == "--power-loop" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 4800 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-power-loop
     elif [[ "$smoke_mode" == "--round-restart" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 900 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-construction --playtest-smoke-round-restart
@@ -153,6 +161,19 @@ for _ in $(seq 1 "$max_checks"); do
        [[ $(grep -c "PLAYTEST_INTERACTION_SERVER_STATE" "$host_log") -ge 3 ]]; then
       ready=1
     fi
+  elif [[ "$smoke_mode" == "--custom-map" ]]; then
+    if grep -q 'PLAYTEST_MAP_LOADED name="Example Outpost" source=res://maps/example_outpost.json walls=' "$host_log" && \
+       grep -q 'PLAYTEST_MAP_RECEIVED name="Example Outpost" walls=' "$client_log" && \
+       ! grep -q "PLAYTEST_MAP_FALLBACK\|PLAYTEST_MAP_REJECTED" "$host_log" "$client_log" && \
+       grep -q "PLAYTEST_ROSTER peers=2" "$host_log" && \
+       grep -q "PLAYTEST_ROUND_STARTED host_job=20" "$host_log" && \
+       grep -q "PLAYTEST_PLAYER_SPAWNED peer=1 job=20 role=Engineer" "$client_log" && \
+       grep -Eq "PLAYTEST_PLAYER_SPAWNED peer=[0-9]+ job=2 role=Assistant count=2" "$client_log" && \
+       grep -q "PLAYTEST_LOCAL_CHAT_RECEIVED speaker=1" "$client_log" && \
+       grep -q "PLAYTEST_CLIENT_POSITION peer=" "$host_log" && \
+       grep -q "PLAYTEST_REMOTE_MOVE peer=" "$client_log"; then
+      ready=1
+    fi
   elif grep -q "PLAYTEST_ROSTER peers=2" "$host_log" && \
        grep -q "PLAYTEST_HOST_READY port=7777 phase=PreRound" "$host_log" && \
        grep -q "PLAYTEST_ROUND_STARTED host_job=20" "$host_log" && \
@@ -188,6 +209,8 @@ for _ in $(seq 1 "$max_checks"); do
       echo "MULTIPLAYER_ENGINEERING_ACCESS_SMOKE_OK: Assistant ID was denied; Engineer ID opened the shared airlock on both clients"
     elif [[ "$smoke_mode" == "--interactions" ]]; then
       echo "MULTIPLAYER_INTERACTION_SMOKE_OK: remote peer picked up, used, and dropped the shared wrench; snapshots replicated"
+    elif [[ "$smoke_mode" == "--custom-map" ]]; then
+      echo "MULTIPLAYER_CUSTOM_MAP_SMOKE_OK: host loaded a community map file, the client received it, and both spawned, spoke and moved on it"
     else
       echo "MULTIPLAYER_SMOKE_OK: shared shift started, distinct roles spawned, local speech routed, and movement replicated"
     fi

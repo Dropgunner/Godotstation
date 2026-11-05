@@ -1,6 +1,7 @@
 using Godot;
 using Godotstation.Common.Interactions;
 using Godotstation.Engine.Rounds;
+using Godotstation.Game.Maps;
 using Godotstation.Game.Playtest;
 using Godotstation.Game.Round;
 
@@ -14,12 +15,18 @@ public partial class RoundLobbyController : Control
     private Button startButton = null!;
     private LineEdit addressInput = null!;
     private OptionButton crewJobOption = null!;
+    private OptionButton mapOption = null!;
 
     public override void _Ready()
     {
         if (PlaytestLaunchOptions.TryReadCommandLine())
         {
             CallDeferred(nameof(OpenPlaytestScene));
+            return;
+        }
+        if (PlaytestLaunchOptions.OpenMapEditor)
+        {
+            CallDeferred(nameof(OpenMapEditorScene));
             return;
         }
 
@@ -108,6 +115,16 @@ public partial class RoundLobbyController : Control
         if (crewJobOption.ItemCount > 0) crewJobOption.Select(0);
         crewJobRow.AddChild(crewJobOption);
 
+        var mapRow = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        content.AddChild(mapRow);
+        mapRow.AddChild(new Label { Text = "Host map:" });
+        mapOption = new OptionButton { CustomMinimumSize = new Vector2(280, 38) };
+        PopulateMapOption();
+        mapRow.AddChild(mapOption);
+        var editorButton = new Button { Text = "Map Editor", CustomMinimumSize = new Vector2(120, 38) };
+        editorButton.Pressed += OpenMapEditorScene;
+        mapRow.AddChild(editorButton);
+
         var playtestButtons = new HBoxContainer
         {
             Alignment = BoxContainer.AlignmentMode.Center,
@@ -143,9 +160,30 @@ public partial class RoundLobbyController : Control
         GetTree().ChangeSceneToFile("res://World/Wave8Station.tscn");
     }
 
+    private void PopulateMapOption()
+    {
+        mapOption.Clear();
+        int index = 0;
+        foreach (StationMapEntry entry in StationMapLibrary.List())
+        {
+            mapOption.AddItem(entry.Label, index);
+            mapOption.SetItemMetadata(index, entry.Path);
+            index++;
+        }
+        if (mapOption.ItemCount == 0)
+        {
+            mapOption.AddItem("Playtest Station  ·  built in", 0);
+            mapOption.SetItemMetadata(0, string.Empty);
+        }
+        mapOption.Select(0);
+    }
+
     private void StartPlaytest(bool host)
     {
         PlaytestLaunchOptions.IsHost = host;
+        PlaytestLaunchOptions.Map = null;
+        string selectedPath = mapOption.Selected >= 0 ? mapOption.GetItemMetadata(mapOption.Selected).AsString() : string.Empty;
+        PlaytestLaunchOptions.MapPath = host && selectedPath.Length > 0 ? selectedPath : null;
         PlaytestLaunchOptions.Address = string.IsNullOrWhiteSpace(addressInput.Text)
             ? "127.0.0.1"
             : addressInput.Text.Trim();
@@ -154,4 +192,6 @@ public partial class RoundLobbyController : Control
     }
 
     private void OpenPlaytestScene() => GetTree().ChangeSceneToFile("res://World/StationPlaytest.tscn");
+
+    private void OpenMapEditorScene() => GetTree().ChangeSceneToFile("res://MapEditor/MapEditor.tscn");
 }

@@ -1,14 +1,18 @@
+using System.Collections.Generic;
 using Godot;
 using Godotstation.Engine.Entities;
-using Godotstation.Engine.Movement;
 using Godotstation.Engine.Interactions;
+using Godotstation.Engine.Maps;
 
 namespace Godotstation.Game.Playtest;
 
-/// <summary>Renders the shared tile layout as a compact station with labeled departments.</summary>
+/// <summary>Renders a <see cref="StationMap"/> as a compact station with labeled departments and its entities.</summary>
 public partial class StationMapView : Node2D
 {
     private ReplicatedStationEntities entities = new();
+    private StationMap map = StationMaps.CreateDefault();
+    private readonly List<Node2D> roomLabels = new();
+    private bool ready;
 
     public void SetEntities(ReplicatedStationEntities currentEntities)
     {
@@ -18,28 +22,47 @@ public partial class StationMapView : Node2D
 
     public void RefreshEntities() => QueueRedraw();
 
+    /// <summary>Switches the drawn layout, for example when a client receives the host's map.</summary>
+    public void SetMap(StationMap stationMap)
+    {
+        map = stationMap;
+        if (ready) RebuildRoomLabels();
+        QueueRedraw();
+    }
+
     public override void _Ready()
     {
-        AddRoomLabel("MEDICAL", new Vector2(-8f, -6.3f), new Color("#b8efff"));
-        AddRoomLabel("SECURITY", new Vector2(0f, -6.3f), new Color("#ffd1bd"));
-        AddRoomLabel("ENGINEERING", new Vector2(8f, -6.3f), new Color("#ffe1a8"));
-        AddRoomLabel("CREW QUARTERS", new Vector2(0f, 6.3f), new Color("#ded9ff"));
-        AddRoomLabel("CENTRAL HALL", new Vector2(0f, 0.6f), new Color("#d1e2e8"));
+        ready = true;
+        RebuildRoomLabels();
+    }
+
+    private void RebuildRoomLabels()
+    {
+        foreach (Node2D label in roomLabels) label.QueueFree();
+        roomLabels.Clear();
+        foreach (StationMapRoom room in map.Rooms)
+        {
+            if (string.IsNullOrWhiteSpace(room.Name)) continue;
+            roomLabels.Add(AddRoomLabel(room.Name, new Vector2(room.CenterX, room.CenterY + 0.3f), new Color(room.LabelColor)));
+        }
     }
 
     public override void _Draw()
     {
-        for (int y = StationPlaytestLayout.MinY; y <= StationPlaytestLayout.MaxY; y++)
-        for (int x = StationPlaytestLayout.MinX; x <= StationPlaytestLayout.MaxX; x++)
+        StationMapBounds bounds = map.Bounds;
+        var defaultFloor = new Color(StationMaps.DefaultFloorColor);
+        Color defaultFloorAlt = defaultFloor.Darkened(0.06f);
+        for (int y = bounds.MinY; y <= bounds.MaxY; y++)
+        for (int x = bounds.MinX; x <= bounds.MaxX; x++)
         {
-            Color floor = y < -4
-                ? (x < -4 ? new Color("#475b64") : x < 4 ? new Color("#54525d") : new Color("#5b5848"))
-                : y > 4 ? new Color("#484d5a")
-                : ((x + y) & 1) == 0 ? new Color("#485965") : new Color("#44545f");
+            StationMapRoom? room = map.GetRoomAt(x, y);
+            Color floor = room != null && room.FloorColor != StationMaps.DefaultFloorColor
+                ? new Color(room.FloorColor)
+                : ((x + y) & 1) == 0 ? defaultFloor : defaultFloorAlt;
             DrawRect(new Rect2(x - 0.5f, y - 0.5f, 1f, 1f), floor, true);
         }
 
-        foreach (var (x, y) in StationPlaytestLayout.GetWallTiles())
+        foreach (var (x, y) in map.Walls)
         {
             DrawRect(new Rect2(x - 0.49f, y - 0.49f, 0.98f, 0.98f), new Color("#24323b"), true);
             DrawRect(new Rect2(x - 0.49f, y - 0.49f, 0.98f, 0.12f), new Color("#6c8591"), true);
@@ -176,7 +199,7 @@ public partial class StationMapView : Node2D
             entity.Kind.ToUpperInvariant(), HorizontalAlignment.Left, -1, 1, new Color("#f1d3f2"));
     }
 
-    private void AddRoomLabel(string text, Vector2 worldPosition, Color color)
+    private Node2D AddRoomLabel(string text, Vector2 worldPosition, Color color)
     {
         var anchor = new Node2D { Position = worldPosition };
         AddChild(anchor);
@@ -193,5 +216,6 @@ public partial class StationMapView : Node2D
         label.AddThemeFontSizeOverride("font_size", 18);
         label.AddThemeColorOverride("font_color", color);
         anchor.AddChild(label);
+        return anchor;
     }
 }

@@ -72,6 +72,7 @@ trace additional upstream systems it actually implements.
 | New player action | Wrench/cart and construction interactions remain; Engineer can also fuel/start a generator, enable storage output, observe APC lamp outage, and recover power. Two-peer smoke passed. | Integrated in PRs #32 and #37; ordinary-control two-player path unverified |
 | Full round | Host can start, end, and restart a shared shift; Engineer can plate a girder, access the engineering airlock, and complete the scripted power failure/recovery loop. End sends both peers a fact-only report of tracked crew and station state. | **Open:** no mode-specific outcome/report, survival/incapacitation path, full power grid or machinery parity, or two-person ordinary-controls pass |
 | Bugs found during play | A client could click stale construction targets; the HUD covered the station after spawn. | Fixed in PRs #32 and #33; repeat human playtest needed |
+| Community maps | The station layout, spawns, objects and rooms are one JSON map (`game/maps/`); the host loads a chosen map and streams it to joining clients, and an in-game editor authors, validates and hosts maps. Headless editor smoke and a two-client custom-map smoke pass. | Integrated on `claude/kind-darwin-flm5te`; wall/floor tiles only, no doors or windows as tiles yet |
 
 The export script now uses the tracked game solution, creates a
 temporary unsigned debug preset only when no local preset exists, refuses to overwrite an
@@ -80,6 +81,29 @@ a temporary publish-directory cleanup exception after writing the app. The repos
 project targets .NET 10; the installed .NET 8 SDK cannot run that target directly. A temporary
 retarget ran 255 tests successfully with 8 skipped, then restored the project file. These
 environment and exporter limitations remain visible; the manual full-round gate is still open.
+
+## Open task list
+
+Work items are tracked as GitHub issues in dependency order; each names the milestone it
+serves and its exit evidence. The current set, created from this roadmap:
+
+1. [#46](https://github.com/Dropgunner/Godotstation/issues/46) Two-person ordinary-controls
+   playtest gate on the exported app (closes the open gate row).
+2. [#47](https://github.com/Dropgunner/Godotstation/issues/47) Map-aware smokes and HUD: look up
+   scripted-smoke entities by kind rather than fixed catalog ids so every smoke runs on any map.
+3. [#48](https://github.com/Dropgunner/Godotstation/issues/48) Map tiles beyond wall and floor:
+   doors, windows, space, and placing the airlock as a tile.
+4. [#49](https://github.com/Dropgunner/Godotstation/issues/49) Mode-driven round outcome and
+   sourced round report (P0).
+5. [#50](https://github.com/Dropgunner/Godotstation/issues/50) Examine, alt-click and inventory
+   UI on the shared world (P2).
+6. [#51](https://github.com/Dropgunner/Godotstation/issues/51) Radio channel and whisper speech (P1).
+7. [#52](https://github.com/Dropgunner/Godotstation/issues/52) Health, incapacitation and ghost
+   observation (P4).
+8. [#53](https://github.com/Dropgunner/Godotstation/issues/53) Map editor quality of life:
+   rectangle fill, copy and paste, per-map thumbnails in the lobby.
+9. [#54](https://github.com/Dropgunner/Godotstation/issues/54) Atmospherics on the map grid: seed
+   the atmos simulation from the map's floor and wall tiles.
 
 ## Dependency-ordered milestones
 

@@ -1,0 +1,144 @@
+{
+  "format": 1,
+  "name": "Playtest Station",
+  "author": "Godotstation",
+  "description": "Five-room LAN playtest station: medical, security and engineering above a central hall, crew quarters below.",
+  "bounds": {
+    "minX": -12,
+    "minY": -9,
+    "maxX": 12,
+    "maxY": 9
+  },
+  "tiles": [
+    "#########################",
+    "#.......#.......#.......#",
+    "#.......#.......#.......#",
+    "#.......................#",
+    "#.......#.......#.......#",
+    "####.######.########.####",
+    "#.......#.......#.......#",
+    "#.......#.......#.......#",
+    "#.......#.......#.......#",
+    "#.......................#",
+    "#.......#.......#.......#",
+    "#.......#.......#.......#",
+    "#.......#.......#.......#",
+    "####.######.########.####",
+    "#.......................#",
+    "#.......................#",
+    "#.......................#",
+    "#.......................#",
+    "#########################"
+  ],
+  "spawns": [
+    [-6, 0],
+    [6, 0],
+    [-1, 0],
+    [1, 0]
+  ],
+  "rooms": [
+    {
+      "name": "MEDICAL",
+      "minX": -11,
+      "minY": -8,
+      "maxX": -5,
+      "maxY": -5,
+      "floorColor": "#475b64",
+      "labelColor": "#b8efff"
+    },
+    {
+      "name": "SECURITY",
+      "minX": -3,
+      "minY": -8,
+      "maxX": 3,
+      "maxY": -5,
+      "floorColor": "#54525d",
+      "labelColor": "#ffd1bd"
+    },
+    {
+      "name": "ENGINEERING",
+      "minX": 5,
+      "minY": -8,
+      "maxX": 11,
+      "maxY": -5,
+      "floorColor": "#5b5848",
+      "labelColor": "#ffe1a8"
+    },
+    {
+      "name": "CENTRAL HALL",
+      "minX": -11,
+      "minY": -3,
+      "maxX": 11,
+      "maxY": 3,
+      "floorColor": "#485965",
+      "labelColor": "#d1e2e8"
+    },
+    {
+      "name": "CREW QUARTERS",
+      "minX": -11,
+      "minY": 5,
+      "maxX": 11,
+      "maxY": 8,
+      "floorColor": "#484d5a",
+      "labelColor": "#ded9ff"
+    }
+  ],
+  "entities": [
+    {
+      "id": 9001,
+      "kind": "wrench",
+      "x": -1,
+      "y": 2
+    },
+    {
+      "id": 9002,
+      "kind": "service-cart",
+      "x": 0,
+      "y": 2
+    },
+    {
+      "id": 9003,
+      "kind": "metal-sheets",
+      "x": 1,
+      "y": 2,
+      "amount": 2
+    },
+    {
+      "id": 9004,
+      "kind": "girder",
+      "x": 2,
+      "y": 2
+    },
+    {
+      "id": 9005,
+      "kind": "engineering-airlock",
+      "x": 8,
+      "y": -4
+    },
+    {
+      "id": 9006,
+      "kind": "generator-fuel",
+      "x": 7,
+      "y": -7,
+      "amount": 3
+    },
+    {
+      "id": 9007,
+      "kind": "fuel-generator",
+      "x": 8,
+      "y": -7
+    },
+    {
+      "id": 9008,
+      "kind": "power-storage",
+      "x": 9,
+      "y": -7
+    },
+    {
+      "id": 9009,
+      "kind": "apc-lamp",
+      "x": 10,
+      "y": -7
+    }
+  ]
+}

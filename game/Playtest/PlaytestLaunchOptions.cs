@@ -1,4 +1,5 @@
 using Godot;
+using Godotstation.Engine.Maps;
 
 namespace Godotstation.Game.Playtest;
 
@@ -16,6 +17,12 @@ public static class PlaytestLaunchOptions
     public static bool SmokeEngineeringAccess { get; private set; }
     public static bool SmokeRoundRestart { get; private set; }
     public static bool SmokePowerLoop { get; private set; }
+    /// <summary>Map file the host loads (res://, user:// or absolute). Null means the built-in station.</summary>
+    public static string? MapPath { get; set; }
+    /// <summary>A map handed straight from the editor to the host, taking precedence over <see cref="MapPath"/>.</summary>
+    public static StationMap? Map { get; set; }
+    public static bool OpenMapEditor { get; private set; }
+    public static bool MapEditorSmoke { get; private set; }
 
     public static bool TryReadCommandLine()
     {
@@ -70,6 +77,19 @@ public static class PlaytestLaunchOptions
             else if (arg == "--playtest-smoke-power-loop")
             {
                 SmokePowerLoop = true;
+            }
+            else if (arg.StartsWith("--playtest-map=", System.StringComparison.Ordinal))
+            {
+                MapPath = arg["--playtest-map=".Length..];
+            }
+            else if (arg == "--map-editor")
+            {
+                OpenMapEditor = true;
+            }
+            else if (arg == "--map-editor-smoke")
+            {
+                OpenMapEditor = true;
+                MapEditorSmoke = true;
             }
         }
 

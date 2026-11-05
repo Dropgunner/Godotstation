@@ -1,0 +1,38 @@
+{
+  "format": 1,
+  "name": "Example Outpost",
+  "author": "Godotstation",
+  "description": "Hand-written two-room example: a dock with construction supplies and a reactor room behind an engineering airlock. Copy it to start your own map.",
+  "bounds": { "minX": -10, "minY": -6, "maxX": 10, "maxY": 6 },
+  "tiles": [
+    "#####################",
+    "#.........#.........#",
+    "#.........#.........#",
+    "#.........#.........#",
+    "#.........#.........#",
+    "#.........#.........#",
+    "#...................#",
+    "#.........#.........#",
+    "#.........#.........#",
+    "#.........#.........#",
+    "#.........#.........#",
+    "#.........#.........#",
+    "#####################"
+  ],
+  "spawns": [[-5, 0], [-7, 0], [-5, 2], [-7, 2]],
+  "rooms": [
+    { "name": "DOCK", "minX": -9, "minY": -5, "maxX": -1, "maxY": 5, "floorColor": "#475b64", "labelColor": "#b8efff" },
+    { "name": "REACTOR", "minX": 1, "minY": -5, "maxX": 9, "maxY": 5, "floorColor": "#5b5848", "labelColor": "#ffe1a8" }
+  ],
+  "entities": [
+    { "id": 1, "kind": "wrench", "x": -3, "y": -3 },
+    { "id": 2, "kind": "service-cart", "x": -3, "y": -2 },
+    { "id": 3, "kind": "metal-sheets", "x": -3, "y": 3, "amount": 2 },
+    { "id": 4, "kind": "girder", "x": -2, "y": 3 },
+    { "id": 5, "kind": "engineering-airlock", "x": 0, "y": 0 },
+    { "id": 6, "kind": "generator-fuel", "x": 3, "y": -3, "amount": 3 },
+    { "id": 7, "kind": "fuel-generator", "x": 4, "y": -3 },
+    { "id": 8, "kind": "power-storage", "x": 5, "y": -3 },
+    { "id": 9, "kind": "apc-lamp", "x": 6, "y": -3 }
+  ]
+}

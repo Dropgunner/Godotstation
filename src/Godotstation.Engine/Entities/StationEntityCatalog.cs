@@ -17,6 +17,42 @@ public static class StationEntityKind
     public const string ApcLamp = "apc-lamp";
 }
 
+/// <summary>What a map author needs to know about one entity kind.</summary>
+public sealed record StationEntityKindInfo(string Kind, string DisplayName, string Summary, bool Stackable, int DefaultAmount);
+
+/// <summary>The catalogue of placeable entity kinds, in palette order.</summary>
+public static class StationEntityKinds
+{
+    public static IReadOnlyList<StationEntityKindInfo> All { get; } =
+    [
+        new(StationEntityKind.Wrench, "Wrench", "Hand tool; anchors or frees a service cart.", false, 0),
+        new(StationEntityKind.ServiceCart, "Service cart", "Pushable cart; wrench it to anchor it.", false, 0),
+        new(StationEntityKind.MetalSheets, "Metal sheets", "Stackable construction material for plating girders.", true, 2),
+        new(StationEntityKind.Girder, "Girder", "Solid frame; two sheets and four seconds plate it into a wall.", false, 0),
+        new(StationEntityKind.EngineeringAirlock, "Engineering airlock", "Door that opens only for Engine clearance.", false, 0),
+        new(StationEntityKind.GeneratorFuel, "Generator fuel", "Stackable fuel for the generator.", true, 3),
+        new(StationEntityKind.FuelGenerator, "Fuel generator", "Burns fuel to charge the storage unit.", false, 0),
+        new(StationEntityKind.PowerStorage, "Power storage", "Stores generator output; toggle its output on.", false, 0),
+        new(StationEntityKind.ApcLamp, "APC lamp", "Lit while the storage unit outputs power.", false, 0),
+    ];
+
+    public static bool IsKnown(string kind) => TryGet(kind, out _);
+
+    public static bool TryGet(string kind, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out StationEntityKindInfo? info)
+    {
+        foreach (StationEntityKindInfo candidate in All)
+        {
+            if (candidate.Kind == kind)
+            {
+                info = candidate;
+                return true;
+            }
+        }
+        info = null;
+        return false;
+    }
+}
+
 /// <summary>Names of the small per-kind state values carried in <see cref="StationEntityState.Fields"/>.</summary>
 public static class StationEntityField
 {
