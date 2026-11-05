@@ -33,6 +33,9 @@ public sealed class ReplicatedStationEntities
             entities[state.Id] = state;
     }
 
+    /// <summary>Forgets an entity the server no longer has, such as a departed crew member's body.</summary>
+    public bool Remove(int id) => entities.Remove(id);
+
     public int? FindNearestTarget(Vector2 position, float radius)
     {
         if (!float.IsFinite(position.X) || !float.IsFinite(position.Y) || !float.IsFinite(radius) || radius <= 0)

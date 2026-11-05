@@ -69,6 +69,8 @@ namespace Godotstation.Common.Interactions
 		bool IsGhosting { get; }
 		bool HasTelekinesis { get; }
 		bool IsAlive { get; }
+		/// <summary>Finer-grained than <see cref="IsAlive"/>: critical performers are not Conscious.</summary>
+		ConsciousState ConsciousState => IsAlive ? ConsciousState.Conscious : ConsciousState.Dead;
 		IInteractable? ActiveHandItem { get; }
 		Intent CurrentIntent { get; }
 		PlayerEntity InteractionPlayer { get; }

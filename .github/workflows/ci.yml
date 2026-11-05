@@ -40,7 +40,7 @@ jobs:
       # One mode at a time: the smokes share UDP port 7777.
       - name: Two-client smokes
         run: |
-          for mode in movement --interactions --construction --engineering-access --round-restart --power-loop; do
+          for mode in movement --interactions --construction --engineering-access --round-restart --power-loop --health; do
             echo "::group::smoke $mode"
             bash tools/multiplayer_smoke.sh "$mode"
             echo "::endgroup::"
