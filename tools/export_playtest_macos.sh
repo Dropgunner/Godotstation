@@ -8,6 +8,12 @@ output_path="${1:-/private/tmp/Godotstation-Playtest-$(date +%Y%m%d-%H%M%S).app}
 solution_path="$repo_root/game/Godotstation.Game.sln"
 export_presets_path="$repo_root/game/export_presets.cfg"
 temporary_export_preset=false
+# On a non-macOS host (for example a Linux cloud machine) the app is cross-exported with Godot's
+# built-in ad-hoc signature, which Apple Silicon needs to launch it, and the macOS-only headless
+# startup check is skipped and reported as such.
+host_os="$(uname -s)"
+codesign_mode=0
+if [[ "$host_os" != "Darwin" ]]; then codesign_mode=1; fi
 
 if [[ ! -f "$solution_path" ]]; then
   echo "Godot C# solution not found: $solution_path" >&2
@@ -66,9 +72,10 @@ application/version="0.1.0"
 application/copyright=""
 application/copyright_localized={}
 display/high_res=true
-codesign/codesign=0
+codesign/codesign=__CODESIGN_MODE__
 codesign/identity=""
 PRESET
+  sed -i.bak "s/__CODESIGN_MODE__/$codesign_mode/" "$export_presets_path" && rm -f "$export_presets_path.bak"
 fi
 
 if ! grep -Fq 'name="macOS Debug"' "$export_presets_path"; then
@@ -87,6 +94,12 @@ if [[ ! -x "$app_executable" || ! -f "$app_resources/Godotstation.pck" || \
       ! -f "$app_resources/data_Godotstation.Game_macos_x86_64/Godotstation.Game.dll" ]]; then
   echo "Exported app is missing the executable, game data, or a universal C# runtime: $output_path" >&2
   exit 1
+fi
+
+if [[ "$host_os" != "Darwin" ]]; then
+  echo "MACOS_PLAYTEST_EXPORTED: $output_path"
+  echo "MACOS_PLAYTEST_STARTUP_SKIPPED: cross-exported on $host_os with an ad-hoc signature; launch it on a Mac to check startup"
+  exit 0
 fi
 
 startup_log="$(mktemp /private/tmp/godotstation-app-startup.XXXXXX)"

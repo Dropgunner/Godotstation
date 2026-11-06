@@ -82,6 +82,98 @@ Each clause names the test that fails when it is violated. Tests live in
    `SharedRoundLifecycle.TryRestart` the adapter rebuilds the shared world and every re-added crew
    member starts `Conscious` with `brute = 0`. *Test:* `SharedStationSurvivalTests.RestartRestoresFullHealth`.
 
+## Addendum (2026-11-05): bruise-pack treatment, the first recovery path
+
+Source, same commit, under `UnityProject/Assets/Scripts/US13/`: `Items/Medical/HealsTheLiving.cs`
+(`WillInteract` requires `DefaultWillInteract.Default`, a target with `LivingHealthMasterBase`, and
+`Intent.Help`; `ServerApplyHeal` calls `HealDamage(null, 40, healType, ...)` and
+`stackable.ServerConsume(1)`; self-treatment instead runs a 5-second `SelfHeal` progress action).
+`UnityProject/Assets/Prefabs/Items/Medical/Basic Treatments/Bruise Pack.prefab` sets
+`initialAmount`/`maxAmount` 6 and `healType: 0`; `HealthV2/HealthEnums.cs` line 58 maps 0 to
+`Brute`. `LivingHealthMasterBase.CalculateOverallHealth` (lines 1148–1209) re-derives the conscious
+state from health after damage changes, so healing above a threshold restores the better state.
+
+10. **FC-HL-1 Item.** The playtest station spawns one bruise-pack stack (`kind = bruise-pack`, id 9010)
+    with 6 uses; each application heals 40 brute. *Tests:* `BruisePackHealingTests.StationSpawnsOneSixUseBruisePack`,
+    `BruisePackHealingTests.UsesRunOutAfterSixApplications`.
+11. **FC-HL-2 Heal rule.** Healing removes brute (never below 0) from a living body and re-derives
+    its conscious state with the FC-SC-1 thresholds. A dead body is not healed. *Tests:*
+    `BruisePackHealingTests.HealRulesRemoveBruteAndRederiveState`, `BruisePackHealingTests.DeadBodiesAreNotHealed`.
+12. **FC-HL-3 Application path.** A Help-intent `HandApply` with the pack in the active hand on
+    another living, injured crew body resolves through the dispatcher's reach/obstruction/performer
+    validation, heals once, and consumes one use. Wrong intent, no damage, out of reach, or a dead
+    body is refused and consumes nothing. *Tests:* `BruisePackHealingTests.HelpIntentWithPackHealsFortyAndConsumesOneUse`,
+    `BruisePackHealingTests.PackIsRefusedOnUninjuredDeadSelfOrWrongIntent`, `BruisePackHealingTests.OutOfReachTreatmentIsRefused`.
+13. **FC-HL-4 Recovery.** An unconscious crew member treated back to `Conscious` can move and act
+    again, and every peer sees the new state through the FC-SC-7 replication. *Tests:*
+    `BruisePackHealingTests.HealingRevivesAnUnconsciousCrewmateToMovement`; smoke
+    `tools/multiplayer_smoke.sh --recovery`.
+14. **FC-HL-5 No self-treatment yet.** Applying the pack to one's own body is refused (deviation below).
+
+Deviations for this addendum: self-treatment (upstream: 5-second progress action) is not ported;
+healing targets the whole body instead of the aimed body part; the pack does not stop bleeding or
+heal trauma (neither exists here). Open question: upstream `CalculateOverallHealth` would re-derive
+state for a healed corpse above −100 unless the heart/brain path keeps it dead; that organ model is
+not ported, so this slice keeps FC-SC-2 and refuses to heal dead bodies.
+
+## Addendum (2026-11-05): ghost observer
+
+Source, same commit, under `UnityProject/Assets/Scripts/US13/`:
+`Player/MovementV2/MovementSynchronisation.cs` lines 1146–1149 (a dead player whose normal move
+fails calls `Mind.CmdSpawnPlayerGhost`); `Player/GhostMove.cs` (`MoveSpeed = 8`;
+`ReceivePlayerMoveAction` moves the ghost one step per input with no collision check);
+`Core/Chat/ChatRelay.cs` lines 134–138 (Local/Action/Combat messages are always kept for ghosts,
+"send all to ghosts", before range and wall checks); `Common/Interactions/InteractionDispatcher.cs`
+already refuses clicks from a performer whose `IsGhosting` is true (port of FC-5).
+
+15. **FC-GH-1 Becoming a ghost.** A dead crew member's movement input leaves the body as a ghost at
+    the body's tile, once. Living crew cannot ghost. The body stays where it fell and keeps
+    FC-SC-5's movement refusal. *Test:* `GhostObserverTests.OnlyTheDeadBecomeGhostsAndOnlyOnce`.
+16. **FC-GH-2 Ghost movement.** The ghost moves at 8 tiles per second in the input direction through
+    walls, doors, and bodies. *Tests:* `GhostObserverTests.GhostMovesThroughWallsButBodyStays`,
+    `GhostObserverTests.GhostStaysInsideStationBounds`.
+17. **FC-GH-3 Ghost hearing.** A ghost receives every Local message regardless of range or walls;
+    a dead body that has not ghosted still does not (FC-LS-8). *Test:*
+    `GhostObserverTests.GhostsHearAllLocalSpeechRegardlessOfRangeOrWalls`.
+18. **FC-GH-4 No ghost interaction.** Every click from a ghost is refused by the dispatcher.
+    *Test:* `GhostObserverTests.GhostCannotInteract`.
+19. **FC-GH-5 Replication.** The crew body's entity state carries `ghost`, `ghost_x`, `ghost_y`
+    (rounded to 0.1). The local player's ghost is drawn and followed by the camera. *Test:*
+    `GhostObserverTests.GhostStateReplicatesOnTheCrewBody`; smoke `--survival` checks
+    `PLAYTEST_GHOST_SPAWNED`, `PLAYTEST_GHOST_MOVED`, and the client's `PLAYTEST_GHOST_OBSERVED ... local=True`.
+
+Deviations for this addendum: the ghost is clamped to the playtest map bounds (upstream can leave the
+matrix); ghosts are not drawn for other players (upstream ghosts are invisible to the living but
+visible to other ghosts); there is no re-enter-body, orbit, ghost-role, or fast-fly (Shift) control;
+a ghost moves continuously instead of tile-by-tile steps.
+
+## Addendum (2026-11-06): disarm intent
+
+Source, same commit, under `UnityProject/Assets/Scripts/US13/`: `Systems/Inventory/Disarmable.cs`
+(`WillInteract`: `DefaultWillInteract.Default`, `Intent.Disarm`, target is not the performer,
+performer not `IsLayingDown`; `ServerPerformInteraction`: 0.5 s `TimeBetweenDisarms` cooldown, then
+`rng.Next(1, 100) <= 5` → `KnockDown()`, else a fresh `rng.Next(1, 100) <= 50` → `Disarm()` drops
+both hand slots, else a miss message); `Tilemaps/Behaviours/Objects/RegisterPlayer.cs`
+`ServerStun(6, false)` (knockdown for 6 s that "stops the player from moving and interacting",
+hands kept; armor stun immunity cannot apply because no armor is ported).
+
+20. **FC-DA-1 Validation.** A Disarm-intent click on another crew body is resolved by the dispatcher
+    (reach, obstruction, performer state) and refused for one's own body, while the performer is
+    knocked down, or within 0.5 s of the performer's previous attempt. *Tests:*
+    `DisarmTests.AttemptsAreHalfASecondApart`, `DisarmTests.SelfOutOfReachAndKnockedDownPerformersAreRefused`.
+21. **FC-DA-2 Outcome roll.** Knockdown at a first roll ≤ 5, otherwise disarm at a second roll ≤ 50,
+    otherwise a miss; a disarm drops both of the target's hands at the target's tile. *Tests:*
+    `DisarmTests.RollMatchesDisarmableChances`, `DisarmTests.SuccessfulDisarmDropsBothHandsAtTheVictim`,
+    `DisarmTests.MissChangesNothing`.
+22. **FC-DA-3 Knockdown.** The target cannot move or interact for 6 s, keeps its hand items, and its
+    crew entity carries `stunned = 1` until the timer ends. *Test:*
+    `DisarmTests.KnockdownStunsForSixSecondsKeepsHandsAndBlocksActing`.
+23. **FC-DA-4 Feedback.** Both crew members involved receive a combat line (fail / disarm / knock
+    down). Smoke: `tools/multiplayer_smoke.sh --disarm`.
+
+Deviations for this addendum: no sounds; helping a knocked-down player up (`RegisterPlayer.ServerHelpUp`,
+33 % chance) is not ported; bystanders do not see the combat line (upstream sends it to everyone nearby).
+
 ## Deviations (deliberate, playtest-scaled)
 
 - **Damage per unarmed hit is 25, not Unitystation's 5.** Thresholds are kept at source values, so
@@ -92,19 +184,20 @@ Each clause names the test that fails when it is violated. Tests live in
   receives `brute` and `conscious` for every body. Recorded here as a simplification.
 - **BarelyConscious crew move at normal speed.** Upstream switches to crawling; crawl speed and
   prone sprites are not ported.
-- **Dead bodies stay in the world as the peer's avatar with no ghost mob.** Upstream spawns a ghost
-  when a dead player moves. Here the dead peer simply cannot act; observing continues through the
-  existing camera. The dispatcher's `IsGhosting` short-circuit stays unused by this slice.
+- **Dead bodies stay in the world as the peer's avatar.** Since the 2026-11-05 ghost addendum
+  (FC-GH-1..5), the dead peer's first move spawns a ghost observer, as upstream does.
 - **Self-harm is refused.** Upstream validation does not forbid it explicitly; this slice refuses a
   harm click on one's own body to keep misclicks from being self-damaging in a two-person test.
 
 ## Known gaps before parity claims
 
 - No body parts, organs, bleeding, oxygen, clone, radiation, stamina, armor, block, trauma, or
-  weapon damage: only one brute pool and unarmed hits. Disarm and Grab intents on crew do nothing.
-- No revival, healing, medical items, or `OnRevive` path; death ends the peer's agency for the round.
-- Speech while unconscious or dead is not restricted (upstream limits dead players to Ghost/OOC).
-  The interaction contract already lists chat incapacity handling as open.
+  weapon damage: only one brute pool and unarmed hits. Grab intent on crew does nothing; disarm is FC-DA.
+- Only one medical item (bruise pack, FC-HL); no revival or `OnRevive` path, so death still ends
+  the peer's agency for the round.
+- Dead-speaker routing is now covered by FC-LS-7/8 in
+  [FidelityContract_LocalSpeech.md](FidelityContract_LocalSpeech.md); crit (unconscious) speech
+  is still allowed pending the open question recorded there.
 - `RoundEndReport` casualty count is a mechanical extension of the existing fact-only report; no
   Unitystation or tgstation round-outcome rule was traced for it.
 - `// TODO(fidelity)` questions recorded in code: whether `BarelyConscious` crew may melee
@@ -123,5 +216,9 @@ Each clause names the test that fails when it is violated. Tests live in
   `PLAYTEST_INTERACTION_REFUSED_INCAPACITATED ... conscious=Dead`, `PLAYTEST_SURVIVAL_HOST_OK hits=9`;
   client log shows the same three state lines and `PLAYTEST_SURVIVAL_CLIENT_OK unconscious=True dead=True`.
   `--interactions` and `--round-restart` smokes still pass; preflight unchanged at 301 passed.
+- 2026-11-05 follow-ups on branch `claude/project-thread-vq7vru`: preflight 314 passed / 7 skipped;
+  `--survival` (now also checks Ghost-channel speech), `--recovery`, `--interactions`,
+  `--construction`, `--round-restart`, `--engineering-access`, `--power-loop`, and the default smoke all print
+  their `*_SMOKE_OK` line on Linux with Godot 4.4.1 mono.
 - Not done: exported macOS app and the hands-on two-person run. See
   [PLAYTEST_KIT_Survival.md](PLAYTEST_KIT_Survival.md).

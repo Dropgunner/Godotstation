@@ -49,11 +49,10 @@ public sealed class SharedStationSurvivalTests
     [Fact]
     public void HelpIntentOnCrewAppliesNothing()
     {
-        // FC-SC-3: only harm intent produces an outcome on a crew body in this slice.
+        // FC-SC-3: help (empty hand) and grab produce no outcome on a crew body; disarm is FC-DA (DisarmTests).
         SharedStationInventoryWorld world = TwoAdjacentCrew();
 
         Assert.False(world.TryInteract(Attacker, VictimBody, Intent.Help, false));
-        Assert.False(world.TryInteract(Attacker, VictimBody, Intent.Disarm, false));
         Assert.False(world.TryInteract(Attacker, VictimBody, Intent.Grab, false));
         Assert.Equal(0, world.GetCrewHealth(Victim)!.Brute);
     }

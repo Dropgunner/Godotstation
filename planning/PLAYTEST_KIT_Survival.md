@@ -59,11 +59,24 @@ left-click acts on the nearest target within about 0.7 tiles.
    vitals line reads `BarelyConscious · brute 125/100`. If B was holding the wrench, it drops at
    B's feet. B can still walk (crawl speed is not ported).
 4. **Two more hits (7 total).** B's avatar turns grey with `UNCONSCIOUS`. B's status line reads
-   `You are unconscious. You cannot move or act until the shift restarts.` In B, press WASD and
+   `You are unconscious. A crewmate can treat you with the bruise pack (help intent).` In B, press WASD and
    click an object: nothing happens, and A's terminal prints `PLAYTEST_MOVE_REFUSED` and
    `PLAYTEST_INTERACTION_REFUSED_INCAPACITATED` for B's peer id.
+3a. **Disarm.** B picks up the wrench (`1`, click it). A presses `2` (Disarm) and clicks B's avatar,
+   about twice a second. Each try either fails, makes B drop the wrench (about half the time), or
+   rarely knocks B down for 6 seconds (`KNOCKED DOWN` caption; B cannot move or click). Both chat
+   logs show a `[COMBAT]` line for each try.
+4a. **Optional recovery branch (instead of 5).** In A press `1` (Help), walk to the white
+   `BRUISE PACK ×6` beside the spawn and left-click it to pick it up, walk back next to B, and
+   left-click B twice. Each click heals 40 brute and uses one pack (`×5`, then `×4`). After the
+   second click B is back to `Conscious · brute 95/100` in both windows, B's status reads
+   `You came round`, and B can walk again. Then continue from 5 if you also want to test death;
+   the pack does nothing on a dead body.
 5. **Two more hits (9 total).** B's avatar turns dark red with `DEAD`. Further hits change
    nothing. B still sees the station and chat but cannot move, pick up, or use anything.
+   If B types in chat now, A does not see it: dead speech goes to the `[GHOST]` channel only.
+   If B presses WASD, B leaves the body as a pale `GHOST` that flies through walls; the camera
+   follows it, B hears A's speech from anywhere, and B still cannot click anything. A does not see the ghost.
 6. **Try to cheat as B.** Press `4` in B and click A's avatar: refused (B is dead).
 7. **End the shift** in A. Both windows receive the round report; it now contains
    `Crew casualties: 1`.

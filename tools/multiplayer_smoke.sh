@@ -29,6 +29,10 @@ launch_host() {
   if [[ -n "$playtest_app" ]]; then
     if [[ "$smoke_mode" == "--survival" ]]; then
       "$godot_bin" --headless --quit-after 900 -- --playtest-host --playtest-jobid=20 --playtest-smoke-survival
+    elif [[ "$smoke_mode" == "--disarm" ]]; then
+      "$godot_bin" --headless --quit-after 900 -- --playtest-host --playtest-jobid=20 --playtest-smoke-disarm
+    elif [[ "$smoke_mode" == "--recovery" ]]; then
+      "$godot_bin" --headless --quit-after 900 -- --playtest-host --playtest-jobid=20 --playtest-smoke-recovery
     elif [[ "$smoke_mode" == "--power-loop" ]]; then
       "$godot_bin" --headless --quit-after 4800 -- --playtest-host --playtest-jobid=2 --playtest-smoke-power-loop
     elif [[ "$smoke_mode" == "--round-restart" ]]; then
@@ -45,6 +49,10 @@ launch_host() {
   else
     if [[ "$smoke_mode" == "--survival" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 900 -- --playtest-host --playtest-jobid=20 --playtest-smoke-survival
+    elif [[ "$smoke_mode" == "--disarm" ]]; then
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 900 -- --playtest-host --playtest-jobid=20 --playtest-smoke-disarm
+    elif [[ "$smoke_mode" == "--recovery" ]]; then
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 900 -- --playtest-host --playtest-jobid=20 --playtest-smoke-recovery
     elif [[ "$smoke_mode" == "--power-loop" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 4800 -- --playtest-host --playtest-jobid=2 --playtest-smoke-power-loop
     elif [[ "$smoke_mode" == "--round-restart" ]]; then
@@ -64,6 +72,10 @@ launch_client() {
   if [[ -n "$playtest_app" ]]; then
     if [[ "$smoke_mode" == "--survival" ]]; then
       "$godot_bin" --headless --quit-after 900 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-survival
+    elif [[ "$smoke_mode" == "--disarm" ]]; then
+      "$godot_bin" --headless --quit-after 900 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-disarm
+    elif [[ "$smoke_mode" == "--recovery" ]]; then
+      "$godot_bin" --headless --quit-after 900 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-recovery
     elif [[ "$smoke_mode" == "--power-loop" ]]; then
       "$godot_bin" --headless --quit-after 4800 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-power-loop
     elif [[ "$smoke_mode" == "--round-restart" ]]; then
@@ -80,6 +92,10 @@ launch_client() {
   else
     if [[ "$smoke_mode" == "--survival" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 900 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-survival
+    elif [[ "$smoke_mode" == "--disarm" ]]; then
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 900 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-disarm
+    elif [[ "$smoke_mode" == "--recovery" ]]; then
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 900 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-recovery
     elif [[ "$smoke_mode" == "--power-loop" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 4800 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-power-loop
     elif [[ "$smoke_mode" == "--round-restart" ]]; then
@@ -118,7 +134,7 @@ if [[ "$smoke_mode" == "--construction" ]]; then max_checks=200; fi
 if [[ "$smoke_mode" == "--round-restart" ]]; then max_checks=200; fi
 if [[ "$smoke_mode" == "--power-loop" ]]; then max_checks=900; fi
 if [[ "$smoke_mode" == "--engineering-access" ]]; then max_checks=100; fi
-if [[ "$smoke_mode" == "--survival" ]]; then max_checks=200; fi
+if [[ "$smoke_mode" == "--survival" || "$smoke_mode" == "--recovery" || "$smoke_mode" == "--disarm" ]]; then max_checks=200; fi
 for _ in $(seq 1 "$max_checks"); do
   ready=0
   if [[ "$smoke_mode" == "--round-restart" ]]; then
@@ -139,6 +155,26 @@ for _ in $(seq 1 "$max_checks"); do
        grep -q "PLAYTEST_GIRDER_PLATING_OK engineer=true sheets_consumed=2 duration_seconds=4 replicated=true" "$client_log"; then
       ready=1
     fi
+  elif [[ "$smoke_mode" == "--disarm" ]]; then
+    # FC-DA-1..3: the client holds the wrench; host disarm attempts resolve server-side until one drops it,
+    # and both peers get combat feedback.
+    if grep -q "PLAYTEST_ROSTER peers=2" "$host_log" && \
+       grep -Eq "PLAYTEST_DISARM performer=1 target=[0-9]+ outcome=Disarm" "$host_log" && \
+       grep -Eq "PLAYTEST_DISARM_HOST_OK attempts=[0-9]+ wrench_dropped=true" "$host_log" && \
+       grep -q "PLAYTEST_COMBAT_RECEIVED outcome=Disarm" "$client_log"; then
+      ready=1
+    fi
+  elif [[ "$smoke_mode" == "--recovery" ]]; then
+    # FC-HL-3/4: host knocks the client unconscious, picks up the bruise pack, treats the client back
+    # to Conscious, and the server accepts the recovered client's ordinary movement again.
+    if grep -q "PLAYTEST_ROSTER peers=2" "$host_log" && \
+       grep -Eq "PLAYTEST_CREW_STATE peer=[0-9]+ conscious=Unconscious brute=175" "$host_log" && \
+       grep -Eq "PLAYTEST_CREW_STATE peer=[0-9]+ conscious=Conscious brute=95" "$host_log" && \
+       grep -q "PLAYTEST_RECOVERY_HOST_OK hits=7 treatments=2 conscious=Conscious moved_after=true" "$host_log" && \
+       grep -Eq "PLAYTEST_CREW_STATE peer=[0-9]+ conscious=Conscious brute=95" "$client_log" && \
+       grep -q "PLAYTEST_RECOVERY_CLIENT_OK unconscious=True recovered=true moving=true" "$client_log"; then
+      ready=1
+    fi
   elif [[ "$smoke_mode" == "--survival" ]]; then
     # FC-SC-3/4/5/7: host harms the client to Unconscious then Dead, both peers log each transition,
     # and the dead peer's ordinary movement and click requests are refused by the server.
@@ -151,7 +187,13 @@ for _ in $(seq 1 "$max_checks"); do
        grep -q "PLAYTEST_SURVIVAL_HOST_OK hits=9 dead=true move_refused=true click_refused=true" "$host_log" && \
        grep -Eq "PLAYTEST_CREW_STATE peer=[0-9]+ conscious=Unconscious brute=175" "$client_log" && \
        grep -Eq "PLAYTEST_CREW_STATE peer=[0-9]+ conscious=Dead brute=225" "$client_log" && \
-       grep -q "PLAYTEST_SURVIVAL_CLIENT_OK unconscious=True dead=True replicated=true requests_sent=true" "$client_log"; then
+       grep -q "PLAYTEST_SURVIVAL_CLIENT_OK unconscious=True dead=True replicated=true requests_sent=true" "$client_log" && \
+       grep -Eq "PLAYTEST_LOCAL_CHAT_RELAYED sender=[0-9]+ recipients=1 channel=GHOST" "$host_log" && \
+       grep -Eq "PLAYTEST_LOCAL_CHAT_RECEIVED speaker=[0-9]+ channel=GHOST" "$client_log" && \
+       grep -Eq "PLAYTEST_GHOST_SPAWNED peer=[0-9]+" "$host_log" && \
+       grep -Eq "PLAYTEST_GHOST_MOVED peer=[0-9]+" "$host_log" && \
+       grep -Eq "PLAYTEST_GHOST_OBSERVED peer=[0-9]+ local=True" "$client_log" && \
+       ! grep -q "channel=GHOST" <(grep "PLAYTEST_LOCAL_CHAT_RECEIVED" "$host_log"); then
       ready=1
     fi
   elif [[ "$smoke_mode" == "--engineering-access" ]]; then
@@ -208,8 +250,12 @@ for _ in $(seq 1 "$max_checks"); do
       echo "MULTIPLAYER_CONSTRUCTION_SMOKE_OK: engineer picked up two sheets, completed the four-second girder task, and both clients observed the wall"
     elif [[ "$smoke_mode" == "--power-loop" ]]; then
       echo "MULTIPLAYER_POWER_LOOP_SMOKE_OK: Engineer fuel, generator, storage, replicated APC lamp outage, and recovery were observed by both peers"
+    elif [[ "$smoke_mode" == "--disarm" ]]; then
+      echo "MULTIPLAYER_DISARM_SMOKE_OK: host disarm attempts resolved on the server until the client's wrench dropped; both peers got combat feedback"
+    elif [[ "$smoke_mode" == "--recovery" ]]; then
+      echo "MULTIPLAYER_RECOVERY_SMOKE_OK: host knocked the client unconscious, treated it twice with the bruise pack, both peers saw it come round, and it moved again"
     elif [[ "$smoke_mode" == "--survival" ]]; then
-      echo "MULTIPLAYER_SURVIVAL_SMOKE_OK: host harmed the client to unconscious then dead, both peers observed each state, and the server refused the dead peer's movement and click"
+      echo "MULTIPLAYER_SURVIVAL_SMOKE_OK: host harmed the client to unconscious then dead, both peers observed each state, and the server refused the dead peer's movement and click; the dead peer's speech reached only the Ghost channel, and moving made the dead peer a ghost"
     elif [[ "$smoke_mode" == "--engineering-access" ]]; then
       echo "MULTIPLAYER_ENGINEERING_ACCESS_SMOKE_OK: Assistant ID was denied; Engineer ID opened the shared airlock on both clients"
     elif [[ "$smoke_mode" == "--interactions" ]]; then

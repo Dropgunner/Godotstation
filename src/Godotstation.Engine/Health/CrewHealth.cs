@@ -22,6 +22,15 @@ public static class CrewHealthRules
     /// </summary>
     public const double UnarmedBruteDamage = 25;
 
+    /// <summary>
+    /// FC-HL-1: one bruise pack application heals 40 of its heal type (Brute)
+    /// (HealsTheLiving.ServerApplyHeal → HealDamage(null, 40, healType, ...); Bruise Pack.prefab healType 0 = Brute).
+    /// </summary>
+    public const double BruisePackHeal = 40;
+
+    /// <summary>FC-HL-1: Bruise Pack.prefab sets Stackable initialAmount and maxAmount to 6.</summary>
+    public const int BruisePackUses = 6;
+
     public static double HealthFor(double brute) => MaxHealth - brute;
 
     /// <summary>health &lt; 0 → BarelyConscious, &lt; -50 → Unconscious, &lt; -100 → Dead.</summary>
@@ -57,5 +66,20 @@ public sealed class CrewHealth
         ConsciousState derived = CrewHealthRules.StateFor(Brute);
         if (previous != ConsciousState.Dead) ConsciousState = derived;
         return previous;
+    }
+
+    /// <summary>
+    /// FC-HL-2: removes brute damage from a living body and re-derives its conscious state from health
+    /// (LivingHealthMasterBase.CalculateOverallHealth), so healing above a threshold restores the better
+    /// state. A dead body is not healed (FC-SC-2; revival is not ported).
+    /// </summary>
+    /// <returns>True when damage was removed.</returns>
+    public bool HealBrute(double amount)
+    {
+        if (!double.IsFinite(amount) || amount < 0) throw new ArgumentOutOfRangeException(nameof(amount));
+        if (IsDead || Brute <= 0 || amount == 0) return false;
+        Brute = Math.Max(0, Brute - amount);
+        ConsciousState = CrewHealthRules.StateFor(Brute);
+        return true;
     }
 }

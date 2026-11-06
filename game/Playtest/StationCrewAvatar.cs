@@ -13,6 +13,9 @@ public partial class StationCrewAvatar : Node2D
     private string jobName = string.Empty;
     private Label? nameLabel;
     private ConsciousState consciousState = ConsciousState.Conscious;
+    private Camera2D? camera;
+    private bool knockedDown;
+    private Node2D? ghost;
 
     public void Configure(int ownerPeerId, bool local, string playerName, string assignedJobName)
     {
@@ -57,7 +60,7 @@ public partial class StationCrewAvatar : Node2D
         ApplyConsciousState();
 
         if (!isLocal) return;
-        var camera = new Camera2D
+        camera = new Camera2D
         {
             Name = "StationCamera",
             Zoom = new Vector2(32, 32),
@@ -77,6 +80,14 @@ public partial class StationCrewAvatar : Node2D
         if (IsInsideTree()) ApplyConsciousState();
     }
 
+    /// <summary>Presentation only: a knocked-down body shows a caption (FC-DA-3).</summary>
+    public void SetKnockedDown(bool value)
+    {
+        if (knockedDown == value) return;
+        knockedDown = value;
+        if (IsInsideTree()) ApplyConsciousState();
+    }
+
     private void ApplyConsciousState()
     {
         (Color tint, string caption) = consciousState switch
@@ -86,8 +97,44 @@ public partial class StationCrewAvatar : Node2D
             ConsciousState.Dead => (new Color(0.45f, 0.2f, 0.2f), "\nDEAD"),
             _ => (Colors.White, string.Empty),
         };
+        if (knockedDown && consciousState == ConsciousState.Conscious) caption = "\nKNOCKED DOWN";
         Modulate = tint;
         if (nameLabel != null) nameLabel.Text = $"{displayName}\n{jobName.ToUpperInvariant()}{caption}";
+    }
+
+    /// <summary>
+    /// FC-GH-5 presentation: the local player's ghost is drawn at its replicated position and the camera
+    /// follows it; the body stays where it fell. Other players' ghosts stay hidden, as upstream ghosts
+    /// are invisible to the living.
+    /// </summary>
+    public void SetGhostPosition(Vector2? worldPosition)
+    {
+        if (!isLocal || !IsInsideTree()) return;
+        if (worldPosition is not Vector2 target)
+        {
+            ghost?.QueueFree();
+            ghost = null;
+            if (camera != null) camera.Position = Vector2.Zero;
+            return;
+        }
+        if (ghost == null)
+        {
+            ghost = new Node2D { Name = "Ghost", TopLevel = true, Modulate = new Color(0.8f, 0.9f, 1f, 0.6f) };
+            ghost.AddChild(new Polygon2D { Color = new Color("#dce8ff"), Polygon = MakeCircle(0.26f, 20) });
+            var label = new Label
+            {
+                Text = "GHOST",
+                Position = new Vector2(-48f, -34f),
+                Size = new Vector2(96f, 20f),
+                Scale = new Vector2(0.04f, 0.04f),
+                HorizontalAlignment = HorizontalAlignment.Center,
+            };
+            label.AddThemeFontSizeOverride("font_size", 13);
+            ghost.AddChild(label);
+            AddChild(ghost);
+        }
+        ghost.GlobalPosition = target;
+        if (camera != null) camera.Position = ghost.GlobalPosition - GlobalPosition;
     }
 
     private static Vector2[] MakeCircle(float radius, int segments)

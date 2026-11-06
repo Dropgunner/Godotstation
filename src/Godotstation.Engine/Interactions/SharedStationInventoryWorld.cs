@@ -34,9 +34,13 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
     private readonly Dictionary<int, StationEntityState> lastPublished = new();
     private readonly StationPowerLoop powerLoop = new();
 
+    private readonly Func<int, int, int> nextRandom;
+
+    /// <param name="nextRandom">Integer draw in [min, max) for chance rolls such as disarm; defaults to <see cref="Random.Shared"/>.</param>
     public SharedStationInventoryWorld(IReachabilityMap? reachabilityMap = null,
-        IReadOnlyList<StationEntitySpawn>? spawns = null)
+        IReadOnlyList<StationEntitySpawn>? spawns = null, Func<int, int, int>? nextRandom = null)
     {
+        this.nextRandom = nextRandom ?? Random.Shared.Next;
         this.reachabilityMap = reachabilityMap ?? UnobstructedMap.Instance;
         inventory = new InventorySystem(this);
         inventory.OnMovePerformed += _ => PublishChanges();
@@ -46,6 +50,9 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         foreach (StationEntityState state in CaptureAll())
             lastPublished[state.Id] = state;
     }
+
+    /// <summary>Raised on the server after each resolved disarm attempt: performer peer, target peer, outcome.</summary>
+    public event Action<int, int, DisarmOutcome>? DisarmResolved;
 
     /// <summary>Raised with only the entities whose replicated state differs from the last publish.</summary>
     public event Action<IReadOnlyList<StationEntityState>>? EntitiesChanged;
@@ -76,9 +83,30 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
     public CrewHealth? GetCrewHealth(int peerId) =>
         crew.TryGetValue(peerId, out CrewMember? member) ? member.Health : null;
 
-    /// <summary>FC-SC-5: unconscious and dead crew cannot move; the server adapter must consult this before resolving input.</summary>
+    /// <summary>
+    /// FC-SC-5 / FC-DA-3: unconscious, dead, and knocked-down crew cannot move; the server adapter must
+    /// consult this before resolving input.
+    /// </summary>
     public bool CanActorMove(int peerId) =>
-        crew.TryGetValue(peerId, out CrewMember? member) && CrewHealthRules.CanMove(member.Health.ConsciousState);
+        crew.TryGetValue(peerId, out CrewMember? member) && CrewHealthRules.CanMove(member.Health.ConsciousState) &&
+        member.StunSeconds <= 0;
+
+    public bool IsStunned(int peerId) => crew.TryGetValue(peerId, out CrewMember? member) && member.StunSeconds > 0;
+
+    /// <summary>Advances per-crew timers (knockdown stun, disarm cooldown) on the server. Publishes when a stun ends.</summary>
+    public void AdvanceCrewTimers(double elapsedSeconds)
+    {
+        if (!double.IsFinite(elapsedSeconds) || elapsedSeconds <= 0) return;
+        bool changed = false;
+        foreach (CrewMember member in crew.Values)
+        {
+            member.DisarmCooldownSeconds = Math.Max(0, member.DisarmCooldownSeconds - elapsedSeconds);
+            if (member.StunSeconds <= 0) continue;
+            member.StunSeconds = Math.Max(0, member.StunSeconds - elapsedSeconds);
+            changed |= member.StunSeconds <= 0;
+        }
+        if (changed) PublishChanges();
+    }
 
     /// <summary>The replicated starting state of a station, for clients that have not received a snapshot yet.</summary>
     public static IReadOnlyList<StationEntityState> InitialStates(IReadOnlyList<StationEntitySpawn>? spawns = null) =>
@@ -113,6 +141,11 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
                 break;
             case StationEntityKind.GeneratorFuel:
                 entity = new ItemEntity(this, spawn, "generator fuel", new SharedStack(spawn.Kind, spawn.Amount, "generator fuel"));
+                break;
+            case StationEntityKind.BruisePack:
+                var pack = new ItemEntity(this, spawn, "bruise pack", new SharedStack(spawn.Kind, spawn.Amount, "bruise pack"));
+                dispatcher.RegisterHandler(new BruisePackHandler(this, pack));
+                entity = pack;
                 break;
             case StationEntityKind.ServiceCart:
                 var cart = new ServiceCart(spawn);
@@ -174,6 +207,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         crew.Add(peerId, member);
         crewByStorage.Add(storage, member);
         dispatcher.RegisterHandler(member.HarmHandler);
+        dispatcher.RegisterHandler(member.DisarmHandler);
 
         if (profile != null)
         {
@@ -247,6 +281,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         foreach (Girder girder in entityOrder.OfType<Girder>())
             girder.Task.Cancel(peerId);
         dispatcher.UnregisterHandler(member.HarmHandler);
+        dispatcher.UnregisterHandler(member.DisarmHandler);
         crew.Remove(peerId);
         crewByStorage.Remove(member.Inventory);
         PublishChanges();
@@ -256,6 +291,45 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         EntitiesChanged?.Invoke(new[] { removed });
         return true;
     }
+
+    /// <summary>
+    /// FC-GH-1: a dead crew member who tries to move leaves the body as a ghost at the body's tile
+    /// (MovementSynchronisation: "Can't do normal move, so check to see if dead" → CmdSpawnPlayerGhost).
+    /// The body stays where it fell. Returns true only on the transition.
+    /// </summary>
+    public bool TryBecomeGhost(int peerId)
+    {
+        if (!crew.TryGetValue(peerId, out CrewMember? member) || !member.Health.IsDead || member.GhostPosition.HasValue)
+            return false;
+        member.GhostPosition = member.Position;
+        PublishChanges();
+        return true;
+    }
+
+    public bool IsGhost(int peerId) => crew.TryGetValue(peerId, out CrewMember? member) && member.GhostPosition.HasValue;
+
+    public Vector2? GetGhostPosition(int peerId) =>
+        crew.TryGetValue(peerId, out CrewMember? member) ? member.GhostPosition : null;
+
+    /// <summary>
+    /// FC-GH-2: a ghost moves at <see cref="GhostMoveSpeed"/> tiles per second in the input direction,
+    /// through walls, doors and bodies (GhostMove.ReceivePlayerMoveAction does no collision check),
+    /// kept inside the station bounds. Publish with <see cref="PublishChanges"/>.
+    /// </summary>
+    public bool TryMoveGhost(int peerId, int deltaX, int deltaY, double elapsedSeconds)
+    {
+        if (!crew.TryGetValue(peerId, out CrewMember? member) || member.GhostPosition is not Vector2 position ||
+            !double.IsFinite(elapsedSeconds) || elapsedSeconds <= 0 || (deltaX == 0 && deltaY == 0)) return false;
+        var direction = Vector2.Normalize(new Vector2(Math.Sign(deltaX), Math.Sign(deltaY)));
+        Vector2 next = position + direction * (float)(GhostMoveSpeed * elapsedSeconds);
+        next = Vector2.Clamp(next, new Vector2(StationPlaytestLayout.MinX, StationPlaytestLayout.MinY),
+            new Vector2(StationPlaytestLayout.MaxX, StationPlaytestLayout.MaxY));
+        member.GhostPosition = next;
+        return next != position;
+    }
+
+    /// <summary>GhostMove.MoveSpeed default (8 world units per second).</summary>
+    public const float GhostMoveSpeed = 8f;
 
     public bool SetActorPosition(int peerId, Vector2 position)
     {
@@ -322,6 +396,8 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
     {
         if (!crew.TryGetValue(senderPeerId, out CrewMember? member) ||
             intent is not (Intent.Help or Intent.Disarm or Intent.Grab or Intent.Harm)) return false;
+        // FC-DA-3: RegisterPlayer.ServerStun "stops the player from moving and interacting".
+        if (member.StunSeconds > 0) return false;
         IInteractable? target = ResolveTarget(targetId);
         if (target == null) return false;
 
@@ -355,6 +431,37 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
             ItemSlot? slot = victim.Inventory.GetNamedItemSlot(hand);
             if (slot?.Item != null) inventory.ServerDrop(slot);
         }
+    }
+
+    /// <summary>FC-DA-1..3: one disarm attempt by <paramref name="performer"/> on <paramref name="target"/>.</summary>
+    private void ResolveDisarm(CrewMember performer, CrewMember target)
+    {
+        performer.DisarmCooldownSeconds = DisarmRules.TimeBetweenDisarms;
+        DisarmOutcome outcome = DisarmRules.Roll(nextRandom);
+        if (outcome == DisarmOutcome.Knockdown)
+            target.StunSeconds = DisarmRules.KnockdownStunSeconds;
+        else if (outcome == DisarmOutcome.Disarm)
+            foreach (InventoryNamedSlot hand in new[] { InventoryNamedSlot.leftHand, InventoryNamedSlot.rightHand })
+            {
+                ItemSlot? slot = target.Inventory.GetNamedItemSlot(hand);
+                if (slot?.Item != null) inventory.ServerDrop(slot);
+            }
+        DisarmResolved?.Invoke(performer.PeerId, target.PeerId, outcome);
+    }
+
+    /// <summary>
+    /// FC-HL-1/2/3: one bruise pack application on another living crew member's body, consuming one use.
+    /// A patient healed past a threshold regains the better conscious state, and with it movement and input.
+    /// </summary>
+    private bool TryApplyBruisePack(int performerPeerId, ItemEntity pack, CrewMember patient)
+    {
+        if (!crew.TryGetValue(performerPeerId, out CrewMember? medic) ||
+            !ReferenceEquals(medic.ActiveHandSlot.Item, pack) || pack.Stackable is not { Amount: > 0 } ||
+            !patient.Health.HealBrute(CrewHealthRules.BruisePackHeal)) return false;
+        patient.InteractionPlayer.ConsciousState = patient.Health.ConsciousState;
+        if (!inventory.ServerConsume(medic.ActiveHandSlot, 1))
+            throw new InvalidOperationException("Validated bruise pack could not be consumed.");
+        return true;
     }
 
     /// <summary>Advance authoritative power simulation time on the host only. Call <see cref="PublishChanges"/> to replicate it.</summary>
@@ -437,7 +544,12 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
             InteractionPlayer = new PlayerEntity { Id = peerId, Name = $"crew-{peerId}" };
             InteractionPlayer.PlaceAt(position);
             HarmHandler = new CrewHarmHandler(world, this);
+            DisarmHandler = new CrewDisarmHandler(world, this);
         }
+
+        public CrewDisarmHandler DisarmHandler { get; }
+        public double StunSeconds { get; set; }
+        public double DisarmCooldownSeconds { get; set; }
 
         public CrewHealth Health { get; } = new();
         public CrewHarmHandler HarmHandler { get; }
@@ -452,6 +564,14 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
                 [StationEntityField.Brute] = Health.Brute,
                 [StationEntityField.Conscious] = (int)Health.ConsciousState,
             };
+            if (StunSeconds > 0) fields[StationEntityField.Stunned] = 1;
+            if (GhostPosition is Vector2 ghost)
+            {
+                fields[StationEntityField.Ghost] = 1;
+                // Snap replicated ghost positions to tenths so a drifting ghost does not publish every frame.
+                fields[StationEntityField.GhostX] = Math.Round(ghost.X, 1);
+                fields[StationEntityField.GhostY] = Math.Round(ghost.Y, 1);
+            }
             return new StationEntityState(StationEntityCatalog.CrewEntityId(PeerId), StationEntityKind.Crew, Position, null,
                 targetable ? StationEntityFlags.Targetable : StationEntityFlags.None, fields);
         }
@@ -463,7 +583,8 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         public InventoryNamedSlot ActiveHand { get; set; } = InventoryNamedSlot.rightHand;
         public ItemSlot ActiveHandSlot => Inventory.GetNamedItemSlot(ActiveHand)!;
         public Vector2 WorldPosition => Position;
-        public bool IsGhosting => false;
+        public Vector2? GhostPosition { get; set; }
+        public bool IsGhosting => GhostPosition.HasValue;
         public bool HasTelekinesis => false;
         public bool IsAlive => !Health.IsDead;
         public ConsciousState ConsciousState => Health.ConsciousState;
@@ -492,6 +613,30 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
             // TODO(fidelity): Unitystation gates melee on Validations.CheckState(x => x.CanMelee); whether
             // soft-crit players may punch was not inspected, so FC-4's default (no soft crit) applies.
             if (interaction.Performer != null) world.ApplyUnarmedHarm(owner);
+        }
+    }
+
+    /// <summary>
+    /// FC-DA-1: Disarmable.WillInteract: default validation, Disarm intent, not one's own body, and a
+    /// performer who is not lying down (here: not knocked down). The 0.5 s cooldown is checked here so a
+    /// refused attempt reports false to the adapter.
+    /// </summary>
+    private sealed class CrewDisarmHandler(SharedStationInventoryWorld world, CrewMember owner) : IOwnedInteractionHandler<HandApply>
+    {
+        public WorldEntity Owner { get; } = owner.InteractionPlayer;
+        public bool IsFirstInteractable => false;
+        public int Priority => 0;
+
+        public bool WillInteract(HandApply interaction, NetworkSide side) =>
+            interaction.Intent == Intent.Disarm && interaction.Performer != null &&
+            interaction.TargetObject == Owner && interaction.Performer != Owner &&
+            world.crew.TryGetValue(interaction.Performer.Id, out CrewMember? performer) &&
+            performer.StunSeconds <= 0 && performer.DisarmCooldownSeconds <= 0;
+
+        public void ServerPerformInteraction(HandApply interaction)
+        {
+            if (interaction.Performer != null && world.crew.TryGetValue(interaction.Performer.Id, out CrewMember? performer))
+                world.ResolveDisarm(performer, owner);
         }
     }
 
@@ -722,6 +867,39 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
                 world.crew.TryGetValue(interaction.Performer.Id, out CrewMember? member))
                 world.inventory.ServerAdd(owner, member.ActiveHandSlot);
         }
+    }
+
+    /// <summary>
+    /// FC-HL-3: HealsTheLiving lives on the held item; it accepts a Help-intent HandApply on a living
+    /// body that has brute damage. Reach, obstruction and the medic's conscious state are validated by
+    /// the dispatcher first (DefaultWillInteract.Default).
+    /// </summary>
+    private sealed class BruisePackHandler(SharedStationInventoryWorld world, ItemEntity owner)
+        : IOwnedInteractionHandler<HandApply>
+    {
+        public WorldEntity Owner { get; } = owner;
+        public bool IsFirstInteractable => false;
+        public int Priority => 0;
+
+        public bool WillInteract(HandApply interaction, NetworkSide side) =>
+            interaction.Intent == Intent.Help && interaction.Performer != null &&
+            interaction.HandObject == Owner && owner.Stackable is { Amount: > 0 } &&
+            world.IsInActiveHand(interaction.Performer.Id, owner) &&
+            world.TryGetPatient(interaction.TargetObject, out CrewMember? patient) &&
+            patient!.PeerId != interaction.Performer.Id && !patient.Health.IsDead && patient.Health.Brute > 0;
+
+        public void ServerPerformInteraction(HandApply interaction)
+        {
+            if (interaction.Performer != null && world.TryGetPatient(interaction.TargetObject, out CrewMember? patient))
+                world.TryApplyBruisePack(interaction.Performer.Id, owner, patient!);
+        }
+    }
+
+    private bool TryGetPatient(WorldEntity? target, out CrewMember? patient)
+    {
+        patient = target is PlayerEntity body && crew.TryGetValue(body.Id, out CrewMember? member) &&
+                  ReferenceEquals(member.InteractionPlayer, body) ? member : null;
+        return patient != null;
     }
 
     private sealed class CartWrenchHandler(ServiceCart owner) : IOwnedInteractionHandler<HandApply>

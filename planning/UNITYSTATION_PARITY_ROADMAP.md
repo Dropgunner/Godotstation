@@ -73,12 +73,13 @@ trace additional upstream systems it actually implements.
 
 | Outcome | Current evidence | Status |
 | --- | --- | --- |
-| Integrated build | `c1d2b64dc77ce4fb1f276ca782714a7b903c43d1` exported as `/private/tmp/Godotstation-Integrated-c1d2b64-Playtest.app`; universal runtime bundle passed headless startup. | Built; manual full-round gate open |
+| Integrated build | `c1d2b64dc77ce4fb1f276ca782714a7b903c43d1` exported as `/private/tmp/Godotstation-Integrated-c1d2b64-Playtest.app`; universal runtime bundle passed headless startup. 2026-11-05: `543fab1` (PR #45 stacked on #44, not integrated) cross-exported on Linux with an ad-hoc signature as `Godotstation-543fab1-Playtest-macOS.zip` (universal binary, both C# runtimes present); not yet launched on a Mac. 2026-11-06: `83313c9` (adds ghost observer and disarm) cross-exported the same way as `Godotstation-83313c9-Playtest-macOS.zip`; not yet launched on a Mac. | Built; manual full-round gate open |
 | New player action | Wrench/cart and construction interactions remain; Engineer can also fuel/start a generator, enable storage output, observe APC lamp outage, and recover power. Two-peer smoke passed. | Integrated in PRs #32 and #37; ordinary-control two-player path unverified |
-| Full round | Host can start, end, and restart a shared shift; Engineer can plate a girder, access the engineering airlock, and complete the scripted power failure/recovery loop. End sends both peers a fact-only report of tracked crew and station state, now including crew casualties. Harm intent (key `4`) on a crew body applies 25 brute per hit; at 125/175/225 brute the body is BarelyConscious/Unconscious/Dead on every peer, and the server refuses the incapacitated peer's movement and clicks. `tools/multiplayer_smoke.sh --survival` passed on `534f4e2` (2026-11-04, Linux, Godot 4.4.1 mono); restart rebuilds fresh bodies. | **Open:** no mode-specific outcome/report, no healing/revival/ghost path, full power grid or machinery parity, or two-person ordinary-controls pass (kit: [PLAYTEST_KIT_Survival.md](PLAYTEST_KIT_Survival.md)) |
+| Full round | Host can start, end, and restart a shared shift; Engineer can plate a girder, access the engineering airlock, and complete the scripted power failure/recovery loop. End sends both peers a fact-only report of tracked crew and station state, now including crew casualties. Harm intent (key `4`) on a crew body applies 25 brute per hit; at 125/175/225 brute the body is BarelyConscious/Unconscious/Dead on every peer, and the server refuses the incapacitated peer's movement and clicks. `tools/multiplayer_smoke.sh --survival` passed on `534f4e2` (2026-11-04, Linux, Godot 4.4.1 mono); restart rebuilds fresh bodies. | **Open:** no mode-specific outcome/report, no revival path (on the 2026-11-05 branch `claude/project-thread-vq7vru`, bruise-pack treatment of unconscious crew passed `--recovery` and the ghost observer passed `--survival`), full power grid or machinery parity, or two-person ordinary-controls pass (kit: [PLAYTEST_KIT_Survival.md](PLAYTEST_KIT_Survival.md)) |
 | Bugs found during play | A client could click stale construction targets; the HUD covered the station after spawn. | Fixed in PRs #32 and #33; repeat human playtest needed |
 
-The export script now uses the tracked game solution, creates a
+The export script can also cross-export from Linux: it then signs ad-hoc and skips the macOS-only
+startup check, printing `MACOS_PLAYTEST_STARTUP_SKIPPED`. The export script now uses the tracked game solution, creates a
 temporary unsigned debug preset only when no local preset exists, refuses to overwrite an
 existing app, and validates the universal C# bundle with a headless startup. Godot still reports
 a temporary publish-directory cleanup exception after writing the app. The repository's test
@@ -119,7 +120,7 @@ feedback. Deterministic tests cover routing boundaries.
 **Completed slice:** local player speech now routes by the source-backed 14-tile default
 hearing range and station-wall line of sight under
 [`FidelityContract_LocalSpeech.md`](FidelityContract_LocalSpeech.md). Radios, whispers,
-ghost listeners, and Action/Combat channel integration remain open.
+and Action/Combat channel integration remain open; dead-speaker routing and ghost listeners are covered by FC-LS-7..9 and FC-GH-3.
 
 ### P2 — SS13 interaction loop in the shared world
 
@@ -181,8 +182,18 @@ pool per crew member with Unitystation's health thresholds, harm-intent unarmed 
 the shared dispatcher, hand items dropped on falling, server-side refusal of movement and clicks
 while unconscious or dead, replicated crew status on every peer, casualties in the round report,
 and fresh bodies on restart. Automated evidence: 33 clause tests and the `--survival` two-peer
-smoke. Still open for P4: disarm/grab/help outcomes, crawling, healing and revival, a ghost
-observer, speech restriction while incapacitated, and the human ordinary-controls pass.
+smoke. Follow-up slice (2026-11-05): a dead crew member's speech is carried on the Ghost
+channel and reaches only dead crew, and dead crew stop hearing living Local speech (FC-LS-7/8,
+`IncapacitatedSpeechTests`, `--survival` smoke). A second follow-up adds the first recovery
+path: a six-use bruise pack applied on help intent heals 40 brute, so an unconscious crew member
+can be treated back to Conscious and moving (FC-HL-1..5, `BruisePackHealingTests`, `--recovery`
+smoke). A third follow-up adds the ghost observer: a dead player's move leaves the body as a ghost
+that flies through walls at 8 tiles/s, hears all Local speech, and cannot interact (FC-GH-1..5,
+`GhostObserverTests`, `--survival` smoke). A fourth follow-up (2026-11-06) adds disarm intent: 5 %
+knockdown for 6 s, otherwise 50 % to drop both hands, 0.5 s apart (FC-DA-1..4, `DisarmTests`,
+`--disarm` smoke). Still open for P4: grab/pull, help-up, crawling,
+self-treatment, revival of the dead, ghost re-entry/orbit/roles, the crit-speech question in FC-LS-9, and the
+human ordinary-controls pass.
 
 ### P5 — Round identity and replayable social chaos
 
