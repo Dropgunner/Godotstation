@@ -189,7 +189,9 @@ path: a six-use bruise pack applied on help intent heals 40 brute, so an unconsc
 can be treated back to Conscious and moving (FC-HL-1..5, `BruisePackHealingTests`, `--recovery`
 smoke). A third follow-up adds the ghost observer: a dead player's move leaves the body as a ghost
 that flies through walls at 8 tiles/s, hears all Local speech, and cannot interact (FC-GH-1..5,
-`GhostObserverTests`, `--survival` smoke). Still open for P4: disarm/grab outcomes, crawling,
+`GhostObserverTests`, `--survival` smoke). A fourth follow-up (2026-11-06) adds disarm intent: 5 %
+knockdown for 6 s, otherwise 50 % to drop both hands, 0.5 s apart (FC-DA-1..4, `DisarmTests`,
+`--disarm` smoke). Still open for P4: grab/pull, help-up, crawling,
 self-treatment, revival of the dead, ghost re-entry/orbit/roles, the crit-speech question in FC-LS-9, and the
 human ordinary-controls pass.
 

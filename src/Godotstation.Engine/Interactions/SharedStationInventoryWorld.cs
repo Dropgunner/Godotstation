@@ -34,9 +34,13 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
     private readonly Dictionary<int, StationEntityState> lastPublished = new();
     private readonly StationPowerLoop powerLoop = new();
 
+    private readonly Func<int, int, int> nextRandom;
+
+    /// <param name="nextRandom">Integer draw in [min, max) for chance rolls such as disarm; defaults to <see cref="Random.Shared"/>.</param>
     public SharedStationInventoryWorld(IReachabilityMap? reachabilityMap = null,
-        IReadOnlyList<StationEntitySpawn>? spawns = null)
+        IReadOnlyList<StationEntitySpawn>? spawns = null, Func<int, int, int>? nextRandom = null)
     {
+        this.nextRandom = nextRandom ?? Random.Shared.Next;
         this.reachabilityMap = reachabilityMap ?? UnobstructedMap.Instance;
         inventory = new InventorySystem(this);
         inventory.OnMovePerformed += _ => PublishChanges();
@@ -46,6 +50,9 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         foreach (StationEntityState state in CaptureAll())
             lastPublished[state.Id] = state;
     }
+
+    /// <summary>Raised on the server after each resolved disarm attempt: performer peer, target peer, outcome.</summary>
+    public event Action<int, int, DisarmOutcome>? DisarmResolved;
 
     /// <summary>Raised with only the entities whose replicated state differs from the last publish.</summary>
     public event Action<IReadOnlyList<StationEntityState>>? EntitiesChanged;
@@ -76,9 +83,30 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
     public CrewHealth? GetCrewHealth(int peerId) =>
         crew.TryGetValue(peerId, out CrewMember? member) ? member.Health : null;
 
-    /// <summary>FC-SC-5: unconscious and dead crew cannot move; the server adapter must consult this before resolving input.</summary>
+    /// <summary>
+    /// FC-SC-5 / FC-DA-3: unconscious, dead, and knocked-down crew cannot move; the server adapter must
+    /// consult this before resolving input.
+    /// </summary>
     public bool CanActorMove(int peerId) =>
-        crew.TryGetValue(peerId, out CrewMember? member) && CrewHealthRules.CanMove(member.Health.ConsciousState);
+        crew.TryGetValue(peerId, out CrewMember? member) && CrewHealthRules.CanMove(member.Health.ConsciousState) &&
+        member.StunSeconds <= 0;
+
+    public bool IsStunned(int peerId) => crew.TryGetValue(peerId, out CrewMember? member) && member.StunSeconds > 0;
+
+    /// <summary>Advances per-crew timers (knockdown stun, disarm cooldown) on the server. Publishes when a stun ends.</summary>
+    public void AdvanceCrewTimers(double elapsedSeconds)
+    {
+        if (!double.IsFinite(elapsedSeconds) || elapsedSeconds <= 0) return;
+        bool changed = false;
+        foreach (CrewMember member in crew.Values)
+        {
+            member.DisarmCooldownSeconds = Math.Max(0, member.DisarmCooldownSeconds - elapsedSeconds);
+            if (member.StunSeconds <= 0) continue;
+            member.StunSeconds = Math.Max(0, member.StunSeconds - elapsedSeconds);
+            changed |= member.StunSeconds <= 0;
+        }
+        if (changed) PublishChanges();
+    }
 
     /// <summary>The replicated starting state of a station, for clients that have not received a snapshot yet.</summary>
     public static IReadOnlyList<StationEntityState> InitialStates(IReadOnlyList<StationEntitySpawn>? spawns = null) =>
@@ -179,6 +207,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         crew.Add(peerId, member);
         crewByStorage.Add(storage, member);
         dispatcher.RegisterHandler(member.HarmHandler);
+        dispatcher.RegisterHandler(member.DisarmHandler);
 
         if (profile != null)
         {
@@ -252,6 +281,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         foreach (Girder girder in entityOrder.OfType<Girder>())
             girder.Task.Cancel(peerId);
         dispatcher.UnregisterHandler(member.HarmHandler);
+        dispatcher.UnregisterHandler(member.DisarmHandler);
         crew.Remove(peerId);
         crewByStorage.Remove(member.Inventory);
         PublishChanges();
@@ -366,6 +396,8 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
     {
         if (!crew.TryGetValue(senderPeerId, out CrewMember? member) ||
             intent is not (Intent.Help or Intent.Disarm or Intent.Grab or Intent.Harm)) return false;
+        // FC-DA-3: RegisterPlayer.ServerStun "stops the player from moving and interacting".
+        if (member.StunSeconds > 0) return false;
         IInteractable? target = ResolveTarget(targetId);
         if (target == null) return false;
 
@@ -399,6 +431,22 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
             ItemSlot? slot = victim.Inventory.GetNamedItemSlot(hand);
             if (slot?.Item != null) inventory.ServerDrop(slot);
         }
+    }
+
+    /// <summary>FC-DA-1..3: one disarm attempt by <paramref name="performer"/> on <paramref name="target"/>.</summary>
+    private void ResolveDisarm(CrewMember performer, CrewMember target)
+    {
+        performer.DisarmCooldownSeconds = DisarmRules.TimeBetweenDisarms;
+        DisarmOutcome outcome = DisarmRules.Roll(nextRandom);
+        if (outcome == DisarmOutcome.Knockdown)
+            target.StunSeconds = DisarmRules.KnockdownStunSeconds;
+        else if (outcome == DisarmOutcome.Disarm)
+            foreach (InventoryNamedSlot hand in new[] { InventoryNamedSlot.leftHand, InventoryNamedSlot.rightHand })
+            {
+                ItemSlot? slot = target.Inventory.GetNamedItemSlot(hand);
+                if (slot?.Item != null) inventory.ServerDrop(slot);
+            }
+        DisarmResolved?.Invoke(performer.PeerId, target.PeerId, outcome);
     }
 
     /// <summary>
@@ -496,7 +544,12 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
             InteractionPlayer = new PlayerEntity { Id = peerId, Name = $"crew-{peerId}" };
             InteractionPlayer.PlaceAt(position);
             HarmHandler = new CrewHarmHandler(world, this);
+            DisarmHandler = new CrewDisarmHandler(world, this);
         }
+
+        public CrewDisarmHandler DisarmHandler { get; }
+        public double StunSeconds { get; set; }
+        public double DisarmCooldownSeconds { get; set; }
 
         public CrewHealth Health { get; } = new();
         public CrewHarmHandler HarmHandler { get; }
@@ -511,6 +564,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
                 [StationEntityField.Brute] = Health.Brute,
                 [StationEntityField.Conscious] = (int)Health.ConsciousState,
             };
+            if (StunSeconds > 0) fields[StationEntityField.Stunned] = 1;
             if (GhostPosition is Vector2 ghost)
             {
                 fields[StationEntityField.Ghost] = 1;
@@ -559,6 +613,30 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
             // TODO(fidelity): Unitystation gates melee on Validations.CheckState(x => x.CanMelee); whether
             // soft-crit players may punch was not inspected, so FC-4's default (no soft crit) applies.
             if (interaction.Performer != null) world.ApplyUnarmedHarm(owner);
+        }
+    }
+
+    /// <summary>
+    /// FC-DA-1: Disarmable.WillInteract: default validation, Disarm intent, not one's own body, and a
+    /// performer who is not lying down (here: not knocked down). The 0.5 s cooldown is checked here so a
+    /// refused attempt reports false to the adapter.
+    /// </summary>
+    private sealed class CrewDisarmHandler(SharedStationInventoryWorld world, CrewMember owner) : IOwnedInteractionHandler<HandApply>
+    {
+        public WorldEntity Owner { get; } = owner.InteractionPlayer;
+        public bool IsFirstInteractable => false;
+        public int Priority => 0;
+
+        public bool WillInteract(HandApply interaction, NetworkSide side) =>
+            interaction.Intent == Intent.Disarm && interaction.Performer != null &&
+            interaction.TargetObject == Owner && interaction.Performer != Owner &&
+            world.crew.TryGetValue(interaction.Performer.Id, out CrewMember? performer) &&
+            performer.StunSeconds <= 0 && performer.DisarmCooldownSeconds <= 0;
+
+        public void ServerPerformInteraction(HandApply interaction)
+        {
+            if (interaction.Performer != null && world.crew.TryGetValue(interaction.Performer.Id, out CrewMember? performer))
+                world.ResolveDisarm(performer, owner);
         }
     }
 

@@ -121,7 +121,7 @@ public sealed class BruisePackHealingTests
         Assert.False(world.TryInteract(Medic, PatientBody, Intent.Help, false));
         Hit(world, 1);
         Assert.False(world.TryInteract(Medic, MedicBody, Intent.Help, false));
-        Assert.False(world.TryInteract(Medic, PatientBody, Intent.Disarm, false));
+        Assert.False(world.TryInteract(Medic, PatientBody, Intent.Grab, false));
         Assert.Equal(CrewHealthRules.BruisePackUses, PackUses(world));
 
         Hit(world, 8);

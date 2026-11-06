@@ -74,7 +74,8 @@ authorization, and replicated airlock passability. `tools/multiplayer_smoke.sh -
 harm-intent hits take a peer to unconscious then dead on both clients and that the server refuses
 the dead peer's movement and clicks and keeps the dead peer's speech on the Ghost channel;
 `tools/multiplayer_smoke.sh --recovery` checks that a bruise pack on help intent brings an
-unconscious peer back to Conscious and moving (hands-on steps: `PLAYTEST_KIT_Survival.md`). A local macOS app can be exported with
+unconscious peer back to Conscious and moving; `tools/multiplayer_smoke.sh --disarm` checks that
+disarm attempts can make a peer drop its wrench (hands-on steps: `PLAYTEST_KIT_Survival.md`). A local macOS app can be exported with
 `GODOT_BIN=/path/to/Godot bash tools/export_playtest_macos.sh /path/to/Godotstation.app`.
 On Linux the same command cross-exports an ad-hoc-signed app (Godot 4.4.1 mono macOS export
 templates must be installed) and skips the startup check, which has to be done on a Mac.

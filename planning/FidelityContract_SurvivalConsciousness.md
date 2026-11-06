@@ -147,6 +147,33 @@ matrix); ghosts are not drawn for other players (upstream ghosts are invisible t
 visible to other ghosts); there is no re-enter-body, orbit, ghost-role, or fast-fly (Shift) control;
 a ghost moves continuously instead of tile-by-tile steps.
 
+## Addendum (2026-11-06): disarm intent
+
+Source, same commit, under `UnityProject/Assets/Scripts/US13/`: `Systems/Inventory/Disarmable.cs`
+(`WillInteract`: `DefaultWillInteract.Default`, `Intent.Disarm`, target is not the performer,
+performer not `IsLayingDown`; `ServerPerformInteraction`: 0.5 s `TimeBetweenDisarms` cooldown, then
+`rng.Next(1, 100) <= 5` → `KnockDown()`, else a fresh `rng.Next(1, 100) <= 50` → `Disarm()` drops
+both hand slots, else a miss message); `Tilemaps/Behaviours/Objects/RegisterPlayer.cs`
+`ServerStun(6, false)` (knockdown for 6 s that "stops the player from moving and interacting",
+hands kept; armor stun immunity cannot apply because no armor is ported).
+
+20. **FC-DA-1 Validation.** A Disarm-intent click on another crew body is resolved by the dispatcher
+    (reach, obstruction, performer state) and refused for one's own body, while the performer is
+    knocked down, or within 0.5 s of the performer's previous attempt. *Tests:*
+    `DisarmTests.AttemptsAreHalfASecondApart`, `DisarmTests.SelfOutOfReachAndKnockedDownPerformersAreRefused`.
+21. **FC-DA-2 Outcome roll.** Knockdown at a first roll ≤ 5, otherwise disarm at a second roll ≤ 50,
+    otherwise a miss; a disarm drops both of the target's hands at the target's tile. *Tests:*
+    `DisarmTests.RollMatchesDisarmableChances`, `DisarmTests.SuccessfulDisarmDropsBothHandsAtTheVictim`,
+    `DisarmTests.MissChangesNothing`.
+22. **FC-DA-3 Knockdown.** The target cannot move or interact for 6 s, keeps its hand items, and its
+    crew entity carries `stunned = 1` until the timer ends. *Test:*
+    `DisarmTests.KnockdownStunsForSixSecondsKeepsHandsAndBlocksActing`.
+23. **FC-DA-4 Feedback.** Both crew members involved receive a combat line (fail / disarm / knock
+    down). Smoke: `tools/multiplayer_smoke.sh --disarm`.
+
+Deviations for this addendum: no sounds; helping a knocked-down player up (`RegisterPlayer.ServerHelpUp`,
+33 % chance) is not ported; bystanders do not see the combat line (upstream sends it to everyone nearby).
+
 ## Deviations (deliberate, playtest-scaled)
 
 - **Damage per unarmed hit is 25, not Unitystation's 5.** Thresholds are kept at source values, so
@@ -165,7 +192,7 @@ a ghost moves continuously instead of tile-by-tile steps.
 ## Known gaps before parity claims
 
 - No body parts, organs, bleeding, oxygen, clone, radiation, stamina, armor, block, trauma, or
-  weapon damage: only one brute pool and unarmed hits. Disarm and Grab intents on crew do nothing.
+  weapon damage: only one brute pool and unarmed hits. Grab intent on crew does nothing; disarm is FC-DA.
 - Only one medical item (bruise pack, FC-HL); no revival or `OnRevive` path, so death still ends
   the peer's agency for the round.
 - Dead-speaker routing is now covered by FC-LS-7/8 in

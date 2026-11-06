@@ -14,6 +14,7 @@ public partial class StationCrewAvatar : Node2D
     private Label? nameLabel;
     private ConsciousState consciousState = ConsciousState.Conscious;
     private Camera2D? camera;
+    private bool knockedDown;
     private Node2D? ghost;
 
     public void Configure(int ownerPeerId, bool local, string playerName, string assignedJobName)
@@ -79,6 +80,14 @@ public partial class StationCrewAvatar : Node2D
         if (IsInsideTree()) ApplyConsciousState();
     }
 
+    /// <summary>Presentation only: a knocked-down body shows a caption (FC-DA-3).</summary>
+    public void SetKnockedDown(bool value)
+    {
+        if (knockedDown == value) return;
+        knockedDown = value;
+        if (IsInsideTree()) ApplyConsciousState();
+    }
+
     private void ApplyConsciousState()
     {
         (Color tint, string caption) = consciousState switch
@@ -88,6 +97,7 @@ public partial class StationCrewAvatar : Node2D
             ConsciousState.Dead => (new Color(0.45f, 0.2f, 0.2f), "\nDEAD"),
             _ => (Colors.White, string.Empty),
         };
+        if (knockedDown && consciousState == ConsciousState.Conscious) caption = "\nKNOCKED DOWN";
         Modulate = tint;
         if (nameLabel != null) nameLabel.Text = $"{displayName}\n{jobName.ToUpperInvariant()}{caption}";
     }

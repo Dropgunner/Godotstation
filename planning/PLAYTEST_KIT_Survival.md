@@ -62,6 +62,10 @@ left-click acts on the nearest target within about 0.7 tiles.
    `You are unconscious. A crewmate can treat you with the bruise pack (help intent).` In B, press WASD and
    click an object: nothing happens, and A's terminal prints `PLAYTEST_MOVE_REFUSED` and
    `PLAYTEST_INTERACTION_REFUSED_INCAPACITATED` for B's peer id.
+3a. **Disarm.** B picks up the wrench (`1`, click it). A presses `2` (Disarm) and clicks B's avatar,
+   about twice a second. Each try either fails, makes B drop the wrench (about half the time), or
+   rarely knocks B down for 6 seconds (`KNOCKED DOWN` caption; B cannot move or click). Both chat
+   logs show a `[COMBAT]` line for each try.
 4a. **Optional recovery branch (instead of 5).** In A press `1` (Help), walk to the white
    `BRUISE PACK ×6` beside the spawn and left-click it to pick it up, walk back next to B, and
    left-click B twice. Each click heals 40 brute and uses one pack (`×5`, then `×4`). After the

@@ -19,6 +19,8 @@ public static class PlaytestLaunchOptions
     public static bool SmokeSurvival { get; private set; }
     /// <summary>Survival smoke variant: knock the client unconscious, then treat it back to Conscious with the bruise pack.</summary>
     public static bool SmokeRecovery { get; private set; }
+    /// <summary>Two-peer smoke: the client holds the wrench and the host disarms it until it drops.</summary>
+    public static bool SmokeDisarm { get; private set; }
 
     public static bool TryReadCommandLine()
     {
@@ -77,6 +79,10 @@ public static class PlaytestLaunchOptions
             else if (arg == "--playtest-smoke-survival")
             {
                 SmokeSurvival = true;
+            }
+            else if (arg == "--playtest-smoke-disarm")
+            {
+                SmokeDisarm = true;
             }
             else if (arg == "--playtest-smoke-recovery")
             {

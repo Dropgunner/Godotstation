@@ -43,6 +43,8 @@ public static class StationEntityField
     public const string Ghost = "ghost";
     public const string GhostX = "ghost_x";
     public const string GhostY = "ghost_y";
+    /// <summary>1 while the crew member is knocked down by a disarm (FC-DA-3).</summary>
+    public const string Stunned = "stunned";
 }
 
 /// <summary>Where one entity starts the round. Stackable kinds use <see cref="Amount"/>.</summary>
