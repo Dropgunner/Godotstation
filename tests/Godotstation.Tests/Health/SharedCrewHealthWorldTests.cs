@@ -89,11 +89,13 @@ public sealed class SharedCrewHealthWorldTests
     }
 
     [Fact]
-    public void HelpIntentAndEmptyHandsDoNotHurt()
+    public void HelpIntentAndOtherHeldItemsDoNotHurt()
     {
         SharedStationInventoryWorld world = ArmedWorld();
         Assert.False(world.TryInteract(Attacker, Victim, Intent.Help, false));
+        Assert.False(world.TryInteract(Attacker, Victim, Intent.Disarm, false));
         Assert.True(world.TryToggleActiveHand(Attacker));
+        Assert.True(world.TryInteract(Attacker, StationEntityCatalog.BruisePackId, Intent.Help, false));
         Assert.False(world.TryInteract(Attacker, Victim, Intent.Harm, false));
         Assert.Equal(CrewHealth.MaxHealth, world.GetCrewHealth(Victim));
     }
