@@ -41,6 +41,10 @@ public static class StationEntityField
     public const string Job = "job";
     public const string TreatmentHealer = "treatment_healer";
     public const string TreatmentPatient = "treatment_patient";
+    /// <summary>Set on a dead crew body whose player has left it as a ghost.</summary>
+    public const string Ghost = "ghost";
+    public const string GhostX = "ghost_x";
+    public const string GhostY = "ghost_y";
 }
 
 /// <summary>Where one entity starts the round. Stackable kinds use <see cref="Amount"/>.</summary>

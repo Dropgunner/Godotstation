@@ -60,6 +60,9 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
     /// <summary>Raised when a crew member's stat changes (peer, previous, current).</summary>
     public event Action<int, CrewStat, CrewStat>? CrewStatChanged;
 
+    /// <summary>Raised when a dead crew member's player leaves the body as a ghost.</summary>
+    public event Action<int>? CrewGhosted;
+
     /// <summary>Door tiles whose passability follows their entity's state.</summary>
     public IEnumerable<(int X, int Y, IPassable Passable)> PassableTiles =>
         entityOrder.OfType<AccessDoor>().Select(door =>
@@ -340,6 +343,30 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
     public double? GetCrewHealth(int peerId) =>
         crew.TryGetValue(peerId, out CrewMember? member) ? member.Health.Health : null;
 
+    /// <summary>Where a dead player's ghost is, or null while they are alive or still in the body.</summary>
+    public Vector2? GetGhostPosition(int peerId) =>
+        crew.TryGetValue(peerId, out CrewMember? member) ? member.GhostPosition : null;
+
+    /// <summary>Where this player perceives the world from: the ghost if they have one, otherwise the body.</summary>
+    public Vector2? GetPerceptionPosition(int peerId) =>
+        crew.TryGetValue(peerId, out CrewMember? member) ? member.GhostPosition ?? member.Position : null;
+
+    /// <summary>
+    /// Applies a dead player's movement input. The first input leaves the body at its position;
+    /// later input moves the ghost through anything inside the bounds. The living are refused.
+    /// Call <see cref="PublishChanges"/> to replicate the result.
+    /// </summary>
+    public bool TryMoveGhost(int peerId, int deltaX, int deltaY, double elapsedSeconds, Vector2 minimum, Vector2 maximum)
+    {
+        if (!crew.TryGetValue(peerId, out CrewMember? member) || !member.Health.IsDead) return false;
+        if (deltaX is < -1 or > 1 || deltaY is < -1 or > 1 || (deltaX == 0 && deltaY == 0)) return false;
+        bool leaving = member.GhostPosition == null;
+        member.GhostPosition = GhostObserver.Move(member.GhostPosition ?? member.Position, deltaX, deltaY,
+            elapsedSeconds, minimum, maximum);
+        if (leaving) CrewGhosted?.Invoke(peerId);
+        return true;
+    }
+
     /// <summary>
     /// Advances crew life ticks, melee cooldowns and bruise pack treatments on the host.
     /// Call <see cref="PublishChanges"/> to replicate the result.
@@ -496,6 +523,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         public CrewBody? Body { get; set; }
         public List<IInteractionHandler<HandApply>> Handlers { get; } = new();
         public double NextMeleeAt { get; set; }
+        public Vector2? GhostPosition { get; set; }
         public InventoryNamedSlot ActiveHand { get; set; } = InventoryNamedSlot.rightHand;
         public ItemSlot ActiveHandSlot => Inventory.GetNamedItemSlot(ActiveHand)!;
         public Vector2 WorldPosition => Position;
@@ -610,6 +638,12 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
             fields[StationEntityField.BruteLoss] = Member.Health.BruteLoss;
             fields[StationEntityField.OxyLoss] = Member.Health.OxyLoss;
             fields[StationEntityField.Stat] = (int)Member.Health.Stat;
+            if (Member.GhostPosition is Vector2 ghost)
+            {
+                fields[StationEntityField.Ghost] = 1;
+                fields[StationEntityField.GhostX] = ghost.X;
+                fields[StationEntityField.GhostY] = ghost.Y;
+            }
             if (Member.Treatment.PatientPeerId is int patient)
             {
                 fields[StationEntityField.TreatmentPatient] = patient;

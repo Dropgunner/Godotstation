@@ -14,6 +14,13 @@ public partial class StationCrewAvatar : Node2D
     private Node2D? bodyRoot;
     private Label? conditionLabel;
     private CrewStat condition = CrewStat.Stable;
+    private Node2D? ghostRoot;
+    private Camera2D? camera;
+    private Vector2 ghostTarget;
+    private bool ghostActive;
+
+    /// <summary>True while this player's ghost is drawn for the local viewer.</summary>
+    public bool GhostVisible => ghostRoot is { Visible: true };
 
     public void Configure(int ownerPeerId, bool local, string playerName, string assignedJobName)
     {
@@ -69,8 +76,23 @@ public partial class StationCrewAvatar : Node2D
         AddChild(conditionLabel);
         ApplyCondition(CrewHealth.MaxHealth);
 
+        // The ghost keeps its own world position, so it does not follow the body it left.
+        ghostRoot = new Node2D { Name = "Ghost", TopLevel = true, Visible = false, Modulate = new Color(0.75f, 0.92f, 1f, 0.55f) };
+        ghostRoot.AddChild(new Polygon2D { Color = Colors.White, Polygon = MakeCircle(0.3f, 20) });
+        var ghostLabel = new Label
+        {
+            Text = $"GHOST\n{displayName}",
+            Position = new Vector2(-48f, -40f),
+            Size = new Vector2(96f, 20f),
+            Scale = new Vector2(0.04f, 0.04f),
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        ghostLabel.AddThemeFontSizeOverride("font_size", 13);
+        ghostRoot.AddChild(ghostLabel);
+        AddChild(ghostRoot);
+
         if (!isLocal) return;
-        var camera = new Camera2D
+        camera = new Camera2D
         {
             Name = "StationCamera",
             Zoom = new Vector2(32, 32),
@@ -88,6 +110,46 @@ public partial class StationCrewAvatar : Node2D
     {
         condition = stat;
         ApplyCondition(health);
+    }
+
+    /// <summary>
+    /// Places this player's ghost, or removes it when <paramref name="worldPosition"/> is null.
+    /// The local player's camera follows their ghost once they have left the body.
+    /// </summary>
+    public void SetGhost(Vector2? worldPosition, bool visibleToLocalViewer)
+    {
+        if (ghostRoot == null) return;
+        if (worldPosition is not Vector2 target)
+        {
+            ghostRoot.Visible = false;
+            if (!ghostActive) return;
+            ghostActive = false;
+            if (camera != null)
+            {
+                camera.Reparent(this, false);
+                camera.Position = Vector2.Zero;
+            }
+            return;
+        }
+
+        if (!ghostActive)
+        {
+            ghostActive = true;
+            ghostRoot.GlobalPosition = target;
+            if (camera != null)
+            {
+                camera.Reparent(ghostRoot, false);
+                camera.Position = Vector2.Zero;
+            }
+        }
+        ghostTarget = target;
+        ghostRoot.Visible = visibleToLocalViewer;
+    }
+
+    public override void _Process(double delta)
+    {
+        if (ghostActive && ghostRoot != null)
+            ghostRoot.GlobalPosition = ghostRoot.GlobalPosition.Lerp(ghostTarget, Mathf.Clamp((float)delta * 14f, 0f, 1f));
     }
 
     private void ApplyCondition(double health)
