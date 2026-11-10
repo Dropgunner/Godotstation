@@ -17,7 +17,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [[ -n "$playtest_app" ]]; then
+# PLAYTEST_APP is an exported macOS .app; PLAYTEST_BIN is any exported game executable.
+if [[ -n "${PLAYTEST_BIN:-}" ]]; then
+  godot_bin="$PLAYTEST_BIN"
+  playtest_app="$PLAYTEST_BIN"
+elif [[ -n "$playtest_app" ]]; then
   godot_bin="$playtest_app/Contents/MacOS/Godotstation"
 fi
 if [[ ! -x "$godot_bin" ]]; then
