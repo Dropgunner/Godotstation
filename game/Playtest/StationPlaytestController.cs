@@ -81,6 +81,9 @@ public partial class StationPlaytestController : Node2D
     private bool smokeGhostMoving;
     private bool smokeGhostCrossedWall;
     private bool smokeGhostHeardLiving;
+    private int smokeExamineStage;
+    private int smokeExamineReceived;
+    private bool smokeExamineRejected;
     private string activeHandItemName = string.Empty;
     private bool localRoundStarted;
     private string connectionStatus = "Connecting…";
@@ -168,6 +171,7 @@ public partial class StationPlaytestController : Node2D
         DriveSmokePowerLoop();
         DriveSmokeHealth();
         DriveSmokeGhost();
+        DriveSmokeExamine();
         var direction = ReadLocalInput();
 
         if (multiplayer.IsServer())
@@ -281,7 +285,7 @@ public partial class StationPlaytestController : Node2D
         if (PlaytestLaunchOptions.SmokeMove || PlaytestLaunchOptions.SmokeInteractions ||
             PlaytestLaunchOptions.SmokeConstruction || PlaytestLaunchOptions.SmokeEngineeringAccess ||
             PlaytestLaunchOptions.SmokePowerLoop || PlaytestLaunchOptions.SmokeHealth ||
-            PlaytestLaunchOptions.SmokeGhost)
+            PlaytestLaunchOptions.SmokeGhost || PlaytestLaunchOptions.SmokeExamine)
             CallDeferred(nameof(StartShift));
     }
 
@@ -916,6 +920,16 @@ public partial class StationPlaytestController : Node2D
             !localRoundStarted || !players.ContainsKey(GetMultiplayer().GetUniqueId())) return;
 
         Vector2 clickPosition = GetGlobalMousePosition();
+        if (click.ShiftPressed)
+        {
+            int? examined = replicatedEntities.FindNearestExaminable(
+                new System.Numerics.Vector2(clickPosition.X, clickPosition.Y), 0.7f);
+            if (examined is null) return;
+            if (GetMultiplayer().IsServer()) ResolveExamine(localPeerId, examined.Value);
+            else RpcId(1, nameof(RequestExamine), localRoundId, examined.Value);
+            return;
+        }
+
         int? targetId = replicatedEntities.FindNearestTarget(
             new System.Numerics.Vector2(clickPosition.X, clickPosition.Y), 0.7f);
         if (targetId is null) return;
@@ -925,6 +939,89 @@ public partial class StationPlaytestController : Node2D
             ResolveSharedInteraction(localPeerId, targetId.Value, (int)selectedIntent, altClick);
         else
             RpcId(1, nameof(RequestSharedInteraction), localRoundId, targetId.Value, (int)selectedIntent, altClick);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestExamine(int roundId, int targetId)
+    {
+        if (!GetMultiplayer().IsServer() || roundId != roundLifecycle.RoundId) return;
+        ResolveExamine((int)GetMultiplayer().GetRemoteSenderId(), targetId);
+    }
+
+    /// <summary>Shift-click: the server describes the target to the examiner alone.</summary>
+    private void ResolveExamine(int senderId, int targetId)
+    {
+        if (!roundLifecycle.CanRequestJob || !players.ContainsKey(senderId)) return;
+        ExamineResult result = sharedInteractionWorld.TryExamine(senderId, targetId, out IReadOnlyList<string> lines);
+        string text = result switch
+        {
+            ExamineResult.Ok => string.Join("\n", lines),
+            ExamineResult.Unconscious => "You are unconscious and cannot see.",
+            ExamineResult.OutOfView => "You cannot see that from here.",
+            _ => string.Empty,
+        };
+        GD.Print($"PLAYTEST_EXAMINE peer={senderId} target={targetId} result={result}");
+        if (text.Length == 0) return;
+        if (senderId == localPeerId) ReceiveExamine(result == ExamineResult.Ok, text);
+        else RpcId(senderId, nameof(ReceiveExamine), result == ExamineResult.Ok, text);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceiveExamine(bool seen, string text)
+    {
+        if (seen)
+        {
+            chatLog.AppendText($"[EXAMINE] {text}\n");
+            chatLog.ScrollToLine(Math.Max(0, chatLog.GetLineCount() - 1));
+            smokeExamineReceived++;
+        }
+        else
+        {
+            SetStatus(text);
+            smokeExamineRejected = true;
+        }
+        string first = text.Split('\n')[0];
+        GD.Print($"PLAYTEST_EXAMINE_RECEIVED seen={seen} first={first}");
+    }
+
+    /// <summary>
+    /// Two-client examine smoke: the remote Assistant looks at the wrench and at the Engineer host from
+    /// the hall, then is refused a look at the bruise packs behind Medical's walls.
+    /// </summary>
+    private void DriveSmokeExamine()
+    {
+        if (!PlaytestLaunchOptions.SmokeExamine || !localRoundStarted || players.Count < 2) return;
+        int remote = players.Keys.First(peer => peer != localPeerId);
+        if (GetMultiplayer().IsServer())
+        {
+            if (smokeExamineStage != 0) return;
+            smokeExamineStage = 1;
+            StageSmokePlayer(localPeerId, SmokeHealthVictimHall);
+            StageSmokePlayer(remote, SmokeHealthAttackerHall);
+            return;
+        }
+
+        if (!replicatedEntities.TryGet(localPeerId, out StationEntityState? self)) return;
+        Vector2 selfPosition = new(self.Position.X, self.Position.Y);
+        switch (smokeExamineStage)
+        {
+            case 0 when selfPosition.DistanceTo(SmokeHealthAttackerHall) < 0.1f:
+                smokeExamineStage = 1;
+                RpcId(1, nameof(RequestExamine), localRoundId, StationEntityCatalog.WrenchId);
+                break;
+            case 1 when smokeExamineReceived == 1:
+                smokeExamineStage = 2;
+                RpcId(1, nameof(RequestExamine), localRoundId, remote);
+                break;
+            case 2 when smokeExamineReceived == 2:
+                smokeExamineStage = 3;
+                RpcId(1, nameof(RequestExamine), localRoundId, StationEntityCatalog.BruisePackId);
+                break;
+            case 3 when smokeExamineRejected:
+                smokeExamineStage = 4;
+                GD.Print("PLAYTEST_EXAMINE_CLIENT_OK object=true crew=true walled_off=true");
+                break;
+        }
     }
 
     private void SetSelectedIntent(Intent intent)
@@ -1677,6 +1774,11 @@ public partial class StationPlaytestController : Node2D
         content.AddChild(new Label
         {
             Text = "Engineer: pick up fuel; click generator twice to load it; Tab, click generator to start; click storage output. Watch the APC lamp.",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        });
+        content.AddChild(new Label
+        {
+            Text = "Shift-click anything in view to examine it.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         });
         content.AddChild(new Label
