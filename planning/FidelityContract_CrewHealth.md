@@ -1,6 +1,6 @@
 # Fidelity Contract: Crew Health, Incapacitation, and Recovery
 
-**Status:** implemented in the engine and LAN adapter with deterministic rule and shared-world tests. A two-peer `--health` smoke is scripted and added to CI. It has not run in the session that wrote it, because executing a downloaded Godot binary was not permitted there. A hands-on ordinary-controls playtest is still open.
+**Status:** implemented in the engine and LAN adapter with deterministic rule and shared-world tests. The two-peer `--health` smoke passed in CI on 2026-11-10 (commit `2211e65`, Godot 4.4.1 .NET on Linux). A hands-on ordinary-controls playtest is still open.
 
 **Source check:** tgstation [`f37d36c`](https://github.com/tgstation/tgstation/tree/f37d36c295c4bf991b72647281352f3bd471b335), read directly on 2026-11-05. Unitystation's HandApply bridge (intent carried by the client click) is unchanged from the [interaction contract](FidelityContract_InteractionSystem.md).
 
