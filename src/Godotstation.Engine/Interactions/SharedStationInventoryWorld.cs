@@ -250,6 +250,8 @@ public sealed partial class SharedStationInventoryWorld : IInventoryWorld
             girder.Task.Cancel(peerId);
         foreach (CrewMember other in crew.Values)
             if (other.Treatment.PatientPeerId == peerId) other.Treatment.Cancel();
+        StopPull(member, PullStopReason.Left);
+        if (member.Body != null) StopPullsOf(member.Body, PullStopReason.Left);
         foreach (IInteractionHandler<HandApply> handler in member.Handlers)
             dispatcher.UnregisterHandler(handler);
         if (member.Body != null)
@@ -524,6 +526,7 @@ public sealed partial class SharedStationInventoryWorld : IInventoryWorld
         public List<IInteractionHandler<HandApply>> Handlers { get; } = new();
         public double NextMeleeAt { get; set; }
         public Vector2? GhostPosition { get; set; }
+        public StationEntity? Pulling { get; set; }
         public InventoryNamedSlot ActiveHand { get; set; } = InventoryNamedSlot.rightHand;
         public ItemSlot ActiveHandSlot => Inventory.GetNamedItemSlot(ActiveHand)!;
         public Vector2 WorldPosition => Position;
@@ -638,6 +641,7 @@ public sealed partial class SharedStationInventoryWorld : IInventoryWorld
             fields[StationEntityField.BruteLoss] = Member.Health.BruteLoss;
             fields[StationEntityField.OxyLoss] = Member.Health.OxyLoss;
             fields[StationEntityField.Stat] = (int)Member.Health.Stat;
+            if (Member.Pulling != null) fields[StationEntityField.Pulling] = Member.Pulling.Id;
             if (Member.GhostPosition is Vector2 ghost)
             {
                 fields[StationEntityField.Ghost] = 1;

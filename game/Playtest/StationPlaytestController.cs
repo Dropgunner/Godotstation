@@ -84,6 +84,9 @@ public partial class StationPlaytestController : Node2D
     private int smokeExamineStage;
     private int smokeExamineReceived;
     private bool smokeExamineRejected;
+    private int smokePullStage;
+    private Vector2I smokePullInput;
+    private Label pullLabel = null!;
     private string activeHandItemName = string.Empty;
     private bool localRoundStarted;
     private string connectionStatus = "Connecting…";
@@ -119,6 +122,8 @@ public partial class StationPlaytestController : Node2D
         sharedInteractionWorld.CrewTreated += OnCrewTreated;
         sharedInteractionWorld.CrewStatChanged += OnCrewStatChanged;
         sharedInteractionWorld.CrewGhosted += OnCrewGhosted;
+        sharedInteractionWorld.PullStarted += OnPullStarted;
+        sharedInteractionWorld.PullStopped += OnPullStopped;
         foreach ((int x, int y, IPassable passable) in sharedInteractionWorld.PassableTiles)
             collisionMap.SetTile(x, y, passable);
         entityObstacles.Clear();
@@ -139,6 +144,8 @@ public partial class StationPlaytestController : Node2D
         sharedInteractionWorld.CrewTreated -= OnCrewTreated;
         sharedInteractionWorld.CrewStatChanged -= OnCrewStatChanged;
         sharedInteractionWorld.CrewGhosted -= OnCrewGhosted;
+        sharedInteractionWorld.PullStarted -= OnPullStarted;
+        sharedInteractionWorld.PullStopped -= OnPullStopped;
         crewRoster = StationCrewJobCatalog.CreateRoster();
         InitializeWorld();
         localRoundStarted = false;
@@ -172,6 +179,7 @@ public partial class StationPlaytestController : Node2D
         DriveSmokeHealth();
         DriveSmokeGhost();
         DriveSmokeExamine();
+        DriveSmokePull();
         var direction = ReadLocalInput();
 
         if (multiplayer.IsServer())
@@ -189,11 +197,14 @@ public partial class StationPlaytestController : Node2D
                 int moveY = player.DeltaY;
                 if (stat == CrewStat.Dead)
                     sharedInteractionWorld.TryMoveGhost(player.PeerId, moveX, moveY, step, GhostMinimum, GhostMaximum);
-                if (!stat.CanMove())
+                if (!stat.CanMove() || sharedInteractionWorld.IsImmobilizedByPull(player.PeerId))
                 {
                     moveX = 0;
                     moveY = 0;
                 }
+                player.Movement.SpeedModifier = sharedInteractionWorld.IsDraggingProne(player.PeerId)
+                    ? SharedStationInventoryWorld.ProneDragSpeedFactor
+                    : 1f;
                 player.Movement.CurrentType = stat.IsFloored() ? MovementType.Crawling : MovementType.Running;
                 SyncCrewDensity(player, stat);
                 float x = player.Position.X;
@@ -214,8 +225,13 @@ public partial class StationPlaytestController : Node2D
                     Mathf.RoundToInt(y) != Mathf.RoundToInt(player.Position.Y)))
                     collisionMap.MoveObject(player.Obstacle, Mathf.RoundToInt(x), Mathf.RoundToInt(y));
 
+                var vacatedTile = new System.Numerics.Vector2(Mathf.RoundToInt(player.Position.X),
+                    Mathf.RoundToInt(player.Position.Y));
                 player.Position = new Vector2(x, y);
                 sharedInteractionWorld.SetActorPosition(player.PeerId, new System.Numerics.Vector2(x, y));
+                if (sharedInteractionWorld.TryGetPullFollow(player.PeerId, vacatedTile, out int pulledId,
+                        out System.Numerics.Vector2 pullDestination))
+                    MovePulledEntity(pulledId, pullDestination);
                 sharedInteractionWorld.AdvanceConstruction(player.PeerId, step);
                 SyncPushedEntities();
                 player.Avatar.Position = player.Position;
@@ -228,6 +244,7 @@ public partial class StationPlaytestController : Node2D
                 }
             }
 
+            sharedInteractionWorld.ValidatePulls();
             entitySnapshotTime += step;
             if (entitySnapshotTime >= SnapshotInterval)
             {
@@ -285,7 +302,8 @@ public partial class StationPlaytestController : Node2D
         if (PlaytestLaunchOptions.SmokeMove || PlaytestLaunchOptions.SmokeInteractions ||
             PlaytestLaunchOptions.SmokeConstruction || PlaytestLaunchOptions.SmokeEngineeringAccess ||
             PlaytestLaunchOptions.SmokePowerLoop || PlaytestLaunchOptions.SmokeHealth ||
-            PlaytestLaunchOptions.SmokeGhost || PlaytestLaunchOptions.SmokeExamine)
+            PlaytestLaunchOptions.SmokeGhost || PlaytestLaunchOptions.SmokeExamine ||
+            PlaytestLaunchOptions.SmokePull)
             CallDeferred(nameof(StartShift));
     }
 
@@ -700,6 +718,144 @@ public partial class StationPlaytestController : Node2D
         sharedInteractionWorld.GetPerceptionPosition(player.PeerId)
         ?? new System.Numerics.Vector2(player.Position.X, player.Position.Y);
 
+    /// <summary>Moves a pulled crew member or fixture into the tile its puller just left.</summary>
+    private void MovePulledEntity(int entityId, System.Numerics.Vector2 destination)
+    {
+        int x = Mathf.RoundToInt(destination.X);
+        int y = Mathf.RoundToInt(destination.Y);
+        if (players.TryGetValue(entityId, out PlayerRuntime? pulled))
+        {
+            pulled.Position = new Vector2(x, y);
+            pulled.Avatar.Position = pulled.Position;
+            if (pulled.ObstacleActive) collisionMap.MoveObject(pulled.Obstacle, x, y);
+            sharedInteractionWorld.SetActorPosition(entityId, destination);
+        }
+        else if (entityObstacles.TryGetValue(entityId, out DynamicObject? obstacle))
+        {
+            collisionMap.MoveObject(obstacle, x, y);
+            sharedInteractionWorld.SetEntityPosition(entityId, destination);
+        }
+    }
+
+    private void OnPullStarted(int pullerId, int pulledId)
+    {
+        GD.Print($"PLAYTEST_PULL_STARTED puller={pullerId} target={pulledId}");
+        if (players.ContainsKey(pulledId))
+            RouteVisibleMessage("ACTION", CrewPosition(pulledId),
+                $"{CrewName(pullerId)} grabs {CrewName(pulledId)} passively.", pullerId, pulledId);
+    }
+
+    private void OnPullStopped(int pullerId, int pulledId, PullStopReason reason) =>
+        GD.Print($"PLAYTEST_PULL_STOPPED puller={pullerId} target={pulledId} reason={reason}");
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestPull(int roundId, int targetId)
+    {
+        if (!GetMultiplayer().IsServer() || roundId != roundLifecycle.RoundId) return;
+        ResolvePull((int)GetMultiplayer().GetRemoteSenderId(), targetId);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestReleasePull(int roundId)
+    {
+        if (!GetMultiplayer().IsServer() || roundId != roundLifecycle.RoundId) return;
+        int senderId = (int)GetMultiplayer().GetRemoteSenderId();
+        if (roundLifecycle.CanRequestJob && players.ContainsKey(senderId))
+            sharedInteractionWorld.TryReleasePull(senderId);
+    }
+
+    /// <summary>Ctrl-click: drop the current pull, or start pulling an adjacent crew member or loose cart.</summary>
+    private void ResolvePull(int senderId, int targetId)
+    {
+        if (!roundLifecycle.CanRequestJob || !players.ContainsKey(senderId)) return;
+        if (sharedInteractionWorld.TryTogglePull(senderId, targetId)) return;
+        if (senderId == localPeerId) ReceivePullRejected();
+        else RpcId(senderId, nameof(ReceivePullRejected));
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceivePullRejected() =>
+        SetStatus("You cannot pull that. Stand next to a crew member or an unanchored cart, with working hands.");
+
+    /// <summary>Shows what the local player pulls and who pulls them, from replicated crew state.</summary>
+    private void UpdatePullLabel()
+    {
+        if (!IsInstanceValid(pullLabel)) return;
+        string text = string.Empty;
+        foreach (StationEntityState crew in replicatedEntities.All)
+        {
+            if (crew.Kind != StationEntityKind.Crew) continue;
+            int pulled = crew.Count(StationEntityField.Pulling);
+            if (crew.Id == localPeerId && pulled != 0)
+                text += $"Pulling: {(replicatedEntities.TryGet(pulled, out StationEntityState? target) && target.Kind != StationEntityKind.Crew ? target.Kind.Replace('-', ' ') : $"Crew {pulled}")} · H or ctrl-click to let go\n";
+            else if (crew.Id != localPeerId && pulled == localPeerId)
+                text += $"Crew {crew.Id} is pulling you · move away to break free\n";
+        }
+        pullLabel.Text = text.TrimEnd();
+        pullLabel.Visible = text.Length > 0;
+    }
+
+    /// <summary>
+    /// Two-client pull smoke: the remote Assistant ctrl-pulls the Engineer host and walks away, and the host
+    /// follows one tile behind. The host then walks off until the pull breaks by distance.
+    /// </summary>
+    private void DriveSmokePull()
+    {
+        if (!PlaytestLaunchOptions.SmokePull || !localRoundStarted || players.Count < 2) return;
+        int remote = players.Keys.First(peer => peer != localPeerId);
+        if (GetMultiplayer().IsServer())
+        {
+            PlayerRuntime host = players[localPeerId];
+            PlayerRuntime puller = players[remote];
+            if (smokePullStage == 0)
+            {
+                smokePullStage = 1;
+                StageSmokePlayer(localPeerId, SmokeHealthVictimHall);
+                StageSmokePlayer(remote, SmokeHealthAttackerHall);
+            }
+            else if (smokePullStage == 1 && sharedInteractionWorld.GetPuller(localPeerId) == remote &&
+                     puller.Position.Y >= 3 && puller.DeltaX == 0 && puller.DeltaY == 0)
+            {
+                smokePullStage = 2;
+                bool behind = Mathf.RoundToInt(host.Position.X) == Mathf.RoundToInt(puller.Position.X) &&
+                              Mathf.RoundToInt(host.Position.Y) == Mathf.RoundToInt(puller.Position.Y) - 1;
+                GD.Print($"PLAYTEST_PULL_HOST_FOLLOWED behind={behind} host_x={host.Position.X:0} host_y={host.Position.Y:0}");
+                smokePullInput = Vector2I.Left;
+            }
+            else if (smokePullStage == 2 && sharedInteractionWorld.GetPuller(localPeerId) == null)
+            {
+                smokePullStage = 3;
+                smokePullInput = Vector2I.Zero;
+                GD.Print("PLAYTEST_PULL_HOST_OK followed=true broke_free=true");
+            }
+            return;
+        }
+
+        if (!replicatedEntities.TryGet(localPeerId, out StationEntityState? self)) return;
+        Vector2 selfPosition = new(self.Position.X, self.Position.Y);
+        int pulling = self.Count(StationEntityField.Pulling);
+        switch (smokePullStage)
+        {
+            case 0 when selfPosition.DistanceTo(SmokeHealthAttackerHall) < 0.1f:
+                smokePullStage = 1;
+                RpcId(1, nameof(RequestPull), localRoundId, remote);
+                break;
+            case 1 when pulling == remote:
+                smokePullStage = 2;
+                smokePullInput = Vector2I.Down;
+                GD.Print($"PLAYTEST_PULL_CLIENT_STARTED target={remote}");
+                break;
+            case 2 when selfPosition.Y >= 3:
+                smokePullStage = 3;
+                smokePullInput = Vector2I.Zero;
+                break;
+            case 3 when pulling == 0:
+                smokePullStage = 4;
+                GD.Print("PLAYTEST_PULL_CLIENT_OK started=true released_by_distance=true");
+                break;
+        }
+    }
+
     private void OnCrewGhosted(int peerId) => GD.Print($"PLAYTEST_CREW_GHOSTED peer={peerId}");
 
     private string CrewName(int peerId) =>
@@ -858,6 +1014,7 @@ public partial class StationPlaytestController : Node2D
     private Vector2I ReadLocalInput()
     {
         if (smokeGhostMoving) return new Vector2I(1, 1);
+        if (smokePullInput != Vector2I.Zero) return smokePullInput;
         if (PlaytestLaunchOptions.SmokeMove)
         {
             if (players.Count >= 2 && !smokeMoveStarted)
@@ -906,6 +1063,16 @@ public partial class StationPlaytestController : Node2D
             return;
         }
 
+        if (inputEvent is InputEventKey { Pressed: true, Echo: false, Keycode: Key.H } &&
+            localRoundStarted && players.ContainsKey(GetMultiplayer().GetUniqueId()))
+        {
+            if (GetMultiplayer().IsServer())
+                sharedInteractionWorld.TryReleasePull(localPeerId);
+            else
+                RpcId(1, nameof(RequestReleasePull), localRoundId);
+            return;
+        }
+
         if (inputEvent is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Q } &&
             localRoundStarted && players.ContainsKey(GetMultiplayer().GetUniqueId()))
         {
@@ -933,6 +1100,13 @@ public partial class StationPlaytestController : Node2D
         int? targetId = replicatedEntities.FindNearestTarget(
             new System.Numerics.Vector2(clickPosition.X, clickPosition.Y), 0.7f);
         if (targetId is null) return;
+
+        if (click.CtrlPressed)
+        {
+            if (GetMultiplayer().IsServer()) ResolvePull(localPeerId, targetId.Value);
+            else RpcId(1, nameof(RequestPull), localRoundId, targetId.Value);
+            return;
+        }
 
         bool altClick = click.AltPressed;
         if (GetMultiplayer().IsServer())
@@ -1636,6 +1810,7 @@ public partial class StationPlaytestController : Node2D
         if (players.TryGetValue(state.Id, out PlayerRuntime? player) && player.Avatar is StationCrewAvatar avatar)
             avatar.SetCondition(stat, state.Get(StationEntityField.Health));
         PresentGhost(state);
+        UpdatePullLabel();
         if (state.Id != localPeerId) return;
         // Dying changes which ghosts the local player may see.
         foreach (StationEntityState other in replicatedEntities.All)
@@ -1763,6 +1938,8 @@ public partial class StationPlaytestController : Node2D
         SetSelectedIntent(selectedIntent);
         healthLabel = new Label { Text = "Health: awaiting role spawn" };
         content.AddChild(healthLabel);
+        pullLabel = new Label { Visible = false, AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        content.AddChild(pullLabel);
         loadoutLabel = new Label { Text = "Crew loadout: awaiting role spawn", AutowrapMode = TextServer.AutowrapMode.WordSmart };
         loadoutLabel.CustomMinimumSize = new Vector2(320, 48);
         content.AddChild(loadoutLabel);
@@ -1778,7 +1955,7 @@ public partial class StationPlaytestController : Node2D
         });
         content.AddChild(new Label
         {
-            Text = "Shift-click anything in view to examine it.",
+            Text = "Shift-click anything in view to examine it. Ctrl-click a crew member or loose cart to pull it; H lets go.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         });
         content.AddChild(new Label

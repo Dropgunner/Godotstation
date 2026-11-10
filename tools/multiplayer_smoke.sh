@@ -27,7 +27,9 @@ fi
 
 launch_host() {
   if [[ -n "$playtest_app" ]]; then
-    if [[ "$smoke_mode" == "--examine" ]]; then
+    if [[ "$smoke_mode" == "--pull" ]]; then
+      "$godot_bin" --headless --quit-after 1500 -- --playtest-host --playtest-jobid=20 --playtest-smoke-pull
+    elif [[ "$smoke_mode" == "--examine" ]]; then
       "$godot_bin" --headless --quit-after 600 -- --playtest-host --playtest-jobid=20 --playtest-smoke-examine
     elif [[ "$smoke_mode" == "--ghost" ]]; then
       "$godot_bin" --headless --quit-after 20000 -- --playtest-host --playtest-jobid=20 --playtest-smoke-ghost
@@ -47,7 +49,9 @@ launch_host() {
       "$godot_bin" --headless --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-move --playtest-smoke-chat
     fi
   else
-    if [[ "$smoke_mode" == "--examine" ]]; then
+    if [[ "$smoke_mode" == "--pull" ]]; then
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 1500 -- --playtest-host --playtest-jobid=20 --playtest-smoke-pull
+    elif [[ "$smoke_mode" == "--examine" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 600 -- --playtest-host --playtest-jobid=20 --playtest-smoke-examine
     elif [[ "$smoke_mode" == "--ghost" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 20000 -- --playtest-host --playtest-jobid=20 --playtest-smoke-ghost
@@ -70,7 +74,9 @@ launch_host() {
 }
 launch_client() {
   if [[ -n "$playtest_app" ]]; then
-    if [[ "$smoke_mode" == "--examine" ]]; then
+    if [[ "$smoke_mode" == "--pull" ]]; then
+      "$godot_bin" --headless --quit-after 1500 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-pull
+    elif [[ "$smoke_mode" == "--examine" ]]; then
       "$godot_bin" --headless --quit-after 600 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-examine
     elif [[ "$smoke_mode" == "--ghost" ]]; then
       "$godot_bin" --headless --quit-after 20000 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-ghost
@@ -90,7 +96,9 @@ launch_client() {
       "$godot_bin" --headless --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-move --playtest-smoke-chat
     fi
   else
-    if [[ "$smoke_mode" == "--examine" ]]; then
+    if [[ "$smoke_mode" == "--pull" ]]; then
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 1500 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-pull
+    elif [[ "$smoke_mode" == "--examine" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 600 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-examine
     elif [[ "$smoke_mode" == "--ghost" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 20000 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-ghost
@@ -135,6 +143,7 @@ if [[ "$smoke_mode" == "--round-restart" ]]; then max_checks=200; fi
 if [[ "$smoke_mode" == "--power-loop" ]]; then max_checks=900; fi
 if [[ "$smoke_mode" == "--health" ]]; then max_checks=900; fi
 if [[ "$smoke_mode" == "--ghost" ]]; then max_checks=1400; fi
+if [[ "$smoke_mode" == "--pull" ]]; then max_checks=200; fi
 if [[ "$smoke_mode" == "--engineering-access" ]]; then max_checks=100; fi
 for _ in $(seq 1 "$max_checks"); do
   ready=0
@@ -160,6 +169,16 @@ for _ in $(seq 1 "$max_checks"); do
     if grep -q "PLAYTEST_ENGINEERING_ACCESS_DENIED peer=" "$host_log" && \
        grep -q "PLAYTEST_ENGINEERING_AIRLOCK_OPENED peer=1 clearance=Engine" "$host_log" && \
        grep -q "PLAYTEST_ENGINEERING_ACCESS_OK denied=true engineer_open=true replicated=true" "$client_log"; then
+      ready=1
+    fi
+  elif [[ "$smoke_mode" == "--pull" ]]; then
+    if grep -q "PLAYTEST_ROSTER peers=2" "$host_log" && \
+       grep -Eq "PLAYTEST_PULL_STARTED puller=[0-9]+ target=1\$" "$host_log" && \
+       grep -q "PLAYTEST_PULL_HOST_FOLLOWED behind=True" "$host_log" && \
+       grep -Eq "PLAYTEST_PULL_STOPPED puller=[0-9]+ target=1 reason=OutOfReach" "$host_log" && \
+       grep -q "PLAYTEST_PULL_HOST_OK followed=true broke_free=true" "$host_log" && \
+       grep -q "PLAYTEST_PULL_CLIENT_STARTED target=1" "$client_log" && \
+       grep -q "PLAYTEST_PULL_CLIENT_OK started=true released_by_distance=true" "$client_log"; then
       ready=1
     fi
   elif [[ "$smoke_mode" == "--examine" ]]; then
@@ -248,6 +267,8 @@ for _ in $(seq 1 "$max_checks"); do
       echo "MULTIPLAYER_ROUND_RESTART_SMOKE_OK: two clients saw the end and respawned in a fresh shared round"
     elif [[ "$smoke_mode" == "--construction" ]]; then
       echo "MULTIPLAYER_CONSTRUCTION_SMOKE_OK: engineer picked up two sheets, completed the four-second girder task, and both clients observed the wall"
+    elif [[ "$smoke_mode" == "--pull" ]]; then
+      echo "MULTIPLAYER_PULL_SMOKE_OK: the remote peer pulled the host, the host followed one tile behind, and walking away broke the pull"
     elif [[ "$smoke_mode" == "--examine" ]]; then
       echo "MULTIPLAYER_EXAMINE_SMOKE_OK: the remote peer examined an object and a crew member, and was refused a look through walls"
     elif [[ "$smoke_mode" == "--ghost" ]]; then
