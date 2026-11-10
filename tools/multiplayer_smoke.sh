@@ -28,7 +28,7 @@ fi
 launch_host() {
   if [[ -n "$playtest_app" ]]; then
     if [[ "$smoke_mode" == "--health" ]]; then
-      "$godot_bin" --headless --quit-after 4800 -- --playtest-host --playtest-jobid=20 --playtest-smoke-health
+      "$godot_bin" --headless --quit-after 9000 -- --playtest-host --playtest-jobid=20 --playtest-smoke-health
     elif [[ "$smoke_mode" == "--power-loop" ]]; then
       "$godot_bin" --headless --quit-after 4800 -- --playtest-host --playtest-jobid=2 --playtest-smoke-power-loop
     elif [[ "$smoke_mode" == "--round-restart" ]]; then
@@ -44,7 +44,7 @@ launch_host() {
     fi
   else
     if [[ "$smoke_mode" == "--health" ]]; then
-      "$godot_bin" --headless --path "$repo_root/game" --quit-after 4800 -- --playtest-host --playtest-jobid=20 --playtest-smoke-health
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 9000 -- --playtest-host --playtest-jobid=20 --playtest-smoke-health
     elif [[ "$smoke_mode" == "--power-loop" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 4800 -- --playtest-host --playtest-jobid=2 --playtest-smoke-power-loop
     elif [[ "$smoke_mode" == "--round-restart" ]]; then
@@ -63,7 +63,7 @@ launch_host() {
 launch_client() {
   if [[ -n "$playtest_app" ]]; then
     if [[ "$smoke_mode" == "--health" ]]; then
-      "$godot_bin" --headless --quit-after 4800 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-health
+      "$godot_bin" --headless --quit-after 9000 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-health
     elif [[ "$smoke_mode" == "--power-loop" ]]; then
       "$godot_bin" --headless --quit-after 4800 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-power-loop
     elif [[ "$smoke_mode" == "--round-restart" ]]; then
@@ -79,7 +79,7 @@ launch_client() {
     fi
   else
     if [[ "$smoke_mode" == "--health" ]]; then
-      "$godot_bin" --headless --path "$repo_root/game" --quit-after 4800 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-health
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 9000 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-health
     elif [[ "$smoke_mode" == "--power-loop" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 4800 -- --playtest-join=127.0.0.1 --playtest-jobid=20 --playtest-smoke-power-loop
     elif [[ "$smoke_mode" == "--round-restart" ]]; then

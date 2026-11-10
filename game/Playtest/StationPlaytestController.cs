@@ -267,7 +267,7 @@ public partial class StationPlaytestController : Node2D
         RefreshStatus();
         if (PlaytestLaunchOptions.SmokeMove || PlaytestLaunchOptions.SmokeInteractions ||
             PlaytestLaunchOptions.SmokeConstruction || PlaytestLaunchOptions.SmokeEngineeringAccess ||
-            PlaytestLaunchOptions.SmokePowerLoop)
+            PlaytestLaunchOptions.SmokePowerLoop || PlaytestLaunchOptions.SmokeHealth)
             CallDeferred(nameof(StartShift));
     }
 
