@@ -184,7 +184,7 @@ for _ in $(seq 1 "$max_checks"); do
        grep -q "PLAYTEST_GHOST_HOST_OK heard_living=true" "$host_log" && \
        grep -q "PLAYTEST_GHOST_CLIENT_SAW_DEATH victim=1" "$client_log" && \
        grep -q "PLAYTEST_GHOST_CLIENT_OK body_dead=true body_stayed=True ghost_hidden=True" "$client_log" && \
-       ! grep -q "PLAYTEST_LOCAL_CHAT_RECEIVED speaker=1" "$client_log"; then
+       ! grep -Eq "PLAYTEST_LOCAL_CHAT_RECEIVED speaker=1\$" "$client_log"; then
       ready=1
     fi
   elif [[ "$smoke_mode" == "--health" ]]; then
