@@ -123,6 +123,8 @@ public partial class StationPlaytestController : Node2D
         sharedInteractionWorld.CrewStatChanged += OnCrewStatChanged;
         sharedInteractionWorld.CrewGhosted += OnCrewGhosted;
         sharedInteractionWorld.PullStarted += OnPullStarted;
+        sharedInteractionWorld.CprStarted += OnCprStarted;
+        sharedInteractionWorld.CprPerformed += OnCprPerformed;
         sharedInteractionWorld.PullStopped += OnPullStopped;
         foreach ((int x, int y, IPassable passable) in sharedInteractionWorld.PassableTiles)
             collisionMap.SetTile(x, y, passable);
@@ -145,6 +147,8 @@ public partial class StationPlaytestController : Node2D
         sharedInteractionWorld.CrewStatChanged -= OnCrewStatChanged;
         sharedInteractionWorld.CrewGhosted -= OnCrewGhosted;
         sharedInteractionWorld.PullStarted -= OnPullStarted;
+        sharedInteractionWorld.CprStarted -= OnCprStarted;
+        sharedInteractionWorld.CprPerformed -= OnCprPerformed;
         sharedInteractionWorld.PullStopped -= OnPullStopped;
         crewRoster = StationCrewJobCatalog.CreateRoster();
         InitializeWorld();
@@ -735,6 +739,20 @@ public partial class StationPlaytestController : Node2D
             collisionMap.MoveObject(obstacle, x, y);
             sharedInteractionWorld.SetEntityPosition(entityId, destination);
         }
+    }
+
+    private void OnCprStarted(int rescuerId, int patientId)
+    {
+        GD.Print($"PLAYTEST_CPR_STARTED rescuer={rescuerId} patient={patientId}");
+        RouteVisibleMessage("ACTION", CrewPosition(patientId),
+            $"{CrewName(rescuerId)} is trying to perform CPR on {CrewName(patientId)}!", rescuerId, patientId);
+    }
+
+    private void OnCprPerformed(int rescuerId, int patientId, double healed)
+    {
+        GD.Print($"PLAYTEST_CPR_PERFORMED rescuer={rescuerId} patient={patientId} oxy_healed={healed:0}");
+        RouteVisibleMessage("ACTION", CrewPosition(patientId),
+            $"{CrewName(rescuerId)} performs CPR on {CrewName(patientId)}!", rescuerId, patientId);
     }
 
     private void OnPullStarted(int pullerId, int pulledId)
@@ -1818,6 +1836,7 @@ public partial class StationPlaytestController : Node2D
         if (!IsInstanceValid(healthLabel)) return;
         string treatment = state.Count(StationEntityField.TreatmentPatient) > 0
             ? $" · applying bruise pack {state.Get(StationEntityField.Progress):0.0}s"
+            : state.Count(StationEntityField.CprPatient) > 0 ? " · performing CPR, hold still"
             : string.Empty;
         healthLabel.Text = $"Health: {state.Get(StationEntityField.Health):0}/{CrewHealth.MaxHealth:0} · {stat.DisplayName()}" +
                            $" · brute {state.Get(StationEntityField.BruteLoss):0} · oxy {state.Get(StationEntityField.OxyLoss):0}{treatment}";
@@ -1960,7 +1979,7 @@ public partial class StationPlaytestController : Node2D
         });
         content.AddChild(new Label
         {
-            Text = "Danger: on harm intent (4) a wrench hits crew for 5 brute. At 0 health crew collapse; untreated they die. Bruise packs in Medical heal 40.",
+            Text = "Danger: on harm intent (4) a wrench hits crew for 5 brute. At 0 health crew collapse; untreated they die. Bruise packs in Medical heal 40. Help intent (1) with an empty hand gives a collapsed crew member CPR.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         });
 

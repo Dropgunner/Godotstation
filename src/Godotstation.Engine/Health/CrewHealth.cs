@@ -100,6 +100,16 @@ public sealed class CrewHealth
         return healed;
     }
 
+    /// <summary>Heals oxygen loss, never below zero. Returns the amount actually healed.</summary>
+    public double HealOxy(double amount)
+    {
+        if (!double.IsFinite(amount) || amount <= 0 || IsDead) return 0;
+        double healed = Math.Min(amount, OxyLoss);
+        OxyLoss -= healed;
+        UpdateStat();
+        return healed;
+    }
+
     /// <summary>Advances life ticks. Returns true when any replicated value changed.</summary>
     public bool Advance(double elapsedSeconds)
     {

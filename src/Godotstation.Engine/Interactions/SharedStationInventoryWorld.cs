@@ -173,6 +173,7 @@ public sealed partial class SharedStationInventoryWorld : IInventoryWorld
         member.Body = new CrewBody(member);
         member.Handlers.Add(new CrewMeleeHandler(this, member.Body));
         member.Handlers.Add(new BruisePackHandler(this, member.Body));
+        member.Handlers.Add(new CprHandler(this, member.Body));
         foreach (IInteractionHandler<HandApply> handler in member.Handlers)
             dispatcher.RegisterHandler(handler);
         entities.Add(peerId, member.Body);
@@ -249,7 +250,10 @@ public sealed partial class SharedStationInventoryWorld : IInventoryWorld
         foreach (Girder girder in entityOrder.OfType<Girder>())
             girder.Task.Cancel(peerId);
         foreach (CrewMember other in crew.Values)
+        {
             if (other.Treatment.PatientPeerId == peerId) other.Treatment.Cancel();
+            if (other.Cpr.PatientPeerId == peerId) other.Cpr.Cancel();
+        }
         StopPull(member, PullStopReason.Left);
         if (member.Body != null) StopPullsOf(member.Body, PullStopReason.Left);
         foreach (IInteractionHandler<HandApply> handler in member.Handlers)
@@ -383,6 +387,7 @@ public sealed partial class SharedStationInventoryWorld : IInventoryWorld
             member.Health.Advance(elapsedSeconds);
             NotifyStat(member, before);
             AdvanceTreatment(member, elapsedSeconds);
+            AdvanceCpr(member, elapsedSeconds);
         }
     }
 
@@ -415,6 +420,7 @@ public sealed partial class SharedStationInventoryWorld : IInventoryWorld
         if (!member.Health.CanUseHands)
         {
             member.Treatment.Cancel();
+            member.Cpr.Cancel();
             foreach (Girder girder in entityOrder.OfType<Girder>())
                 girder.Task.Cancel(member.PeerId);
         }
@@ -522,6 +528,7 @@ public sealed partial class SharedStationInventoryWorld : IInventoryWorld
         public int JobId { get; }
         public CrewHealth Health { get; } = new();
         public BruisePackTreatment Treatment { get; } = new();
+        public CprAttempt Cpr { get; } = new();
         public CrewBody? Body { get; set; }
         public List<IInteractionHandler<HandApply>> Handlers { get; } = new();
         public double NextMeleeAt { get; set; }
@@ -647,6 +654,11 @@ public sealed partial class SharedStationInventoryWorld : IInventoryWorld
                 fields[StationEntityField.Ghost] = 1;
                 fields[StationEntityField.GhostX] = ghost.X;
                 fields[StationEntityField.GhostY] = ghost.Y;
+            }
+            if (Member.Cpr.PatientPeerId is int cprPatient)
+            {
+                fields[StationEntityField.CprPatient] = cprPatient;
+                fields[StationEntityField.Progress] = Member.Cpr.ProgressSeconds;
             }
             if (Member.Treatment.PatientPeerId is int patient)
             {

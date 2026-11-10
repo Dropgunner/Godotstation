@@ -14,6 +14,7 @@
 - `client/Move` in [`mob_movement.dm`](https://github.com/tgstation/tgstation/blob/f37d36c295c4bf991b72647281352f3bd471b335/code/modules/mob/mob_movement.dm) calls `ghostize()` when a dead mob's player tries to move. [`observer.dm`](https://github.com/tgstation/tgstation/blob/f37d36c295c4bf991b72647281352f3bd471b335/code/modules/mob/dead/observer/observer.dm) gives observers `invisibility = INVISIBILITY_OBSERVER` and `see_invisible = SEE_INVISIBLE_OBSERVER`, and `observer/Move` uses `abstract_move`, which ignores obstacles and stops at the world edge.
 - `send_speech` in `living_say.dm` adds every dead player within normal hearing distance to the listeners without a view check. Hearing beyond that distance needs `CHAT_GHOSTEARS` or `CHAT_GHOSTWHISPER`, which are not in `TOGGLES_DEFAULT_CHAT`.
 - `on_lying_down` in `living.dm` adds `TRAIT_UNDENSE`, so lying bodies do not block movement.
+- `human/do_cpr` in [`human.dm`](https://github.com/tgstation/tgstation/blob/f37d36c295c4bf991b72647281352f3bd471b335/code/modules/mob/living/carbon/human/human.dm) refuses yourself and the dead. After a 3-second do-after it heals up to 7 oxygen loss if the patient is still at or below the crit threshold. While the patient stays there, it repeats at `CPR_PANIC_SPEED` (0.8 seconds).
 - [`wrench.dm`](https://github.com/tgstation/tgstation/blob/f37d36c295c4bf991b72647281352f3bd471b335/code/game/objects/items/tools/engineering/wrench.dm) gives `/obj/item/wrench` `force = 5`.
 - [`stacks/medical.dm`](https://github.com/tgstation/tgstation/blob/f37d36c295c4bf991b72647281352f3bd471b335/code/game/objects/items/stacks/medical.dm): medical stacks start at `amount = 6`. `bruise_pack` has `heal_brute = 40`, `self_delay = 4 SECONDS`, `other_delay = 2 SECONDS`, and does not work on the dead.
 
@@ -31,11 +32,13 @@
 10. Ghosts are drawn only for dead players (and always for their owner). Living players see the body and nothing else.
 11. The dead hear local speech, whispers, and combat and action lines within normal hearing range of where they watch from (the ghost, or the body before they leave it), and walls do not block them. Their own speech still reaches only the dead. A ghost cannot interact with the world.
 12. Crew lying on the floor (any critical stat or dead) no longer block movement. A crew member who stands back up blocks again once their tile is free.
+13. On help intent with an empty active hand, clicking another crew member who is at or below 0 health and not dead starts CPR. The first round takes 3 seconds and each repeat takes 0.8 seconds. Each round heals up to 7 oxygen loss. CPR continues while the patient stays critical and stops when the rescuer moves, picks something up, loses reach, or is incapacitated. It does not heal brute damage, so it buys time; a bruise pack is still needed to get the patient up.
 
 ## Known gaps before parity claims
 
 - No limbs, wounds, bleeding, burn/toxin damage, armour, or body-zone targeting. The bruise pack heals total brute instead of one limb, and it does not loop the way tgstation's stacks do.
 - Only the wrench is a weapon. Disarm and grab intents are selectable, but nothing handles them yet. Unarmed attacks, help-up, pulling and examine are not implemented.
+- CPR ignores masks, lungs and mood. The hold-still check allows 0.2 tiles of drift, where tgstation's do-after allows none.
 - The melee cooldown gates melee only; tgstation's `next_move` blocks every click.
 - There is no revival, defibrillation, cloning, or re-entering the corpse. A dead player stays dead until the round restarts.
 - Ghost speed (6 tiles per second) is playtest-scaled, not a source value. Ghosts have no orbit, teleport or jump verbs.
@@ -50,6 +53,8 @@
 `CrewHealthTests` cover the stat thresholds, death finality, healing caps, breath cadence in soft and hard crit, oxygen recovery, the per-stat traits, and bruise pack delays and cancellation. `SharedCrewHealthWorldTests` cover crew-body replication and removal, peer-id collision rejection, harm-intent damage and its events, help-intent and empty-hand rejection, the melee cooldown, reach, crit blocking hands and cancelling construction, treatment of others and of yourself, treatment rejection and cancellation, death by untreated hard crit, and round-report counts.
 
 `GhostObserverTests` cover ghost speed and bounds, visibility by viewer stat, refusing the living, staying in the body until the first movement input, the body staying behind while the ghost replicates on the crew entity, ghosts being unable to touch the world, and dead listeners hearing through walls only within range.
+
+`CprTests` cover the help-intent, empty-hand and critical-patient requirements, the 3-second first round and 0.8-second repeats, healing up to 7 oxygen loss, keeping a hard-crit patient alive through ten minutes of continuous CPR, interruption by moving or picking something up, and refusing the dead and yourself. CPR has no two-peer smoke of its own; it travels over the same interaction request, crew entity fields and action messages that the `--health` smoke exercises.
 
 `tools/multiplayer_smoke.sh --ghost` runs an Engineer host and an Assistant client. The client kills the host with harm-intent wrench hits. The host leaves its body, drifts through a wall row, hears the client speak from a spot that is out of range of the body but in range of the ghost, and then speaks on the dead channel, which the client must not receive. The client confirms the body stayed where it fell and the ghost is not drawn.
 
