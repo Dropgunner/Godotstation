@@ -15,6 +15,9 @@ public static class StationEntityKind
     public const string FuelGenerator = "fuel-generator";
     public const string PowerStorage = "power-storage";
     public const string ApcLamp = "apc-lamp";
+    public const string BruisePack = "bruise-pack";
+    /// <summary>A crew body. Its entity id is the owning peer id.</summary>
+    public const string Crew = "crew";
 }
 
 /// <summary>Names of the small per-kind state values carried in <see cref="StationEntityState.Fields"/>.</summary>
@@ -31,6 +34,13 @@ public static class StationEntityField
     public const string StoredEnergy = "stored_energy";
     public const string OutputEnabled = "output_enabled";
     public const string Powered = "powered";
+    public const string Health = "health";
+    public const string Stat = "stat";
+    public const string BruteLoss = "brute_loss";
+    public const string OxyLoss = "oxy_loss";
+    public const string Job = "job";
+    public const string TreatmentHealer = "treatment_healer";
+    public const string TreatmentPatient = "treatment_patient";
 }
 
 /// <summary>Where one entity starts the round. Stackable kinds use <see cref="Amount"/>.</summary>
@@ -48,6 +58,7 @@ public static class StationEntityCatalog
     public const int FuelGeneratorId = 9007;
     public const int PowerStorageId = 9008;
     public const int ApcLampId = 9009;
+    public const int BruisePackId = 9010;
 
     public static IReadOnlyList<StationEntitySpawn> Playtest { get; } =
     [
@@ -60,5 +71,6 @@ public static class StationEntityCatalog
         new(FuelGeneratorId, StationEntityKind.FuelGenerator, new Vector2(8, -7)),
         new(PowerStorageId, StationEntityKind.PowerStorage, new Vector2(9, -7)),
         new(ApcLampId, StationEntityKind.ApcLamp, new Vector2(10, -7)),
+        new(BruisePackId, StationEntityKind.BruisePack, new Vector2(-8, -7), Amount: 6),
     ];
 }

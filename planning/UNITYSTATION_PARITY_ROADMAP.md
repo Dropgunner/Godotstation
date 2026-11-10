@@ -49,7 +49,9 @@ trace additional upstream systems it actually implements.
   metal pickup and timed girder plating, Engineer equipment/access, and client click targets
   driven by replicated entity state. The power loop adds an Engineer fuel/generator/storage/APC
   lamp failure-and-recovery task, verified by a two-peer smoke. It is an isolated playtest model,
-  not a station grid or source-game rate model. Mode-driven round outcome/report, survival,
+  not a station grid or source-game rate model. A P4 survival slice adds tgstation health and
+  stat, harm-intent wrench attacks, crit and death restrictions, and bruise pack recovery, with
+  crew bodies in the shared entity model. Mode-driven round outcome/report, ghosts and revival,
   broader inventory/intent, full machinery parity, and a two-person ordinary-controls gate remain
   open. The [bounded SS13 source comparison](SS13_ESSENCE_REA.md) uses tgstation as the gameplay
   criterion and Unitystation as the porting bridge.
@@ -70,7 +72,8 @@ trace additional upstream systems it actually implements.
 | --- | --- | --- |
 | Integrated build | `c1d2b64dc77ce4fb1f276ca782714a7b903c43d1` exported as `/private/tmp/Godotstation-Integrated-c1d2b64-Playtest.app`; universal runtime bundle passed headless startup. | Built; manual full-round gate open |
 | New player action | Wrench/cart and construction interactions remain; Engineer can also fuel/start a generator, enable storage output, observe APC lamp outage, and recover power. Two-peer smoke passed. | Integrated in PRs #32 and #37; ordinary-control two-player path unverified |
-| Full round | Host can start, end, and restart a shared shift; Engineer can plate a girder, access the engineering airlock, and complete the scripted power failure/recovery loop. End sends both peers a fact-only report of tracked crew and station state. | **Open:** no mode-specific outcome/report, survival/incapacitation path, full power grid or machinery parity, or two-person ordinary-controls pass |
+| Full round | Host can start, end, and restart a shared shift; Engineer can plate a girder, access the engineering airlock, and complete the scripted power failure/recovery loop. Crew can be incapacitated, killed, and treated. End sends both peers a fact-only report of tracked crew condition and station state. | **Open:** no mode-specific outcome/report, ghost/revival path, full power grid or machinery parity, or two-person ordinary-controls pass |
+| Survival path | Crew bodies replicate health and stat. Harm-intent wrench hits (5 brute, 0.8 s cooldown) cause soft crit at 0, hard crit at −30, and death at −100. Crit blocks hands, movement and speech according to source traits. Bruise packs in Medical heal 40 brute. 26 new rule and shared-world tests pass (294 total), and the `--health` two-peer smoke passed in CI on commit `2211e65`. | Implemented in PR #55; two-peer smoke passed; ordinary-controls pass open |
 | Bugs found during play | A client could click stale construction targets; the HUD covered the station after spawn. | Fixed in PRs #32 and #33; repeat human playtest needed |
 
 The export script now uses the tracked game solution, creates a
@@ -171,6 +174,12 @@ outcomes server authoritative and preserve the existing interaction contracts.
 **Exit evidence:** two clients can trigger and observe sourced outcomes; dead/ghost players
 cannot act on the physical world; tests cover state transitions and interaction restrictions.
 
+**Implemented slice:** [`FidelityContract_CrewHealth.md`](FidelityContract_CrewHealth.md)
+ports the tgstation stat ladder, crit breathing, `set_stat` traits, wrench force, melee
+cooldown, and bruise pack. Clicks now carry the selected intent (keys 1–4), and crew bodies
+are shared entities that can be targeted. Ghost observation, revival, limbs and wounds,
+and disarm/grab outcomes remain open. The two-peer `--health` smoke passed in CI.
+
 ### P5 — Round identity and replayable social chaos
 
 Add the selected round mode's crew/antagonist or other role objectives, round announcements,
@@ -191,7 +200,8 @@ A build qualifies as an SS13-style multiplayer playtest only when two separate c
 3. Pick up and use an item on a world object using sourced intent, reach, and hand rules.
 4. Participate in at least one source-backed job task that changes shared station state.
 5. Observe the result of their actions, including a meaningful failure/incapacitation path,
-   and finish or restart the round.
+   and finish or restart the round. *(Failure path implemented: harm-intent injury, crit, death,
+   and bruise pack recovery, with a passing two-peer smoke. Ordinary-controls evidence pending.)*
 
 Every item needs deterministic engine/network tests plus a documented two-client smoke path.
 An exported app is a delivery artifact; it is not evidence of gameplay parity by itself.

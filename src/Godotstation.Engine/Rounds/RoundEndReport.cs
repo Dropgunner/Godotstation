@@ -3,19 +3,25 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Godotstation.Engine.Entities;
+using Godotstation.Engine.Health;
 
 namespace Godotstation.Engine.Rounds;
 
 /// <summary>
 /// A factual, immutable summary of the shared playtest state when the host ends a shift.
-/// It does not infer a game-mode victory, evacuation, or crew survival outcome.
+/// It does not infer a game-mode victory or evacuation outcome; crew condition is
+/// a count of each body's tgstation stat when the shift ended.
 /// </summary>
 public sealed class RoundEndReport
 {
     private RoundEndReport(int roundId, double durationSeconds, IReadOnlyList<string> crewRoles,
         bool generatorRunning, bool powerOutputEnabled, bool devicePowered, double storedEnergy,
-        bool engineeringAirlockOpen, bool girderPlated, int metalSheetsRemaining)
+        bool engineeringAirlockOpen, bool girderPlated, int metalSheetsRemaining,
+        int crewStable, int crewCritical, int crewDead)
     {
+        CrewStable = crewStable;
+        CrewCritical = crewCritical;
+        CrewDead = crewDead;
         RoundId = roundId;
         DurationSeconds = durationSeconds;
         CrewRoles = crewRoles;
@@ -38,6 +44,10 @@ public sealed class RoundEndReport
     public bool EngineeringAirlockOpen { get; }
     public bool GirderPlated { get; }
     public int MetalSheetsRemaining { get; }
+    public int CrewStable { get; }
+    /// <summary>Crew in soft or hard crit.</summary>
+    public int CrewCritical { get; }
+    public int CrewDead { get; }
 
     /// <summary>Reads the tracked facts from the station's replicated entities by kind.</summary>
     public static RoundEndReport Create(int roundId, double durationSeconds, IEnumerable<string> crewRoles,
@@ -46,6 +56,8 @@ public sealed class RoundEndReport
         ArgumentNullException.ThrowIfNull(station);
         List<StationEntityState> states = station.ToList();
         bool Any(string kind, string field) => states.Any(state => state.Kind == kind && state.Flag(field));
+        int Crew(Func<CrewStat, bool> match) => states.Count(state =>
+            state.Kind == StationEntityKind.Crew && match((CrewStat)state.Count(StationEntityField.Stat)));
         return Create(roundId, durationSeconds, crewRoles,
             Any(StationEntityKind.FuelGenerator, StationEntityField.Running),
             Any(StationEntityKind.PowerStorage, StationEntityField.OutputEnabled),
@@ -55,14 +67,20 @@ public sealed class RoundEndReport
             Any(StationEntityKind.EngineeringAirlock, StationEntityField.Open),
             Any(StationEntityKind.Girder, StationEntityField.Plated),
             states.Where(state => state.Kind == StationEntityKind.MetalSheets)
-                .Sum(state => state.Count(StationEntityField.Amount)));
+                .Sum(state => state.Count(StationEntityField.Amount)),
+            Crew(stat => stat == CrewStat.Stable),
+            Crew(stat => stat is CrewStat.SoftCrit or CrewStat.HardCrit),
+            Crew(stat => stat == CrewStat.Dead));
     }
 
     public static RoundEndReport Create(int roundId, double durationSeconds, IEnumerable<string> crewRoles,
         bool generatorRunning, bool powerOutputEnabled, bool devicePowered, double storedEnergy,
-        bool engineeringAirlockOpen, bool girderPlated, int metalSheetsRemaining)
+        bool engineeringAirlockOpen, bool girderPlated, int metalSheetsRemaining,
+        int crewStable = 0, int crewCritical = 0, int crewDead = 0)
     {
         ArgumentNullException.ThrowIfNull(crewRoles);
+        if (crewStable < 0 || crewCritical < 0 || crewDead < 0)
+            throw new ArgumentOutOfRangeException(nameof(crewStable), "Crew condition counts cannot be negative.");
         if (roundId <= 0) throw new ArgumentOutOfRangeException(nameof(roundId));
         if (!double.IsFinite(durationSeconds) || durationSeconds < 0 || durationSeconds > TimeSpan.MaxValue.TotalSeconds)
             throw new ArgumentOutOfRangeException(nameof(durationSeconds));
@@ -80,7 +98,7 @@ public sealed class RoundEndReport
 
         return new RoundEndReport(roundId, durationSeconds, roleSnapshot.AsReadOnly(), generatorRunning,
             powerOutputEnabled, devicePowered, storedEnergy, engineeringAirlockOpen, girderPlated,
-            metalSheetsRemaining);
+            metalSheetsRemaining, crewStable, crewCritical, crewDead);
     }
 
     public string ToDisplayText()
@@ -96,7 +114,8 @@ public sealed class RoundEndReport
             $"APC lamp: {(DevicePowered ? "POWERED" : "OFF")}",
             $"Engineering airlock: {(EngineeringAirlockOpen ? "OPEN" : "CLOSED")}",
             $"Girder: {(GirderPlated ? "PLATED" : "UNPLATED")} · metal sheets remaining: {MetalSheetsRemaining}",
-            "Not tracked in this prototype: game-mode victory, antagonist outcomes, evacuation, survival, or deaths.");
+            $"Crew condition: {CrewStable} stable · {CrewCritical} critical · {CrewDead} dead",
+            "Not tracked in this prototype: game-mode victory, antagonist outcomes, or evacuation.");
     }
 
     private static string FormatDuration(double durationSeconds)

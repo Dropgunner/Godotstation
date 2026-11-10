@@ -6,6 +6,7 @@ using Godotstation.Common.Interactions;
 using Godotstation.Engine.Access;
 using Godotstation.Engine.Construction;
 using Godotstation.Engine.Entities;
+using Godotstation.Engine.Health;
 using Godotstation.Engine.Inventory;
 using Godotstation.Engine.Movement;
 using Godotstation.Engine.Power;
@@ -32,6 +33,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
     private readonly Dictionary<int, StationEntity> entities = new();
     private readonly Dictionary<int, StationEntityState> lastPublished = new();
     private readonly StationPowerLoop powerLoop = new();
+    private double clockSeconds;
 
     public SharedStationInventoryWorld(IReachabilityMap? reachabilityMap = null,
         IReadOnlyList<StationEntitySpawn>? spawns = null)
@@ -48,6 +50,15 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
 
     /// <summary>Raised with only the entities whose replicated state differs from the last publish.</summary>
     public event Action<IReadOnlyList<StationEntityState>>? EntitiesChanged;
+
+    /// <summary>Raised when one crew member hits another (attacker, victim, brute dealt).</summary>
+    public event Action<int, int, double>? CrewAttacked;
+
+    /// <summary>Raised when a bruise pack treatment finishes (healer, patient, brute healed).</summary>
+    public event Action<int, int, double>? CrewTreated;
+
+    /// <summary>Raised when a crew member's stat changes (peer, previous, current).</summary>
+    public event Action<int, CrewStat, CrewStat>? CrewStatChanged;
 
     /// <summary>Door tiles whose passability follows their entity's state.</summary>
     public IEnumerable<(int X, int Y, IPassable Passable)> PassableTiles =>
@@ -94,6 +105,9 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
             case StationEntityKind.GeneratorFuel:
                 entity = new ItemEntity(this, spawn, "generator fuel", new SharedStack(spawn.Kind, spawn.Amount, "generator fuel"));
                 break;
+            case StationEntityKind.BruisePack:
+                entity = new ItemEntity(this, spawn, "bruise pack", new SharedStack(spawn.Kind, spawn.Amount, "bruise pack"));
+                break;
             case StationEntityKind.ServiceCart:
                 var cart = new ServiceCart(spawn);
                 dispatcher.RegisterHandler(new CartWrenchHandler(cart));
@@ -137,7 +151,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
 
     public bool AddActor(int peerId, Vector2 position, int jobId)
     {
-        if (peerId <= 0 || crew.ContainsKey(peerId) || !IsFinite(position)) return false;
+        if (peerId <= 0 || crew.ContainsKey(peerId) || entities.ContainsKey(peerId) || !IsFinite(position)) return false;
         CrewLoadoutProfile? profile = CrewLoadoutCatalog.GetForJob(jobId);
         var slotNames = new List<InventoryNamedSlot>
         {
@@ -153,6 +167,13 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         var member = new CrewMember(peerId, position, storage, jobId);
         crew.Add(peerId, member);
         crewByStorage.Add(storage, member);
+        member.Body = new CrewBody(member);
+        member.Handlers.Add(new CrewMeleeHandler(this, member.Body));
+        member.Handlers.Add(new BruisePackHandler(this, member.Body));
+        foreach (IInteractionHandler<HandApply> handler in member.Handlers)
+            dispatcher.RegisterHandler(handler);
+        entities.Add(peerId, member.Body);
+        entityOrder.Add(member.Body);
 
         if (profile != null)
         {
@@ -166,6 +187,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
                     throw new InvalidOperationException($"Could not equip {entry.DisplayName} in {entry.Slot}.");
             }
         }
+        PublishChanges();
         return true;
     }
 
@@ -223,6 +245,16 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
                 inventory.ServerDrop(item.ItemSlot);
         foreach (Girder girder in entityOrder.OfType<Girder>())
             girder.Task.Cancel(peerId);
+        foreach (CrewMember other in crew.Values)
+            if (other.Treatment.PatientPeerId == peerId) other.Treatment.Cancel();
+        foreach (IInteractionHandler<HandApply> handler in member.Handlers)
+            dispatcher.UnregisterHandler(handler);
+        if (member.Body != null)
+        {
+            entities.Remove(peerId);
+            entityOrder.Remove(member.Body);
+            lastPublished.Remove(peerId);
+        }
         crew.Remove(peerId);
         crewByStorage.Remove(member.Inventory);
         PublishChanges();
@@ -251,7 +283,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
     /// <summary>Changes the active hand without moving its contents.</summary>
     public bool TryToggleActiveHand(int peerId)
     {
-        if (!crew.TryGetValue(peerId, out CrewMember? member)) return false;
+        if (!crew.TryGetValue(peerId, out CrewMember? member) || !member.Health.CanUseHands) return false;
         member.ActiveHand = member.ActiveHand == InventoryNamedSlot.rightHand
             ? InventoryNamedSlot.leftHand
             : InventoryNamedSlot.rightHand;
@@ -292,7 +324,7 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
 
     public bool TryInteract(int senderPeerId, int targetId, Intent intent, bool isAltClick)
     {
-        if (!crew.TryGetValue(senderPeerId, out CrewMember? member) ||
+        if (!crew.TryGetValue(senderPeerId, out CrewMember? member) || !member.Health.CanUseHands ||
             intent is not (Intent.Help or Intent.Disarm or Intent.Grab or Intent.Harm)) return false;
         if (!entities.TryGetValue(targetId, out StationEntity? target) || !target.CanBeTargeted) return false;
 
@@ -302,13 +334,85 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         return true;
     }
 
+    public CrewStat? GetCrewStat(int peerId) =>
+        crew.TryGetValue(peerId, out CrewMember? member) ? member.Health.Stat : null;
+
+    public double? GetCrewHealth(int peerId) =>
+        crew.TryGetValue(peerId, out CrewMember? member) ? member.Health.Health : null;
+
+    /// <summary>
+    /// Advances crew life ticks, melee cooldowns and bruise pack treatments on the host.
+    /// Call <see cref="PublishChanges"/> to replicate the result.
+    /// </summary>
+    public void AdvanceHealth(double elapsedSeconds)
+    {
+        if (!double.IsFinite(elapsedSeconds) || elapsedSeconds <= 0) return;
+        clockSeconds += elapsedSeconds;
+        foreach (CrewMember member in crew.Values.ToList())
+        {
+            CrewStat before = member.Health.Stat;
+            member.Health.Advance(elapsedSeconds);
+            NotifyStat(member, before);
+            AdvanceTreatment(member, elapsedSeconds);
+        }
+    }
+
+    private void AdvanceTreatment(CrewMember healer, double elapsedSeconds)
+    {
+        BruisePackTreatment treatment = healer.Treatment;
+        if (treatment.PatientPeerId is not int patientId) return;
+        bool hasPatient = crew.TryGetValue(patientId, out CrewMember? patient);
+        ItemEntity? pack = healer.ActiveHandSlot.Item is ItemEntity { Kind: StationEntityKind.BruisePack } held &&
+                           held.Stackable is { Amount: > 0 }
+            ? held
+            : null;
+        bool valid = hasPatient && pack != null && healer.Health.CanUseHands && !patient!.Health.IsDead &&
+                     IsReachable(healer, patient.Body!);
+        if (!treatment.Advance(elapsedSeconds, valid)) return;
+
+        treatment.Cancel();
+        if (!inventory.ServerConsume(healer.ActiveHandSlot, 1))
+            throw new InvalidOperationException("Validated bruise pack could not be consumed.");
+        CrewStat before = patient!.Health.Stat;
+        double healed = patient.Health.HealBrute(BruisePackTreatment.HealBrute);
+        NotifyStat(patient, before);
+        CrewTreated?.Invoke(healer.PeerId, patient.PeerId, healed);
+        PublishChanges();
+    }
+
+    private void NotifyStat(CrewMember member, CrewStat before)
+    {
+        if (member.Health.Stat == before) return;
+        if (!member.Health.CanUseHands)
+        {
+            member.Treatment.Cancel();
+            foreach (Girder girder in entityOrder.OfType<Girder>())
+                girder.Task.Cancel(member.PeerId);
+        }
+        CrewStatChanged?.Invoke(member.PeerId, before, member.Health.Stat);
+    }
+
+    private bool TryAttack(CrewMember attacker, CrewMember victim)
+    {
+        if (clockSeconds < attacker.NextMeleeAt) return false;
+        attacker.NextMeleeAt = clockSeconds + CrewMelee.ClickCooldownSeconds;
+        CrewStat before = victim.Health.Stat;
+        victim.Health.ApplyBrute(CrewMelee.WrenchForce);
+        NotifyStat(victim, before);
+        CrewAttacked?.Invoke(attacker.PeerId, victim.PeerId, CrewMelee.WrenchForce);
+        return true;
+    }
+
+    private bool CanAttackNow(int peerId) =>
+        crew.TryGetValue(peerId, out CrewMember? member) && clockSeconds >= member.NextMeleeAt;
+
     /// <summary>Advance authoritative power simulation time on the host only. Call <see cref="PublishChanges"/> to replicate it.</summary>
     public bool AdvancePower(double elapsedSeconds) => powerLoop.Advance(elapsedSeconds);
 
     /// <summary>Drops only the current active-hand item, as the source inventory does.</summary>
     public bool TryDropActiveHand(int senderPeerId)
     {
-        if (!crew.TryGetValue(senderPeerId, out CrewMember? member)) return false;
+        if (!crew.TryGetValue(senderPeerId, out CrewMember? member) || !member.Health.CanUseHands) return false;
         ItemSlot? activeHand = member.ActiveHandSlot;
         return activeHand.Item != null && inventory.ServerDrop(activeHand);
     }
@@ -387,12 +491,24 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
         public Vector2 Position { get; set; }
         public ItemStorage Inventory { get; }
         public int JobId { get; }
+        public CrewHealth Health { get; } = new();
+        public BruisePackTreatment Treatment { get; } = new();
+        public CrewBody? Body { get; set; }
+        public List<IInteractionHandler<HandApply>> Handlers { get; } = new();
+        public double NextMeleeAt { get; set; }
         public InventoryNamedSlot ActiveHand { get; set; } = InventoryNamedSlot.rightHand;
         public ItemSlot ActiveHandSlot => Inventory.GetNamedItemSlot(ActiveHand)!;
         public Vector2 WorldPosition => Position;
         public bool IsGhosting => false;
         public bool HasTelekinesis => false;
-        public bool IsAlive => true;
+        public bool IsAlive => !Health.IsDead;
+        public ConsciousState ConsciousState => Health.Stat switch
+        {
+            CrewStat.Stable => ConsciousState.Conscious,
+            CrewStat.SoftCrit => ConsciousState.BarelyConscious,
+            CrewStat.HardCrit => ConsciousState.Unconscious,
+            _ => ConsciousState.Dead,
+        };
         public IInteractable? ActiveHandItem => ActiveHandSlot.Item as IInteractable;
         public Intent CurrentIntent => Intent.Help;
         public PlayerEntity InteractionPlayer { get; }
@@ -477,6 +593,28 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
             PositionInWorld = position;
             PlaceAt(position);
             IsInWorld = true;
+        }
+    }
+
+    /// <summary>The crew member's body as a station entity, so clicks and snapshots treat people like objects.</summary>
+    private sealed class CrewBody(CrewMember member)
+        : StationEntity(new StationEntitySpawn(member.PeerId, StationEntityKind.Crew, member.Position), $"crew-{member.PeerId}")
+    {
+        public CrewMember Member { get; } = member;
+        public override Vector2 WorldPosition => Member.Position;
+
+        protected override void WriteFields(Dictionary<string, double> fields)
+        {
+            fields[StationEntityField.Job] = Member.JobId;
+            fields[StationEntityField.Health] = Member.Health.Health;
+            fields[StationEntityField.BruteLoss] = Member.Health.BruteLoss;
+            fields[StationEntityField.OxyLoss] = Member.Health.OxyLoss;
+            fields[StationEntityField.Stat] = (int)Member.Health.Stat;
+            if (Member.Treatment.PatientPeerId is int patient)
+            {
+                fields[StationEntityField.TreatmentPatient] = patient;
+                fields[StationEntityField.Progress] = Member.Treatment.ProgressSeconds;
+            }
         }
     }
 
@@ -697,6 +835,52 @@ public sealed class SharedStationInventoryWorld : IInventoryWorld
                 world.TryLoadGeneratorFuel(interaction.Performer.Id);
             else
                 owner.Loop.TryToggleGenerator();
+        }
+    }
+
+    /// <summary>Harm-intent wrench attack on a crew body: 5 brute, then the attacker's melee cooldown.</summary>
+    private sealed class CrewMeleeHandler(SharedStationInventoryWorld world, CrewBody owner)
+        : IOwnedInteractionHandler<HandApply>
+    {
+        public WorldEntity Owner { get; } = owner;
+        public bool IsFirstInteractable => false;
+        public int Priority => 0;
+
+        public bool WillInteract(HandApply interaction, NetworkSide side) =>
+            side == NetworkSide.Server && interaction.Performer != null && interaction.TargetObject == Owner &&
+            interaction.Intent == Intent.Harm &&
+            interaction.HandObject is ItemEntity { Kind: StationEntityKind.Wrench } wrench &&
+            world.IsInActiveHand(interaction.Performer.Id, wrench) && world.CanAttackNow(interaction.Performer.Id);
+
+        public void ServerPerformInteraction(HandApply interaction)
+        {
+            if (interaction.Performer != null &&
+                world.crew.TryGetValue(interaction.Performer.Id, out CrewMember? attacker))
+                world.TryAttack(attacker, owner.Member);
+        }
+    }
+
+    /// <summary>Bruise pack in the active hand applied to an injured, living crew body (including oneself).</summary>
+    private sealed class BruisePackHandler(SharedStationInventoryWorld world, CrewBody owner)
+        : IOwnedInteractionHandler<HandApply>
+    {
+        public WorldEntity Owner { get; } = owner;
+        public bool IsFirstInteractable => false;
+        public int Priority => 0;
+
+        public bool WillInteract(HandApply interaction, NetworkSide side) =>
+            side == NetworkSide.Server && interaction.Performer != null && interaction.TargetObject == Owner &&
+            interaction.HandObject is ItemEntity { Kind: StationEntityKind.BruisePack, Stackable.Amount: > 0 } pack &&
+            world.IsInActiveHand(interaction.Performer.Id, pack) &&
+            world.crew.TryGetValue(interaction.Performer.Id, out CrewMember? healer) &&
+            !healer.Treatment.PatientPeerId.HasValue &&
+            !owner.Member.Health.IsDead && owner.Member.Health.BruteLoss > 0;
+
+        public void ServerPerformInteraction(HandApply interaction)
+        {
+            if (interaction.Performer != null &&
+                world.crew.TryGetValue(interaction.Performer.Id, out CrewMember? healer))
+                healer.Treatment.TryStart(healer.PeerId, owner.Member.PeerId, owner.Member.Health);
         }
     }
 

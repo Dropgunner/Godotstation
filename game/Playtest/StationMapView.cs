@@ -59,6 +59,8 @@ public partial class StationMapView : Node2D
                 case StationEntityKind.FuelGenerator: DrawGenerator(entity, position); break;
                 case StationEntityKind.PowerStorage: DrawStorage(entity, position); break;
                 case StationEntityKind.ApcLamp: DrawLamp(entity, position); break;
+                case StationEntityKind.BruisePack: DrawBruisePack(entity, position); break;
+                case StationEntityKind.Crew: break; // Drawn by StationCrewAvatar.
                 default: DrawUnknown(entity, position); break;
             }
         }
@@ -165,6 +167,17 @@ public partial class StationMapView : Node2D
         DrawString(ThemeDB.FallbackFont, position + new Vector2(-0.55f, 0.66f),
             on ? "APC LAMP · ON" : "APC LAMP · OUTAGE",
             HorizontalAlignment.Left, -1, 1, on ? new Color("#fff1a8") : new Color("#bdc7cd"));
+    }
+
+    private void DrawBruisePack(StationEntityState entity, Vector2 position)
+    {
+        int packs = entity.Count(StationEntityField.Amount);
+        if (entity.Holder != null || packs <= 0) return;
+        DrawRect(new Rect2(position - new Vector2(0.22f, 0.16f), new Vector2(0.44f, 0.32f)), new Color("#eef2f3"), true);
+        DrawRect(new Rect2(position - new Vector2(0.04f, 0.12f), new Vector2(0.08f, 0.24f)), new Color("#d9534f"), true);
+        DrawRect(new Rect2(position - new Vector2(0.12f, 0.04f), new Vector2(0.24f, 0.08f)), new Color("#d9534f"), true);
+        DrawString(ThemeDB.FallbackFont, position + new Vector2(-0.7f, 0.47f),
+            $"BRUISE PACK ×{packs}", HorizontalAlignment.Left, -1, 1, new Color("#ffd6d4"));
     }
 
     /// <summary>Placeholder so a newly catalogued kind is visible before it gets its own art.</summary>

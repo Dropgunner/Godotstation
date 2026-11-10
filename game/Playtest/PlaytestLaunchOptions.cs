@@ -16,6 +16,7 @@ public static class PlaytestLaunchOptions
     public static bool SmokeEngineeringAccess { get; private set; }
     public static bool SmokeRoundRestart { get; private set; }
     public static bool SmokePowerLoop { get; private set; }
+    public static bool SmokeHealth { get; private set; }
 
     public static bool TryReadCommandLine()
     {
@@ -70,6 +71,10 @@ public static class PlaytestLaunchOptions
             else if (arg == "--playtest-smoke-power-loop")
             {
                 SmokePowerLoop = true;
+            }
+            else if (arg == "--playtest-smoke-health")
+            {
+                SmokeHealth = true;
             }
         }
 

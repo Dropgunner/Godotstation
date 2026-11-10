@@ -7,6 +7,7 @@ using Godot;
 using Godotstation.Common.Interactions;
 using Godotstation.Engine.Chat;
 using Godotstation.Engine.Entities;
+using Godotstation.Engine.Health;
 using Godotstation.Engine.Interactions;
 using Godotstation.Engine.Movement;
 using Godotstation.Engine.Rounds;
@@ -31,6 +32,9 @@ public partial class StationPlaytestController : Node2D
     private Label statusLabel = null!;
     private Label activeHandLabel = null!;
     private Label loadoutLabel = null!;
+    private Label healthLabel = null!;
+    private Label intentLabel = null!;
+    private Intent selectedIntent = Intent.Help;
     private Button startShiftButton = null!;
     private Button endShiftButton = null!;
     private Button restartShiftButton = null!;
@@ -67,6 +71,11 @@ public partial class StationPlaytestController : Node2D
     private bool smokePowerCompleted;
     private bool smokePowerHostSawOn;
     private bool smokePowerHostSawOutage;
+    private int smokeHealthStage;
+    private ulong smokeHealthNextAttackMsec;
+    private bool smokeHealthHostSawCrit;
+    private bool smokeHealthHostBlocked;
+    private bool smokeHealthHostSawRecovery;
     private string activeHandItemName = string.Empty;
     private bool localRoundStarted;
     private string connectionStatus = "Connecting…";
@@ -98,6 +107,9 @@ public partial class StationPlaytestController : Node2D
         movementProcessor = new MovementProcessor(collisionMap);
         sharedInteractionWorld = new SharedStationInventoryWorld(new StationReachabilityMap(collisionMap));
         sharedInteractionWorld.EntitiesChanged += OnEntitiesChanged;
+        sharedInteractionWorld.CrewAttacked += OnCrewAttacked;
+        sharedInteractionWorld.CrewTreated += OnCrewTreated;
+        sharedInteractionWorld.CrewStatChanged += OnCrewStatChanged;
         foreach ((int x, int y, IPassable passable) in sharedInteractionWorld.PassableTiles)
             collisionMap.SetTile(x, y, passable);
         entityObstacles.Clear();
@@ -114,6 +126,9 @@ public partial class StationPlaytestController : Node2D
             player.Avatar.QueueFree();
         players.Clear();
         sharedInteractionWorld.EntitiesChanged -= OnEntitiesChanged;
+        sharedInteractionWorld.CrewAttacked -= OnCrewAttacked;
+        sharedInteractionWorld.CrewTreated -= OnCrewTreated;
+        sharedInteractionWorld.CrewStatChanged -= OnCrewStatChanged;
         crewRoster = StationCrewJobCatalog.CreateRoster();
         InitializeWorld();
         localRoundStarted = false;
@@ -122,6 +137,7 @@ public partial class StationPlaytestController : Node2D
         if (IsInstanceValid(roundEndReportDialog)) roundEndReportDialog.Hide();
         activeHandLabel.Text = "Active hand: rightHand · empty";
         loadoutLabel.Text = "Crew loadout: awaiting role spawn";
+        healthLabel.Text = "Health: awaiting role spawn";
         chatLog.Clear();
     }
 
@@ -143,6 +159,7 @@ public partial class StationPlaytestController : Node2D
         DriveSmokeConstruction();
         DriveSmokeEngineeringAccess();
         DriveSmokePowerLoop();
+        DriveSmokeHealth();
         var direction = ReadLocalInput();
 
         if (multiplayer.IsServer())
@@ -152,8 +169,16 @@ public partial class StationPlaytestController : Node2D
 
             float step = (float)Math.Min(delta, 0.1);
             sharedInteractionWorld.AdvancePower(step);
+            sharedInteractionWorld.AdvanceHealth(step);
             foreach (PlayerRuntime player in players.Values)
             {
+                CrewStat stat = sharedInteractionWorld.GetCrewStat(player.PeerId) ?? CrewStat.Stable;
+                if (!stat.CanMove())
+                {
+                    player.DeltaX = 0;
+                    player.DeltaY = 0;
+                }
+                player.Movement.CurrentType = stat.IsFloored() ? MovementType.Crawling : MovementType.Running;
                 float x = player.Position.X;
                 float y = player.Position.Y;
                 var intent = new MoveIntent
@@ -242,7 +267,7 @@ public partial class StationPlaytestController : Node2D
         RefreshStatus();
         if (PlaytestLaunchOptions.SmokeMove || PlaytestLaunchOptions.SmokeInteractions ||
             PlaytestLaunchOptions.SmokeConstruction || PlaytestLaunchOptions.SmokeEngineeringAccess ||
-            PlaytestLaunchOptions.SmokePowerLoop)
+            PlaytestLaunchOptions.SmokePowerLoop || PlaytestLaunchOptions.SmokeHealth)
             CallDeferred(nameof(StartShift));
     }
 
@@ -543,24 +568,118 @@ public partial class StationPlaytestController : Node2D
             message.IndexOfAny(['\r', '\n', '\0']) >= 0 || !players.TryGetValue(speakerPeerId, out PlayerRuntime? speaker))
             return;
 
-        var listeners = new List<LocalChatListener>(players.Count);
-        foreach (PlayerRuntime player in players.Values)
-            listeners.Add(new LocalChatListener(player.PeerId,
-                new System.Numerics.Vector2(player.Position.X, player.Position.Y),
-                LocalSpeechRouter.DefaultHearingRange));
+        CrewStat speakerStat = sharedInteractionWorld.GetCrewStat(speakerPeerId) ?? CrewStat.Stable;
+        List<int> recipients;
+        string channel;
+        if (speakerStat == CrewStat.Dead)
+        {
+            // say_dead: the dead talk only among themselves.
+            channel = "DEAD";
+            recipients = players.Keys.Where(peer => sharedInteractionWorld.GetCrewStat(peer) == CrewStat.Dead).ToList();
+        }
+        else if (!speakerStat.CanSpeakLocally())
+        {
+            if (speakerPeerId == localPeerId) SetStatus("You are unconscious and cannot speak.");
+            return;
+        }
+        else
+        {
+            // TRAIT_FORCE_WHISPER sets message_range to 1 tile.
+            bool whisper = speakerStat.IsForcedToWhisper();
+            channel = whisper ? "WHISPER" : "LOCAL";
+            float range = whisper ? 1f : LocalSpeechRouter.DefaultHearingRange;
+            var listeners = new List<LocalChatListener>(players.Count);
+            foreach (PlayerRuntime player in players.Values)
+            {
+                CrewStat listenerStat = sharedInteractionWorld.GetCrewStat(player.PeerId) ?? CrewStat.Stable;
+                if (player.PeerId != speakerPeerId && !listenerStat.CanHear()) continue;
+                listeners.Add(new LocalChatListener(player.PeerId,
+                    new System.Numerics.Vector2(player.Position.X, player.Position.Y), range));
+            }
 
-        System.Numerics.Vector2 origin = new(speaker.Position.X, speaker.Position.Y);
-        IReadOnlyList<int> recipients = LocalSpeechRouter.FindListeners(speakerPeerId, origin, listeners,
-            HasLocalLineOfSight);
+            System.Numerics.Vector2 origin = new(speaker.Position.X, speaker.Position.Y);
+            recipients = LocalSpeechRouter.FindListeners(speakerPeerId, origin, listeners, HasLocalLineOfSight).ToList();
+        }
+
         foreach (int recipient in recipients)
         {
             if (recipient == 1)
-                AppendSpeech(speakerPeerId, speaker.Job.Name, message);
+                AppendSpeech(channel, speakerPeerId, speaker.Job.Name, message);
             else
-                RpcId(recipient, nameof(ReceiveLocalSpeech), speakerPeerId, speaker.Job.Name, message);
+                RpcId(recipient, nameof(ReceiveLocalSpeech), channel, speakerPeerId, speaker.Job.Name, message);
         }
 
-        GD.Print($"PLAYTEST_LOCAL_CHAT_RELAYED sender={speakerPeerId} recipients={recipients.Count}");
+        GD.Print($"PLAYTEST_LOCAL_CHAT_RELAYED sender={speakerPeerId} recipients={recipients.Count} channel={channel}");
+    }
+
+    /// <summary>Sends an action or combat line to every conscious crew member who can see where it happened.</summary>
+    private void RouteVisibleMessage(string channel, System.Numerics.Vector2 origin, string text, params int[] alwaysInform)
+    {
+        var listeners = new List<LocalChatListener>(players.Count);
+        foreach (PlayerRuntime player in players.Values)
+        {
+            CrewStat stat = sharedInteractionWorld.GetCrewStat(player.PeerId) ?? CrewStat.Stable;
+            if (!stat.CanHear() && !alwaysInform.Contains(player.PeerId)) continue;
+            listeners.Add(new LocalChatListener(player.PeerId,
+                new System.Numerics.Vector2(player.Position.X, player.Position.Y), LocalSpeechRouter.DefaultHearingRange));
+        }
+        var recipients = new HashSet<int>(alwaysInform.Where(players.ContainsKey));
+        foreach (LocalChatListener listener in listeners)
+            if (System.Numerics.Vector2.Distance(listener.Position, origin) <= listener.HearingRange &&
+                HasLocalLineOfSight(origin, listener.Position))
+                recipients.Add(listener.PeerId);
+        foreach (int recipient in recipients)
+        {
+            if (recipient == 1) AppendActionMessage(channel, text);
+            else RpcId(recipient, nameof(ReceiveActionMessage), channel, text);
+        }
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceiveActionMessage(string channel, string text) => AppendActionMessage(channel, text);
+
+    private void AppendActionMessage(string channel, string text)
+    {
+        chatLog.AppendText($"[{channel}] {text}\n");
+        chatLog.ScrollToLine(Math.Max(0, chatLog.GetLineCount() - 1));
+        GD.Print($"PLAYTEST_ACTION_MESSAGE channel={channel}");
+    }
+
+    private string CrewName(int peerId) =>
+        players.TryGetValue(peerId, out PlayerRuntime? player) ? $"Crew {peerId} · {player.Job.Name}" : $"Crew {peerId}";
+
+    private System.Numerics.Vector2 CrewPosition(int peerId) =>
+        players.TryGetValue(peerId, out PlayerRuntime? player)
+            ? new System.Numerics.Vector2(player.Position.X, player.Position.Y)
+            : System.Numerics.Vector2.Zero;
+
+    private void OnCrewAttacked(int attackerId, int victimId, double damage)
+    {
+        GD.Print($"PLAYTEST_CREW_ATTACKED attacker={attackerId} victim={victimId} brute={damage:0} health={sharedInteractionWorld.GetCrewHealth(victimId):0}");
+        string target = attackerId == victimId ? "themselves" : CrewName(victimId);
+        RouteVisibleMessage("COMBAT", CrewPosition(victimId), $"{CrewName(attackerId)} hits {target} with the wrench!",
+            attackerId, victimId);
+    }
+
+    private void OnCrewTreated(int healerId, int patientId, double healed)
+    {
+        GD.Print($"PLAYTEST_CREW_TREATED healer={healerId} patient={patientId} healed={healed:0} health={sharedInteractionWorld.GetCrewHealth(patientId):0}");
+        string target = healerId == patientId ? "their own bruises" : $"{CrewName(patientId)}'s bruises";
+        RouteVisibleMessage("ACTION", CrewPosition(patientId), $"{CrewName(healerId)} applies a bruise pack to {target}.",
+            healerId, patientId);
+    }
+
+    private void OnCrewStatChanged(int peerId, CrewStat before, CrewStat after)
+    {
+        GD.Print($"PLAYTEST_CREW_STAT peer={peerId} from={before} to={after}");
+        string text = after switch
+        {
+            CrewStat.SoftCrit => $"{CrewName(peerId)} collapses to the floor!",
+            CrewStat.HardCrit => $"{CrewName(peerId)} falls unconscious.",
+            CrewStat.Dead => $"{CrewName(peerId)} seizes up and falls limp, their eyes dead and lifeless...",
+            _ => $"{CrewName(peerId)} comes to and gets back up.",
+        };
+        RouteVisibleMessage("ACTION", CrewPosition(peerId), text, peerId);
     }
 
     private bool HasLocalLineOfSight(System.Numerics.Vector2 from, System.Numerics.Vector2 to)
@@ -570,14 +689,14 @@ public partial class StationPlaytestController : Node2D
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void ReceiveLocalSpeech(int speakerPeerId, string jobName, string message)
+    private void ReceiveLocalSpeech(string channel, int speakerPeerId, string jobName, string message)
     {
-        AppendSpeech(speakerPeerId, jobName, message);
+        AppendSpeech(channel, speakerPeerId, jobName, message);
     }
 
-    private void AppendSpeech(int speakerPeerId, string jobName, string message)
+    private void AppendSpeech(string channel, int speakerPeerId, string jobName, string message)
     {
-        chatLog.AppendText($"[LOCAL] Crew {speakerPeerId} · {jobName}: {message}\n");
+        chatLog.AppendText($"[{channel}] Crew {speakerPeerId} · {jobName}: {message}\n");
         chatLog.ScrollToLine(Math.Max(0, chatLog.GetLineCount() - 1));
         GD.Print($"PLAYTEST_LOCAL_CHAT_RECEIVED speaker={speakerPeerId}");
     }
@@ -627,6 +746,8 @@ public partial class StationPlaytestController : Node2D
     private void RemovePlayer(int peerId)
     {
         if (!players.Remove(peerId, out PlayerRuntime? player)) return;
+        replicatedEntities.Remove(peerId);
+        stationMapView?.RefreshEntities();
         collisionMap.RemoveObject(player.Obstacle);
         player.Avatar.QueueFree();
         RefreshStatus();
@@ -702,6 +823,19 @@ public partial class StationPlaytestController : Node2D
 
     public override void _UnhandledInput(InputEvent inputEvent)
     {
+        if (inputEvent is InputEventKey { Pressed: true, Echo: false } intentKey &&
+            intentKey.Keycode is Key.Key1 or Key.Key2 or Key.Key3 or Key.Key4)
+        {
+            SetSelectedIntent(intentKey.Keycode switch
+            {
+                Key.Key1 => Intent.Help,
+                Key.Key2 => Intent.Disarm,
+                Key.Key3 => Intent.Grab,
+                _ => Intent.Harm,
+            });
+            return;
+        }
+
         if (inputEvent is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Tab } &&
             localRoundStarted && players.ContainsKey(GetMultiplayer().GetUniqueId()))
         {
@@ -732,9 +866,16 @@ public partial class StationPlaytestController : Node2D
 
         bool altClick = click.AltPressed;
         if (GetMultiplayer().IsServer())
-            ResolveSharedInteraction(localPeerId, targetId.Value, (int)Intent.Help, altClick);
+            ResolveSharedInteraction(localPeerId, targetId.Value, (int)selectedIntent, altClick);
         else
-            RpcId(1, nameof(RequestSharedInteraction), localRoundId, targetId.Value, (int)Intent.Help, altClick);
+            RpcId(1, nameof(RequestSharedInteraction), localRoundId, targetId.Value, (int)selectedIntent, altClick);
+    }
+
+    private void SetSelectedIntent(Intent intent)
+    {
+        selectedIntent = intent;
+        if (IsInstanceValid(intentLabel))
+            intentLabel.Text = $"Intent: {intent.ToString().ToUpperInvariant()} · 1 help · 2 disarm · 3 grab · 4 harm";
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -1012,6 +1153,113 @@ public partial class StationPlaytestController : Node2D
         }
     }
 
+    private static readonly Vector2 SmokeHealthVictimHall = new(-1, 0);
+    private static readonly Vector2 SmokeHealthAttackerHall = new(-1, 1);
+    private static readonly Vector2 SmokeHealthVictimMedical = new(-7, -6);
+    private static readonly Vector2 SmokeHealthAttackerMedical = new(-8, -6);
+
+    /// <summary>
+    /// Two-client survival smoke. The host stages positions (movement has its own smoke); the remote
+    /// Assistant then uses ordinary requests: wrench pickup, harm-intent hits until the Engineer host
+    /// collapses, a bruise pack from Medical, and treatment until both peers see the host stand again.
+    /// </summary>
+    private void DriveSmokeHealth()
+    {
+        if (!PlaytestLaunchOptions.SmokeHealth || !localRoundStarted || players.Count < 2) return;
+        if (GetMultiplayer().IsServer())
+        {
+            DriveSmokeHealthHost();
+            return;
+        }
+
+        int remote = players.Keys.First(peer => peer != localPeerId);
+        if (!replicatedEntities.TryGet(localPeerId, out StationEntityState? self) ||
+            !replicatedEntities.TryGet(remote, out StationEntityState? victim)) return;
+        var victimStat = (CrewStat)victim.Count(StationEntityField.Stat);
+        Vector2 selfPosition = new(self.Position.X, self.Position.Y);
+        switch (smokeHealthStage)
+        {
+            case 0 when selfPosition.DistanceTo(SmokeHealthAttackerHall) < 0.1f:
+                smokeHealthStage = 1;
+                RequestSmokeInteraction(StationEntityCatalog.WrenchId);
+                break;
+            case 1 when Entity(StationEntityCatalog.WrenchId).Holder == localPeerId:
+                smokeHealthStage = 2;
+                SetSelectedIntent(Intent.Harm);
+                break;
+            case 2 when victimStat == CrewStat.Stable && Time.GetTicksMsec() >= smokeHealthNextAttackMsec:
+                smokeHealthNextAttackMsec = Time.GetTicksMsec() + 900;
+                RpcId(1, nameof(RequestSharedInteraction), localRoundId, remote, (int)selectedIntent, false);
+                break;
+            case 2 when victimStat == CrewStat.SoftCrit:
+                smokeHealthStage = 3;
+                GD.Print($"PLAYTEST_HEALTH_CLIENT_SAW_CRIT victim={remote} health={victim.Get(StationEntityField.Health):0}");
+                break;
+            case 3 when selfPosition.DistanceTo(SmokeHealthAttackerMedical) < 0.1f:
+                smokeHealthStage = 4;
+                SetSelectedIntent(Intent.Help);
+                RpcId(1, nameof(RequestActiveHandToggle), localRoundId);
+                break;
+            case 4 when activeHandItemName.Length == 0:
+                smokeHealthStage = 5;
+                RequestSmokeInteraction(StationEntityCatalog.BruisePackId);
+                break;
+            case 5 when activeHandItemName == "bruise pack":
+                smokeHealthStage = 6;
+                RpcId(1, nameof(RequestSharedInteraction), localRoundId, remote, (int)selectedIntent, false);
+                break;
+            case 6 when victimStat == CrewStat.Stable:
+                smokeHealthStage = 7;
+                GD.Print($"PLAYTEST_HEALTH_CLIENT_OK crit=true treated=true victim_health={victim.Get(StationEntityField.Health):0} packs={Entity(StationEntityCatalog.BruisePackId).Count(StationEntityField.Amount)} replicated=true");
+                break;
+        }
+    }
+
+    private void DriveSmokeHealthHost()
+    {
+        int remote = players.Keys.First(peer => peer != localPeerId);
+        CrewStat hostStat = sharedInteractionWorld.GetCrewStat(localPeerId) ?? CrewStat.Stable;
+        if (smokeHealthStage == 0)
+        {
+            smokeHealthStage = 1;
+            StageSmokePlayer(localPeerId, SmokeHealthVictimHall);
+            StageSmokePlayer(remote, SmokeHealthAttackerHall);
+            GD.Print("PLAYTEST_HEALTH_STAGED area=hall");
+        }
+        else if (smokeHealthStage == 1 && hostStat == CrewStat.SoftCrit)
+        {
+            smokeHealthStage = 2;
+            smokeHealthHostSawCrit = true;
+            GD.Print($"PLAYTEST_HEALTH_HOST_CRIT health={sharedInteractionWorld.GetCrewHealth(localPeerId):0}");
+            ResolveSharedInteraction(localPeerId, StationEntityCatalog.MetalSheetsId, (int)Intent.Help, false);
+            smokeHealthHostBlocked = !sharedInteractionWorld.TryToggleActiveHand(localPeerId);
+            GD.Print($"PLAYTEST_HEALTH_HOST_BLOCKED hands_blocked={smokeHealthHostBlocked}");
+            StageSmokePlayer(localPeerId, SmokeHealthVictimMedical);
+            StageSmokePlayer(remote, SmokeHealthAttackerMedical);
+            GD.Print("PLAYTEST_HEALTH_STAGED area=medical");
+        }
+        else if (smokeHealthStage == 2 && hostStat == CrewStat.Stable && !smokeHealthHostSawRecovery)
+        {
+            smokeHealthStage = 3;
+            smokeHealthHostSawRecovery = true;
+            bool canAct = sharedInteractionWorld.TryToggleActiveHand(localPeerId);
+            GD.Print($"PLAYTEST_HEALTH_HOST_RECOVERED crit={smokeHealthHostSawCrit} blocked={smokeHealthHostBlocked} can_act={canAct} health={sharedInteractionWorld.GetCrewHealth(localPeerId):0}");
+        }
+    }
+
+    /// <summary>Smoke-only server placement, so the survival smoke does not depend on scripted walking.</summary>
+    private void StageSmokePlayer(int peerId, Vector2 position)
+    {
+        if (!players.TryGetValue(peerId, out PlayerRuntime? player)) return;
+        player.DeltaX = 0;
+        player.DeltaY = 0;
+        player.Position = position;
+        player.Avatar.Position = position;
+        collisionMap.MoveObject(player.Obstacle, Mathf.RoundToInt(position.X), Mathf.RoundToInt(position.Y));
+        sharedInteractionWorld.SetActorPosition(peerId, new System.Numerics.Vector2(position.X, position.Y));
+        sharedInteractionWorld.PublishChanges();
+    }
+
     private void RequestSmokeInteraction(int targetId) =>
         RpcId(1, nameof(RequestSharedInteraction), localRoundId, targetId, (int)Intent.Help, false);
 
@@ -1034,9 +1282,16 @@ public partial class StationPlaytestController : Node2D
                 if (senderId == localPeerId) ReceiveEngineeringAccessDenied();
                 else RpcId(senderId, nameof(ReceiveEngineeringAccessDenied));
             }
+            else if (sharedInteractionWorld.GetCrewStat(senderId) is CrewStat stat && !stat.CanUseHands())
+            {
+                if (GetMultiplayer().IsServer())
+                    GD.Print($"PLAYTEST_INCAPACITATED_ACTION_REJECTED peer={senderId} stat={stat}");
+                if (senderId == localPeerId) ReceiveIncapacitatedRejection((int)stat);
+                else RpcId(senderId, nameof(ReceiveIncapacitatedRejection), (int)stat);
+            }
             else if (senderId == localPeerId) SetStatus(targetsGirder
                     ? "Girder plating requires two metal sheets in your active hand and a clear reach to the girder."
-                    : "Too far away, blocked, or you need the wrench in hand.");
+                    : "Too far away, blocked, or you need the right item in your active hand and intent.");
             else RpcId(senderId, nameof(RejectSharedInteraction));
         }
         else
@@ -1048,7 +1303,17 @@ public partial class StationPlaytestController : Node2D
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RejectSharedInteraction() => SetStatus("Too far away, blocked, or you need the wrench in hand.");
+    private void RejectSharedInteraction() =>
+        SetStatus("Too far away, blocked, or you need the right item in your active hand and intent.");
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceiveIncapacitatedRejection(int statValue)
+    {
+        var stat = (CrewStat)statValue;
+        SetStatus(stat == CrewStat.Dead ? "You are dead. The living world is out of reach." :
+            $"You are {stat.DisplayName().ToLowerInvariant()} and cannot use your hands.");
+        GD.Print($"PLAYTEST_INCAPACITATED_REJECTION_RECEIVED stat={stat}");
+    }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void ReceiveEngineeringAccessDenied()
@@ -1116,8 +1381,30 @@ public partial class StationPlaytestController : Node2D
         }
         replicatedEntities.Apply(states);
         SyncEntityObstacles(states);
+        foreach (StationEntityState state in states)
+            if (state.Kind == StationEntityKind.Crew) PresentCrew(state);
         stationMapView?.RefreshEntities();
         if (isServer && PlaytestLaunchOptions.SmokePowerLoop) ObserveSmokePowerOnHost();
+    }
+
+    /// <summary>Shows a crew body's replicated condition on its avatar and, for the local player, the HUD.</summary>
+    private void PresentCrew(StationEntityState state)
+    {
+        var stat = (CrewStat)state.Count(StationEntityField.Stat);
+        if (players.TryGetValue(state.Id, out PlayerRuntime? player) && player.Avatar is StationCrewAvatar avatar)
+            avatar.SetCondition(stat, state.Get(StationEntityField.Health));
+        if (state.Id != localPeerId || !IsInstanceValid(healthLabel)) return;
+        string treatment = state.Count(StationEntityField.TreatmentPatient) > 0
+            ? $" · applying bruise pack {state.Get(StationEntityField.Progress):0.0}s"
+            : string.Empty;
+        healthLabel.Text = $"Health: {state.Get(StationEntityField.Health):0}/{CrewHealth.MaxHealth:0} · {stat.DisplayName()}" +
+                           $" · brute {state.Get(StationEntityField.BruteLoss):0} · oxy {state.Get(StationEntityField.OxyLoss):0}{treatment}";
+        healthLabel.Modulate = stat switch
+        {
+            CrewStat.Stable => Colors.White,
+            CrewStat.Dead => new Color("#9aa3a8"),
+            _ => new Color("#ff8a7a"),
+        };
     }
 
     /// <summary>Keeps one collision object per solid entity, pushable when the entity allows it.</summary>
@@ -1206,6 +1493,11 @@ public partial class StationPlaytestController : Node2D
         });
         activeHandLabel = new Label { Text = "Active hand: rightHand · empty" };
         content.AddChild(activeHandLabel);
+        intentLabel = new Label();
+        content.AddChild(intentLabel);
+        SetSelectedIntent(selectedIntent);
+        healthLabel = new Label { Text = "Health: awaiting role spawn" };
+        content.AddChild(healthLabel);
         loadoutLabel = new Label { Text = "Crew loadout: awaiting role spawn", AutowrapMode = TextServer.AutowrapMode.WordSmart };
         loadoutLabel.CustomMinimumSize = new Vector2(320, 48);
         content.AddChild(loadoutLabel);
@@ -1217,6 +1509,11 @@ public partial class StationPlaytestController : Node2D
         content.AddChild(new Label
         {
             Text = "Engineer: pick up fuel; click generator twice to load it; Tab, click generator to start; click storage output. Watch the APC lamp.",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        });
+        content.AddChild(new Label
+        {
+            Text = "Danger: on harm intent (4) a wrench hits crew for 5 brute. At 0 health crew collapse; untreated they die. Bruise packs in Medical heal 40.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         });
 
