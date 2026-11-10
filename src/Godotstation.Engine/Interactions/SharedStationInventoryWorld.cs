@@ -54,6 +54,12 @@ public sealed partial class SharedStationInventoryWorld : IInventoryWorld
     /// <summary>Raised when one crew member hits another (attacker, victim, brute dealt).</summary>
     public event Action<int, int, double>? CrewAttacked;
 
+    /// <summary>Raised for every unarmed swing, hit or miss (attacker, victim, result).</summary>
+    public event Action<int, int, UnarmedAttackResult>? CrewStruckUnarmed;
+
+    /// <summary>Source of unarmed damage and miss rolls. Replace it with a seeded one for repeatable results.</summary>
+    public Random Random { get; set; } = new();
+
     /// <summary>Raised when a bruise pack treatment finishes (healer, patient, brute healed).</summary>
     public event Action<int, int, double>? CrewTreated;
 
@@ -435,6 +441,22 @@ public sealed partial class SharedStationInventoryWorld : IInventoryWorld
         victim.Health.ApplyBrute(CrewMelee.WrenchForce);
         NotifyStat(victim, before);
         CrewAttacked?.Invoke(attacker.PeerId, victim.PeerId, CrewMelee.WrenchForce);
+        return true;
+    }
+
+    private bool TryUnarmedAttack(CrewMember attacker, CrewMember victim)
+    {
+        if (clockSeconds < attacker.NextMeleeAt) return false;
+        attacker.NextMeleeAt = clockSeconds + CrewMelee.ClickCooldownSeconds;
+        UnarmedAttackResult result = UnarmedAttack.Roll(attacker.Health.BruteLoss,
+            victim.Health.Stat.IsFloored(), Random);
+        if (result.Hit)
+        {
+            CrewStat before = victim.Health.Stat;
+            victim.Health.ApplyBrute(result.Damage);
+            NotifyStat(victim, before);
+        }
+        CrewStruckUnarmed?.Invoke(attacker.PeerId, victim.PeerId, result);
         return true;
     }
 
@@ -888,7 +910,10 @@ public sealed partial class SharedStationInventoryWorld : IInventoryWorld
         }
     }
 
-    /// <summary>Harm-intent wrench attack on a crew body: 5 brute, then the attacker's melee cooldown.</summary>
+    /// <summary>
+    /// Harm-intent attack on a crew body, then the attacker's melee cooldown: 5 brute with the wrench,
+    /// or an unarmed punch or kick with an empty hand.
+    /// </summary>
     private sealed class CrewMeleeHandler(SharedStationInventoryWorld world, CrewBody owner)
         : IOwnedInteractionHandler<HandApply>
     {
@@ -898,15 +923,17 @@ public sealed partial class SharedStationInventoryWorld : IInventoryWorld
 
         public bool WillInteract(HandApply interaction, NetworkSide side) =>
             side == NetworkSide.Server && interaction.Performer != null && interaction.TargetObject == Owner &&
-            interaction.Intent == Intent.Harm &&
-            interaction.HandObject is ItemEntity { Kind: StationEntityKind.Wrench } wrench &&
-            world.IsInActiveHand(interaction.Performer.Id, wrench) && world.CanAttackNow(interaction.Performer.Id);
+            interaction.Intent == Intent.Harm && world.CanAttackNow(interaction.Performer.Id) &&
+            (interaction.HandObject == null ||
+             (interaction.HandObject is ItemEntity { Kind: StationEntityKind.Wrench } wrench &&
+              world.IsInActiveHand(interaction.Performer.Id, wrench)));
 
         public void ServerPerformInteraction(HandApply interaction)
         {
-            if (interaction.Performer != null &&
-                world.crew.TryGetValue(interaction.Performer.Id, out CrewMember? attacker))
-                world.TryAttack(attacker, owner.Member);
+            if (interaction.Performer == null ||
+                !world.crew.TryGetValue(interaction.Performer.Id, out CrewMember? attacker)) return;
+            if (interaction.HandObject == null) world.TryUnarmedAttack(attacker, owner.Member);
+            else world.TryAttack(attacker, owner.Member);
         }
     }
 

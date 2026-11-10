@@ -124,6 +124,7 @@ public partial class StationPlaytestController : Node2D
         sharedInteractionWorld.CrewGhosted += OnCrewGhosted;
         sharedInteractionWorld.PullStarted += OnPullStarted;
         sharedInteractionWorld.CprStarted += OnCprStarted;
+        sharedInteractionWorld.CrewStruckUnarmed += OnCrewStruckUnarmed;
         sharedInteractionWorld.CprPerformed += OnCprPerformed;
         sharedInteractionWorld.PullStopped += OnPullStopped;
         foreach ((int x, int y, IPassable passable) in sharedInteractionWorld.PassableTiles)
@@ -148,6 +149,7 @@ public partial class StationPlaytestController : Node2D
         sharedInteractionWorld.CrewGhosted -= OnCrewGhosted;
         sharedInteractionWorld.PullStarted -= OnPullStarted;
         sharedInteractionWorld.CprStarted -= OnCprStarted;
+        sharedInteractionWorld.CrewStruckUnarmed -= OnCrewStruckUnarmed;
         sharedInteractionWorld.CprPerformed -= OnCprPerformed;
         sharedInteractionWorld.PullStopped -= OnPullStopped;
         crewRoster = StationCrewJobCatalog.CreateRoster();
@@ -739,6 +741,16 @@ public partial class StationPlaytestController : Node2D
             collisionMap.MoveObject(obstacle, x, y);
             sharedInteractionWorld.SetEntityPosition(entityId, destination);
         }
+    }
+
+    private void OnCrewStruckUnarmed(int attackerId, int victimId, UnarmedAttackResult result)
+    {
+        GD.Print($"PLAYTEST_CREW_STRUCK_UNARMED attacker={attackerId} victim={victimId} verb={result.Verb} hit={result.Hit} brute={result.Damage:0} health={sharedInteractionWorld.GetCrewHealth(victimId):0}");
+        string target = attackerId == victimId ? "themselves" : CrewName(victimId);
+        string text = result.Hit
+            ? $"{CrewName(attackerId)} {result.VerbContinuous} {target}!"
+            : $"{CrewName(attackerId)}'s {result.Verb} misses {target}!";
+        RouteVisibleMessage("COMBAT", CrewPosition(victimId), text, attackerId, victimId);
     }
 
     private void OnCprStarted(int rescuerId, int patientId)
@@ -1979,7 +1991,7 @@ public partial class StationPlaytestController : Node2D
         });
         content.AddChild(new Label
         {
-            Text = "Danger: on harm intent (4) a wrench hits crew for 5 brute. At 0 health crew collapse; untreated they die. Bruise packs in Medical heal 40. Help intent (1) with an empty hand gives a collapsed crew member CPR.",
+            Text = "Danger: on harm intent (4) a wrench hits crew for 5 brute, and an empty hand punches for 5 to 10 (kicks for 7 to 15 if they are down). At 0 health crew collapse; untreated they die. Bruise packs in Medical heal 40. Help intent (1) with an empty hand gives a collapsed crew member CPR.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         });
 

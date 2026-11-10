@@ -15,6 +15,7 @@
 - `send_speech` in `living_say.dm` adds every dead player within normal hearing distance to the listeners without a view check. Hearing beyond that distance needs `CHAT_GHOSTEARS` or `CHAT_GHOSTWHISPER`, which are not in `TOGGLES_DEFAULT_CHAT`.
 - `on_lying_down` in `living.dm` adds `TRAIT_UNDENSE`, so lying bodies do not block movement.
 - `human/do_cpr` in [`human.dm`](https://github.com/tgstation/tgstation/blob/f37d36c295c4bf991b72647281352f3bd471b335/code/modules/mob/living/carbon/human/human.dm) refuses yourself and the dead. After a 3-second do-after it heals up to 7 oxygen loss if the patient is still at or below the crit threshold. While the patient stays there, it repeats at `CPR_PANIC_SPEED` (0.8 seconds).
+- `species/harm` in [`_species.dm`](https://github.com/tgstation/tgstation/blob/f37d36c295c4bf991b72647281352f3bd471b335/code/modules/mob/living/carbon/human/_species.dm) rolls unarmed damage between the attacking limb's low and high values, then misses with a chance of `UNARMED_MISS_CHANCE_BASE` (20) minus the limb's effectiveness plus half the attacker's brute and burn damage, capped at `UNARMED_MISS_CHANCE_MAX` (80). A target lying down is never missed. [`default_parts.dm`](https://github.com/tgstation/tgstation/blob/f37d36c295c4bf991b72647281352f3bd471b335/code/modules/surgery/bodyparts/default_parts.dm) gives arms 5 to 10 damage ("punch") and legs 7 to 15 ("kick"), which are used on grounded targets.
 - [`wrench.dm`](https://github.com/tgstation/tgstation/blob/f37d36c295c4bf991b72647281352f3bd471b335/code/game/objects/items/tools/engineering/wrench.dm) gives `/obj/item/wrench` `force = 5`.
 - [`stacks/medical.dm`](https://github.com/tgstation/tgstation/blob/f37d36c295c4bf991b72647281352f3bd471b335/code/game/objects/items/stacks/medical.dm): medical stacks start at `amount = 6`. `bruise_pack` has `heal_brute = 40`, `self_delay = 4 SECONDS`, `other_delay = 2 SECONDS`, and does not work on the dead.
 
@@ -34,10 +35,13 @@
 12. Crew lying on the floor (any critical stat or dead) no longer block movement. A crew member who stands back up blocks again once their tile is free.
 13. On help intent with an empty active hand, clicking another crew member who is at or below 0 health and not dead starts CPR. The first round takes 3 seconds and each repeat takes 0.8 seconds. Each round heals up to 7 oxygen loss. CPR continues while the patient stays critical and stops when the rescuer moves, picks something up, loses reach, or is incapacitated. It does not heal brute damage, so it buys time; a bruise pack is still needed to get the patient up.
 
+14. On harm intent with an empty active hand, clicking a standing crew member throws a punch: 5 to 10 brute, with a miss chance of 10% plus half the attacker's own brute damage, capped at 80%. A crew member lying down is kicked instead: 7 to 15 brute, and a kick never misses. Hit or miss, the swing costs the 0.8 s melee cooldown. Nearby crew see "X punches Y!", "X kicks Y!" or "X's punch misses Y!".
+
 ## Known gaps before parity claims
 
 - No limbs, wounds, bleeding, burn/toxin damage, armour, or body-zone targeting. The bruise pack heals total brute instead of one limb, and it does not loop the way tgstation's stacks do.
-- Only the wrench is a weapon. Disarm and grab intents are selectable, but nothing handles them yet. Unarmed attacks, help-up, pulling and examine are not implemented.
+- The wrench is the only item that works as a weapon; other held items do nothing on harm intent, where tgstation attacks with any item's force. Disarm and grab intents are selectable, but nothing handles them yet.
+- Unarmed attacks ignore armour, skills, traits, drunkenness, grapples and the staggered status, and kicks use the punch's flat rules apart from damage and accuracy.
 - CPR ignores masks, lungs and mood. The hold-still check allows 0.2 tiles of drift, where tgstation's do-after allows none.
 - The melee cooldown gates melee only; tgstation's `next_move` blocks every click.
 - There is no revival, defibrillation, cloning, or re-entering the corpse. A dead player stays dead until the round restarts.
@@ -55,6 +59,8 @@
 `GhostObserverTests` cover ghost speed and bounds, visibility by viewer stat, refusing the living, staying in the body until the first movement input, the body staying behind while the ghost replicates on the crew entity, ghosts being unable to touch the world, and dead listeners hearing through walls only within range.
 
 `CprTests` cover the help-intent, empty-hand and critical-patient requirements, the 3-second first round and 0.8-second repeats, healing up to 7 oxygen loss, keeping a hard-crit patient alive through ten minutes of continuous CPR, interruption by moving or picking something up, and refusing the dead and yourself. CPR has no two-peer smoke of its own; it travels over the same interaction request, crew entity fields and action messages that the `--health` smoke exercises.
+
+`UnarmedAttackTests` cover the miss-chance formula and cap, the punch and kick damage ranges, the roughly one-in-ten miss rate for an uninjured attacker, a scripted hit and its event, a miss that deals nothing but still costs the cooldown, kicking a collapsed crew member without missing, and the reach requirement. Unarmed attacks have no two-peer smoke of their own; they use the same request and combat-message path as the wrench.
 
 `tools/multiplayer_smoke.sh --ghost` runs an Engineer host and an Assistant client. The client kills the host with harm-intent wrench hits. The host leaves its body, drifts through a wall row, hears the client speak from a spot that is out of range of the body but in range of the ghost, and then speaks on the dead channel, which the client must not receive. The client confirms the body stayed where it fell and the ghost is not drawn.
 
