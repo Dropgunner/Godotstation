@@ -76,7 +76,8 @@ trace additional upstream systems it actually implements.
 | New player action | Wrench/cart and construction interactions remain; Engineer can also fuel/start a generator, enable storage output, observe APC lamp outage, and recover power. Two-peer smoke passed. | Integrated in PRs #32 and #37; ordinary-control two-player path unverified |
 | Full round | Host can start, end, and restart a shared shift; Engineer can plate a girder, access the engineering airlock, and complete the scripted power failure/recovery loop. Crew can be incapacitated, killed, and treated. End sends both peers a fact-only report of tracked crew condition and station state. | **Open:** no mode-specific outcome/report, ghost/revival path, full power grid or machinery parity, or two-person ordinary-controls pass |
 | Survival path | Crew bodies replicate health and stat. Harm-intent wrench hits (5 brute, 0.8 s cooldown) cause soft crit at 0, hard crit at −30, and death at −100. Crit blocks hands, movement and speech according to source traits. Bruise packs in Medical heal 40 brute. 26 new rule and shared-world tests pass (294 total), and the `--health` two-peer smoke passed in CI on commit `2211e65`. | Implemented in PR #55; two-peer smoke passed; ordinary-controls pass open |
-| Ghost observation | A dead player's first movement input leaves the body. The ghost crosses walls, is drawn only for the dead, hears speech in range through walls, and speaks only to the dead. Lying bodies no longer block movement. 7 new tests pass, and a `--ghost` two-peer smoke is in CI. | Implemented on `claude/vibrant-ride-w5fio7`; see the pull request for the CI result |
+| Ghost observation | A dead player's first movement input leaves the body. The ghost crosses walls, is drawn only for the dead, hears speech in range through walls, and speaks only to the dead. Lying bodies no longer block movement. 7 new tests pass, and the `--ghost` two-peer smoke passed in CI. | Merged in PR #56; ordinary-controls pass open |
+| Examine | Shift-click describes objects and crew to the examiner in tgstation's wording, including bruising and condition. It needs sight, not reach or hands. 7 new tests pass, and an `--examine` two-peer smoke is in CI. | Implemented on `claude/vibrant-ride-w5fio7`; see the pull request for the CI result |
 | Bugs found during play | A client could click stale construction targets; the HUD covered the station after spawn. | Fixed in PRs #32 and #33; repeat human playtest needed |
 
 The export script now uses the tracked game solution, creates a
@@ -142,8 +143,9 @@ tests cover slot ownership, inactive-hand rejection, drop/recovery, range, obstr
 disconnect cleanup. The existing two-client runtime smoke verifies shared request and snapshot
 replication. A separate construction slice now uses two shared metal sheets and four seconds of
 server progress to plate a girder. These are interaction foundations and one construction task,
-not a complete inventory or playable SS13 round. Inventory UI/storage, broader intent behavior,
-examine/alt-click, and full upstream anchor rules remain open.
+not a complete inventory or playable SS13 round. Shift-click examine is covered by
+[`FidelityContract_Examine.md`](FidelityContract_Examine.md). Inventory UI/storage, broader
+intent behavior, alt-click, and full upstream anchor rules remain open.
 
 ### P3 — One complete crew job loop
 

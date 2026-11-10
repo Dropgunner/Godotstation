@@ -22,7 +22,7 @@ namespace Godotstation.Engine.Interactions;
 /// are spawned from <see cref="StationEntityCatalog"/> by kind and replicated
 /// as <see cref="StationEntityState"/> through one change feed.
 /// </summary>
-public sealed class SharedStationInventoryWorld : IInventoryWorld
+public sealed partial class SharedStationInventoryWorld : IInventoryWorld
 {
     private readonly Dictionary<int, CrewMember> crew = new();
     private readonly Dictionary<ItemStorage, CrewMember> crewByStorage = new();

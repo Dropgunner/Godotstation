@@ -36,6 +36,32 @@ public sealed class ReplicatedStationEntities
     /// <summary>Forgets an entity the server no longer has, such as a departed crew member's body.</summary>
     public bool Remove(int id) => entities.Remove(id);
 
+    /// <summary>
+    /// Nearest entity that can be looked at: anything lying in the world, including fixtures that
+    /// cannot be used, but not items in someone's hands or used-up stacks.
+    /// </summary>
+    public int? FindNearestExaminable(Vector2 position, float radius)
+    {
+        if (!float.IsFinite(position.X) || !float.IsFinite(position.Y) || !float.IsFinite(radius) || radius <= 0)
+            return null;
+        int? nearest = null;
+        float nearestSquared = radius * radius;
+        foreach (StationEntityState entity in entities.Values)
+        {
+            if (entity.Holder != null ||
+                (entity.IsItem && entity.Fields.ContainsKey(StationEntityField.Amount) &&
+                 entity.Count(StationEntityField.Amount) <= 0))
+                continue;
+            float distanceSquared = Vector2.DistanceSquared(position, entity.Position);
+            if (distanceSquared < nearestSquared)
+            {
+                nearest = entity.Id;
+                nearestSquared = distanceSquared;
+            }
+        }
+        return nearest;
+    }
+
     public int? FindNearestTarget(Vector2 position, float radius)
     {
         if (!float.IsFinite(position.X) || !float.IsFinite(position.Y) || !float.IsFinite(radius) || radius <= 0)
