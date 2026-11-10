@@ -16,6 +16,7 @@
 - `on_lying_down` in `living.dm` adds `TRAIT_UNDENSE`, so lying bodies do not block movement.
 - `human/do_cpr` in [`human.dm`](https://github.com/tgstation/tgstation/blob/f37d36c295c4bf991b72647281352f3bd471b335/code/modules/mob/living/carbon/human/human.dm) refuses yourself and the dead. After a 3-second do-after it heals up to 7 oxygen loss if the patient is still at or below the crit threshold. While the patient stays there, it repeats at `CPR_PANIC_SPEED` (0.8 seconds).
 - `species/harm` in [`_species.dm`](https://github.com/tgstation/tgstation/blob/f37d36c295c4bf991b72647281352f3bd471b335/code/modules/mob/living/carbon/human/_species.dm) rolls unarmed damage between the attacking limb's low and high values, then misses with a chance of `UNARMED_MISS_CHANCE_BASE` (20) minus the limb's effectiveness plus half the attacker's brute and burn damage, capped at `UNARMED_MISS_CHANCE_MAX` (80). A target lying down is never missed. [`default_parts.dm`](https://github.com/tgstation/tgstation/blob/f37d36c295c4bf991b72647281352f3bd471b335/code/modules/surgery/bodyparts/default_parts.dm) gives arms 5 to 10 damage ("punch") and legs 7 to 15 ("kick"), which are used on grounded targets.
+- `living/disarm` in [`living_defense.dm`](https://github.com/tgstation/tgstation/blob/f37d36c295c4bf991b72647281352f3bd471b335/code/modules/mob/living/living_defense.dm) needs a standing shover on a different tile from the target. It moves the target one step directly away. If the target did not move, it is knocked down for `SHOVE_KNOCKDOWN_SOLID` (2 seconds). A target that is lying down drops its active-hand item. Carbons are staggered for `STAGGERED_SLOWDOWN_LENGTH` (3 seconds), and `species/harm` never misses a staggered target.
 - [`wrench.dm`](https://github.com/tgstation/tgstation/blob/f37d36c295c4bf991b72647281352f3bd471b335/code/game/objects/items/tools/engineering/wrench.dm) gives `/obj/item/wrench` `force = 5`.
 - [`stacks/medical.dm`](https://github.com/tgstation/tgstation/blob/f37d36c295c4bf991b72647281352f3bd471b335/code/game/objects/items/stacks/medical.dm): medical stacks start at `amount = 6`. `bruise_pack` has `heal_brute = 40`, `self_delay = 4 SECONDS`, `other_delay = 2 SECONDS`, and does not work on the dead.
 
@@ -37,10 +38,13 @@
 
 14. On harm intent with an empty active hand, clicking a standing crew member throws a punch: 5 to 10 brute, with a miss chance of 10% plus half the attacker's own brute damage, capped at 80%. A crew member lying down is kicked instead: 7 to 15 brute, and a kick never misses. Hit or miss, the swing costs the 0.8 s melee cooldown. Nearby crew see "X punches Y!", "X kicks Y!" or "X's punch misses Y!".
 
+15. On disarm intent with an empty active hand, clicking another crew member shoves them one tile directly away, including diagonally. If a wall, closed door, object or standing person is in the way, the target is knocked down for 2 seconds instead. A knocked-down crew member lies on the floor, crawls, can be walked over and kicked, and stands up on their own. A target that is lying down drops what their active hand holds. Every shove staggers the target for 3 seconds, during which a punch cannot miss them. A shove costs the 0.8 s melee cooldown, and a crew member who is lying down cannot shove.
+
 ## Known gaps before parity claims
 
 - No limbs, wounds, bleeding, burn/toxin damage, armour, or body-zone targeting. The bruise pack heals total brute instead of one limb, and it does not loop the way tgstation's stacks do.
-- The wrench is the only item that works as a weapon; other held items do nothing on harm intent, where tgstation attacks with any item's force. Disarm and grab intents are selectable, but nothing handles them yet.
+- The wrench is the only item that works as a weapon; other held items do nothing on harm intent, where tgstation attacks with any item's force. The grab intent is selectable, but nothing handles it yet; pulling is on ctrl-click.
+- Shoving leaves out the staggered movement slowdown, the 3-second daze, kicking a dazed target onto their side, knocking a second person over when someone is shoved into them, table and disposal-bin shoves, and shoving with a held item. Modern tgstation uses combat mode and right-click where this project uses Unitystation's disarm intent.
 - Unarmed attacks ignore armour, skills, traits, drunkenness, grapples and the staggered status, and kicks use the punch's flat rules apart from damage and accuracy.
 - CPR ignores masks, lungs and mood. The hold-still check allows 0.2 tiles of drift, where tgstation's do-after allows none.
 - The melee cooldown gates melee only; tgstation's `next_move` blocks every click.
@@ -61,6 +65,10 @@
 `CprTests` cover the help-intent, empty-hand and critical-patient requirements, the 3-second first round and 0.8-second repeats, healing up to 7 oxygen loss, keeping a hard-crit patient alive through ten minutes of continuous CPR, interruption by moving or picking something up, and refusing the dead and yourself. CPR has no two-peer smoke of its own; it travels over the same interaction request, crew entity fields and action messages that the `--health` smoke exercises.
 
 `UnarmedAttackTests` cover the miss-chance formula and cap, the punch and kick damage ranges, the roughly one-in-ten miss rate for an uninjured attacker, a scripted hit and its event, a miss that deals nothing but still costs the cooldown, kicking a collapsed crew member without missing, and the reach requirement. Unarmed attacks have no two-peer smoke of their own; they use the same request and combat-message path as the wrench.
+
+`ShoveTests` cover moving the target one tile straight and diagonally, the 2-second knockdown when blocked and standing back up, dropping the held item and being kicked while down, the stagger that makes a punch unmissable for 3 seconds, the empty-hand, reach, cooldown and standing-shover requirements, and dragging a knocked-down crew member.
+
+`tools/multiplayer_smoke.sh --shove` runs an Engineer host and an Assistant client. The client shoves the host one tile toward a wall, steps up, and shoves again. The second shove is blocked, so both peers must see the host go down and then stand back up, still in stable condition.
 
 `tools/multiplayer_smoke.sh --ghost` runs an Engineer host and an Assistant client. The client kills the host with harm-intent wrench hits. The host leaves its body, drifts through a wall row, hears the client speak from a spot that is out of range of the body but in range of the ghost, and then speaks on the dead channel, which the client must not receive. The client confirms the body stayed where it fell and the ghost is not drawn.
 

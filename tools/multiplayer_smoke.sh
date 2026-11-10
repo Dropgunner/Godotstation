@@ -31,7 +31,9 @@ fi
 
 launch_host() {
   if [[ -n "$playtest_app" ]]; then
-    if [[ "$smoke_mode" == "--pull" ]]; then
+    if [[ "$smoke_mode" == "--shove" ]]; then
+      "$godot_bin" --headless --quit-after 1800 -- --playtest-host --playtest-jobid=20 --playtest-smoke-shove
+    elif [[ "$smoke_mode" == "--pull" ]]; then
       "$godot_bin" --headless --quit-after 1500 -- --playtest-host --playtest-jobid=20 --playtest-smoke-pull
     elif [[ "$smoke_mode" == "--examine" ]]; then
       "$godot_bin" --headless --quit-after 600 -- --playtest-host --playtest-jobid=20 --playtest-smoke-examine
@@ -53,7 +55,9 @@ launch_host() {
       "$godot_bin" --headless --quit-after 300 -- --playtest-host --playtest-jobid=20 --playtest-smoke-move --playtest-smoke-chat
     fi
   else
-    if [[ "$smoke_mode" == "--pull" ]]; then
+    if [[ "$smoke_mode" == "--shove" ]]; then
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 1800 -- --playtest-host --playtest-jobid=20 --playtest-smoke-shove
+    elif [[ "$smoke_mode" == "--pull" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 1500 -- --playtest-host --playtest-jobid=20 --playtest-smoke-pull
     elif [[ "$smoke_mode" == "--examine" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 600 -- --playtest-host --playtest-jobid=20 --playtest-smoke-examine
@@ -78,7 +82,9 @@ launch_host() {
 }
 launch_client() {
   if [[ -n "$playtest_app" ]]; then
-    if [[ "$smoke_mode" == "--pull" ]]; then
+    if [[ "$smoke_mode" == "--shove" ]]; then
+      "$godot_bin" --headless --quit-after 1800 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-shove
+    elif [[ "$smoke_mode" == "--pull" ]]; then
       "$godot_bin" --headless --quit-after 1500 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-pull
     elif [[ "$smoke_mode" == "--examine" ]]; then
       "$godot_bin" --headless --quit-after 600 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-examine
@@ -100,7 +106,9 @@ launch_client() {
       "$godot_bin" --headless --quit-after 300 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-move --playtest-smoke-chat
     fi
   else
-    if [[ "$smoke_mode" == "--pull" ]]; then
+    if [[ "$smoke_mode" == "--shove" ]]; then
+      "$godot_bin" --headless --path "$repo_root/game" --quit-after 1800 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-shove
+    elif [[ "$smoke_mode" == "--pull" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 1500 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-pull
     elif [[ "$smoke_mode" == "--examine" ]]; then
       "$godot_bin" --headless --path "$repo_root/game" --quit-after 600 -- --playtest-join=127.0.0.1 --playtest-jobid=2 --playtest-smoke-examine
@@ -148,6 +156,7 @@ if [[ "$smoke_mode" == "--power-loop" ]]; then max_checks=900; fi
 if [[ "$smoke_mode" == "--health" ]]; then max_checks=900; fi
 if [[ "$smoke_mode" == "--ghost" ]]; then max_checks=1400; fi
 if [[ "$smoke_mode" == "--pull" ]]; then max_checks=200; fi
+if [[ "$smoke_mode" == "--shove" ]]; then max_checks=250; fi
 if [[ "$smoke_mode" == "--engineering-access" ]]; then max_checks=100; fi
 for _ in $(seq 1 "$max_checks"); do
   ready=0
@@ -173,6 +182,17 @@ for _ in $(seq 1 "$max_checks"); do
     if grep -q "PLAYTEST_ENGINEERING_ACCESS_DENIED peer=" "$host_log" && \
        grep -q "PLAYTEST_ENGINEERING_AIRLOCK_OPENED peer=1 clearance=Engine" "$host_log" && \
        grep -q "PLAYTEST_ENGINEERING_ACCESS_OK denied=true engineer_open=true replicated=true" "$client_log"; then
+      ready=1
+    fi
+  elif [[ "$smoke_mode" == "--shove" ]]; then
+    if grep -q "PLAYTEST_ROSTER peers=2" "$host_log" && \
+       grep -Eq "PLAYTEST_CREW_SHOVED shover=[0-9]+ target=1 moved=True knocked_down=False" "$host_log" && \
+       grep -q "PLAYTEST_SHOVE_HOST_MOVED x=-2 y=-3" "$host_log" && \
+       grep -Eq "PLAYTEST_CREW_SHOVED shover=[0-9]+ target=1 moved=False knocked_down=True" "$host_log" && \
+       grep -q "PLAYTEST_SHOVE_HOST_DOWN x=-2 y=-3" "$host_log" && \
+       grep -q "PLAYTEST_SHOVE_HOST_OK moved=true knocked_down=True stood_up=true" "$host_log" && \
+       grep -q "PLAYTEST_SHOVE_CLIENT_SAW_DOWN replicated=true" "$client_log" && \
+       grep -q "PLAYTEST_SHOVE_CLIENT_OK moved=true knocked_down=true stood_up=true stat=Stable" "$client_log"; then
       ready=1
     fi
   elif [[ "$smoke_mode" == "--pull" ]]; then
@@ -271,6 +291,8 @@ for _ in $(seq 1 "$max_checks"); do
       echo "MULTIPLAYER_ROUND_RESTART_SMOKE_OK: two clients saw the end and respawned in a fresh shared round"
     elif [[ "$smoke_mode" == "--construction" ]]; then
       echo "MULTIPLAYER_CONSTRUCTION_SMOKE_OK: engineer picked up two sheets, completed the four-second girder task, and both clients observed the wall"
+    elif [[ "$smoke_mode" == "--shove" ]]; then
+      echo "MULTIPLAYER_SHOVE_SMOKE_OK: the remote peer shoved the host back a tile, then into a wall, and both peers saw the host go down and stand back up"
     elif [[ "$smoke_mode" == "--pull" ]]; then
       echo "MULTIPLAYER_PULL_SMOKE_OK: the remote peer pulled the host, the host followed one tile behind, and walking away broke the pull"
     elif [[ "$smoke_mode" == "--examine" ]]; then

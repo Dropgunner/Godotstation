@@ -173,13 +173,14 @@ public sealed partial class SharedStationInventoryWorld : IInventoryWorld
 
         var slots = slotNames.ConvertAll(SlotIdentifier.Named);
         var storage = new ItemStorage(slots, AcceptAllCapacity.Instance, name: $"crew-{peerId}");
-        var member = new CrewMember(peerId, position, storage, jobId);
+        var member = new CrewMember(peerId, position, storage, jobId) { World = this };
         crew.Add(peerId, member);
         crewByStorage.Add(storage, member);
         member.Body = new CrewBody(member);
         member.Handlers.Add(new CrewMeleeHandler(this, member.Body));
         member.Handlers.Add(new BruisePackHandler(this, member.Body));
         member.Handlers.Add(new CprHandler(this, member.Body));
+        member.Handlers.Add(new ShoveHandler(this, member.Body));
         foreach (IInteractionHandler<HandApply> handler in member.Handlers)
             dispatcher.RegisterHandler(handler);
         entities.Add(peerId, member.Body);
@@ -449,7 +450,7 @@ public sealed partial class SharedStationInventoryWorld : IInventoryWorld
         if (clockSeconds < attacker.NextMeleeAt) return false;
         attacker.NextMeleeAt = clockSeconds + CrewMelee.ClickCooldownSeconds;
         UnarmedAttackResult result = UnarmedAttack.Roll(attacker.Health.BruteLoss,
-            victim.Health.Stat.IsFloored(), Random);
+            IsLying(victim), Random, clockSeconds < victim.StaggeredUntil);
         if (result.Hit)
         {
             CrewStat before = victim.Health.Stat;
@@ -555,6 +556,9 @@ public sealed partial class SharedStationInventoryWorld : IInventoryWorld
         public List<IInteractionHandler<HandApply>> Handlers { get; } = new();
         public double NextMeleeAt { get; set; }
         public Vector2? GhostPosition { get; set; }
+        public double KnockdownUntil { get; set; }
+        public double StaggeredUntil { get; set; }
+        public SharedStationInventoryWorld World { get; init; } = null!;
         public StationEntity? Pulling { get; set; }
         public InventoryNamedSlot ActiveHand { get; set; } = InventoryNamedSlot.rightHand;
         public ItemSlot ActiveHandSlot => Inventory.GetNamedItemSlot(ActiveHand)!;
@@ -670,6 +674,8 @@ public sealed partial class SharedStationInventoryWorld : IInventoryWorld
             fields[StationEntityField.BruteLoss] = Member.Health.BruteLoss;
             fields[StationEntityField.OxyLoss] = Member.Health.OxyLoss;
             fields[StationEntityField.Stat] = (int)Member.Health.Stat;
+            if (Member.Health.Stat.IsFloored() || Member.World.clockSeconds < Member.KnockdownUntil)
+                fields[StationEntityField.Lying] = 1;
             if (Member.Pulling != null) fields[StationEntityField.Pulling] = Member.Pulling.Id;
             if (Member.GhostPosition is Vector2 ghost)
             {

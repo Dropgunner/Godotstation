@@ -14,6 +14,7 @@ public partial class StationCrewAvatar : Node2D
     private Node2D? bodyRoot;
     private Label? conditionLabel;
     private CrewStat condition = CrewStat.Stable;
+    private bool lyingDown;
     private Node2D? ghostRoot;
     private Camera2D? camera;
     private Vector2 ghostTarget;
@@ -106,9 +107,10 @@ public partial class StationCrewAvatar : Node2D
     }
 
     /// <summary>Floors the avatar in any critical stat and greys it out in death, as every peer sees it.</summary>
-    public void SetCondition(CrewStat stat, double health)
+    public void SetCondition(CrewStat stat, double health, bool lying)
     {
         condition = stat;
+        lyingDown = lying;
         ApplyCondition(health);
     }
 
@@ -155,7 +157,7 @@ public partial class StationCrewAvatar : Node2D
     private void ApplyCondition(double health)
     {
         if (bodyRoot == null || conditionLabel == null) return;
-        bodyRoot.Rotation = condition.IsFloored() ? Mathf.Pi / 2 : 0;
+        bodyRoot.Rotation = lyingDown || condition.IsFloored() ? Mathf.Pi / 2 : 0;
         bodyRoot.Modulate = condition switch
         {
             CrewStat.Dead => new Color(0.45f, 0.47f, 0.5f),
