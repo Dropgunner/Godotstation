@@ -4,7 +4,8 @@ using System.Numerics;
 
 namespace Godotstation.Engine.Chat;
 
-public sealed record LocalChatListener(int PeerId, Vector2 Position, float HearingRange = 14f);
+/// <param name="IgnoresWalls">True for the dead, who hear anything in range whatever stands between.</param>
+public sealed record LocalChatListener(int PeerId, Vector2 Position, float HearingRange = 14f, bool IgnoresWalls = false);
 
 /// <summary>Server-side listener selection for Unitystation-style local speech.</summary>
 public static class LocalSpeechRouter
@@ -33,7 +34,7 @@ public static class LocalSpeechRouter
 
             if (listener.PeerId == speakerPeerId ||
                 (Vector2.DistanceSquared(speechPosition, listener.Position) <= listener.HearingRange * listener.HearingRange &&
-                 hasLineOfSight(speechPosition, listener.Position)))
+                 (listener.IgnoresWalls || hasLineOfSight(speechPosition, listener.Position))))
                 recipients.Add(listener.PeerId);
         }
 

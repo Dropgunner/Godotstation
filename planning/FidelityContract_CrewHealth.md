@@ -11,6 +11,9 @@
 - `living/set_stat` in [`living.dm`](https://github.com/tgstation/tgstation/blob/f37d36c295c4bf991b72647281352f3bd471b335/code/modules/mob/living/living.dm) adds `FLOORED`, `HANDS_BLOCKED`, `INCAPACITATED`, `FORCE_WHISPER` in soft crit, and `DEAF`, `FLOORED`, `HANDS_BLOCKED`, `INCAPACITATED`, `KNOCKEDOUT` in hard crit and death.
 - `carbon/handle_breathing` and `breathe` in [`carbon/life.dm`](https://github.com/tgstation/tgstation/blob/f37d36c295c4bf991b72647281352f3bd471b335/code/modules/mob/living/carbon/life.dm) breathe every fourth `SSmobs` tick, or every tick after a failed breath. `SSmobs` ticks every 2 s. Hard crit adds 1 to `losebreath` per breath and soft crit adds 0.25. A missed breath goes through `handle_suffocation` at zero pressure: +3 oxygen loss at or above crit, +1 below it. A good breath at or above crit heals 5 oxygen loss.
 - `living_say.dm` returns before speaking when unconscious and forces whisper (`message_range = 1`) under `TRAIT_FORCE_WHISPER`; the dead use `say_dead`.
+- `client/Move` in [`mob_movement.dm`](https://github.com/tgstation/tgstation/blob/f37d36c295c4bf991b72647281352f3bd471b335/code/modules/mob/mob_movement.dm) calls `ghostize()` when a dead mob's player tries to move. [`observer.dm`](https://github.com/tgstation/tgstation/blob/f37d36c295c4bf991b72647281352f3bd471b335/code/modules/mob/dead/observer/observer.dm) gives observers `invisibility = INVISIBILITY_OBSERVER` and `see_invisible = SEE_INVISIBLE_OBSERVER`, and `observer/Move` uses `abstract_move`, which ignores obstacles and stops at the world edge.
+- `send_speech` in `living_say.dm` adds every dead player within normal hearing distance to the listeners without a view check. Hearing beyond that distance needs `CHAT_GHOSTEARS` or `CHAT_GHOSTWHISPER`, which are not in `TOGGLES_DEFAULT_CHAT`.
+- `on_lying_down` in `living.dm` adds `TRAIT_UNDENSE`, so lying bodies do not block movement.
 - [`wrench.dm`](https://github.com/tgstation/tgstation/blob/f37d36c295c4bf991b72647281352f3bd471b335/code/game/objects/items/tools/engineering/wrench.dm) gives `/obj/item/wrench` `force = 5`.
 - [`stacks/medical.dm`](https://github.com/tgstation/tgstation/blob/f37d36c295c4bf991b72647281352f3bd471b335/code/game/objects/items/stacks/medical.dm): medical stacks start at `amount = 6`. `bruise_pack` has `heal_brute = 40`, `self_delay = 4 SECONDS`, `other_delay = 2 SECONDS`, and does not work on the dead.
 
@@ -24,13 +27,20 @@
 6. A six-pack bruise pack stack sits in Medical. With a pack in the active hand, clicking an injured, living crew body starts a 2 s treatment, or 4 s on yourself. It completes only while the healer stays capable, keeps the pack in the active hand, and stays in reach. It heals 40 brute and consumes one pack. Healing back above 0 health restores stable status and hand use.
 7. Attacks, treatments and stat changes are sent as `[COMBAT]`/`[ACTION]` lines to the participants and to conscious crew within 14 tiles with line of sight. Avatars lie down when floored, grey out in death, and show their condition to every peer. The local HUD shows health, stat and treatment progress.
 8. The round-end report counts crew as stable, critical or dead from the replicated crew bodies.
+9. A dead player stays in the body until they press a movement key. The first input leaves the body where it lies and creates a ghost at that spot. The ghost then moves through walls, doors and objects, and stops only at the station edge. The local camera follows the ghost.
+10. Ghosts are drawn only for dead players (and always for their owner). Living players see the body and nothing else.
+11. The dead hear local speech, whispers, and combat and action lines within normal hearing range of where they watch from (the ghost, or the body before they leave it), and walls do not block them. Their own speech still reaches only the dead. A ghost cannot interact with the world.
+12. Crew lying on the floor (any critical stat or dead) no longer block movement. A crew member who stands back up blocks again once their tile is free.
 
 ## Known gaps before parity claims
 
 - No limbs, wounds, bleeding, burn/toxin damage, armour, or body-zone targeting. The bruise pack heals total brute instead of one limb, and it does not loop the way tgstation's stacks do.
 - Only the wrench is a weapon. Disarm and grab intents are selectable, but nothing handles them yet. Unarmed attacks, help-up, pulling and examine are not implemented.
 - The melee cooldown gates melee only; tgstation's `next_move` blocks every click.
-- There is no ghost observer mode, revival, defibrillation, or cloning. A dead player stays in the dead body until the round restarts.
+- There is no revival, defibrillation, cloning, or re-entering the corpse. A dead player stays dead until the round restarts.
+- Ghost speed (6 tiles per second) is playtest-scaled, not a source value. Ghosts have no orbit, teleport or jump verbs.
+- Ghost positions are sent to every client and hidden by the client's renderer, so a modified client could read them. Per-recipient filtering of the snapshot is not implemented.
+- The dead hear within the 14-tile local range used elsewhere; tgstation's normal hearing distance is 7.
 - The tgstation `say` range is 7 tiles; local speech keeps the Unitystation 14-tile fallback (see the [speech contract](FidelityContract_LocalSpeech.md)).
 - Station air is assumed breathable, so atmospherics does not yet drive suffocation.
 - The smoke stages player positions on the host so it does not depend on scripted walking; movement is covered by the movement smoke.
@@ -38,5 +48,9 @@
 ## Regression coverage
 
 `CrewHealthTests` cover the stat thresholds, death finality, healing caps, breath cadence in soft and hard crit, oxygen recovery, the per-stat traits, and bruise pack delays and cancellation. `SharedCrewHealthWorldTests` cover crew-body replication and removal, peer-id collision rejection, harm-intent damage and its events, help-intent and empty-hand rejection, the melee cooldown, reach, crit blocking hands and cancelling construction, treatment of others and of yourself, treatment rejection and cancellation, death by untreated hard crit, and round-report counts.
+
+`GhostObserverTests` cover ghost speed and bounds, visibility by viewer stat, refusing the living, staying in the body until the first movement input, the body staying behind while the ghost replicates on the crew entity, ghosts being unable to touch the world, and dead listeners hearing through walls only within range.
+
+`tools/multiplayer_smoke.sh --ghost` runs an Engineer host and an Assistant client. The client kills the host with harm-intent wrench hits. The host leaves its body, drifts through a wall row, hears the client speak from a spot that is out of range of the body but in range of the ghost, and then speaks on the dead channel, which the client must not receive. The client confirms the body stayed where it fell and the ghost is not drawn.
 
 `tools/multiplayer_smoke.sh --health` runs an Engineer host and an Assistant client. The client picks up the wrench and hits the host on harm intent 20 times until the host collapses. The host then confirms its hands are blocked. The client takes a bruise pack from Medical and treats the host until both peers see the host stable again, at 40 health, with 5 packs left.
