@@ -49,6 +49,8 @@ public static class StationEntityField
     public const string GhostY = "ghost_y";
     /// <summary>Entity id this crew member is pulling, when they pull something.</summary>
     public const string Pulling = "pulling";
+    /// <summary>Set while a crew body lies on the floor, from a critical stat or a knockdown.</summary>
+    public const string Lying = "lying";
 }
 
 /// <summary>Where one entity starts the round. Stackable kinds use <see cref="Amount"/>.</summary>

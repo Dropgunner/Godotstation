@@ -85,6 +85,9 @@ public partial class StationPlaytestController : Node2D
     private int smokeExamineReceived;
     private bool smokeExamineRejected;
     private int smokePullStage;
+    private int smokeShoveStage;
+    private ulong smokeShoveNextMsec;
+    private bool smokeShoveHostWasDown;
     private Vector2I smokePullInput;
     private Label pullLabel = null!;
     private string activeHandItemName = string.Empty;
@@ -125,6 +128,9 @@ public partial class StationPlaytestController : Node2D
         sharedInteractionWorld.PullStarted += OnPullStarted;
         sharedInteractionWorld.CprStarted += OnCprStarted;
         sharedInteractionWorld.CrewStruckUnarmed += OnCrewStruckUnarmed;
+        sharedInteractionWorld.CrewShoved += OnCrewShoved;
+        sharedInteractionWorld.CrewDisplaced += MovePulledEntity;
+        sharedInteractionWorld.CanCrewEnterTile = CanCrewEnterTile;
         sharedInteractionWorld.CprPerformed += OnCprPerformed;
         sharedInteractionWorld.PullStopped += OnPullStopped;
         foreach ((int x, int y, IPassable passable) in sharedInteractionWorld.PassableTiles)
@@ -150,6 +156,8 @@ public partial class StationPlaytestController : Node2D
         sharedInteractionWorld.PullStarted -= OnPullStarted;
         sharedInteractionWorld.CprStarted -= OnCprStarted;
         sharedInteractionWorld.CrewStruckUnarmed -= OnCrewStruckUnarmed;
+        sharedInteractionWorld.CrewShoved -= OnCrewShoved;
+        sharedInteractionWorld.CrewDisplaced -= MovePulledEntity;
         sharedInteractionWorld.CprPerformed -= OnCprPerformed;
         sharedInteractionWorld.PullStopped -= OnPullStopped;
         crewRoster = StationCrewJobCatalog.CreateRoster();
@@ -186,6 +194,7 @@ public partial class StationPlaytestController : Node2D
         DriveSmokeGhost();
         DriveSmokeExamine();
         DriveSmokePull();
+        DriveSmokeShove();
         var direction = ReadLocalInput();
 
         if (multiplayer.IsServer())
@@ -211,8 +220,9 @@ public partial class StationPlaytestController : Node2D
                 player.Movement.SpeedModifier = sharedInteractionWorld.IsDraggingProne(player.PeerId)
                     ? SharedStationInventoryWorld.ProneDragSpeedFactor
                     : 1f;
-                player.Movement.CurrentType = stat.IsFloored() ? MovementType.Crawling : MovementType.Running;
-                SyncCrewDensity(player, stat);
+                bool lying = sharedInteractionWorld.IsLyingDown(player.PeerId);
+                player.Movement.CurrentType = lying ? MovementType.Crawling : MovementType.Running;
+                SyncCrewDensity(player, lying);
                 float x = player.Position.X;
                 float y = player.Position.Y;
                 var intent = new MoveIntent
@@ -309,7 +319,7 @@ public partial class StationPlaytestController : Node2D
             PlaytestLaunchOptions.SmokeConstruction || PlaytestLaunchOptions.SmokeEngineeringAccess ||
             PlaytestLaunchOptions.SmokePowerLoop || PlaytestLaunchOptions.SmokeHealth ||
             PlaytestLaunchOptions.SmokeGhost || PlaytestLaunchOptions.SmokeExamine ||
-            PlaytestLaunchOptions.SmokePull)
+            PlaytestLaunchOptions.SmokePull || PlaytestLaunchOptions.SmokeShove)
             CallDeferred(nameof(StartShift));
     }
 
@@ -697,9 +707,9 @@ public partial class StationPlaytestController : Node2D
     /// Lying bodies do not block movement (tgstation adds TRAIT_UNDENSE when lying down), so a casualty
     /// cannot seal a doorway. A crew member who stands back up blocks again once their tile is free.
     /// </summary>
-    private void SyncCrewDensity(PlayerRuntime player, CrewStat stat)
+    private void SyncCrewDensity(PlayerRuntime player, bool lying)
     {
-        bool dense = !stat.IsFloored();
+        bool dense = !lying;
         if (dense == player.ObstacleActive) return;
         if (!dense)
         {
@@ -751,6 +761,100 @@ public partial class StationPlaytestController : Node2D
             ? $"{CrewName(attackerId)} {result.VerbContinuous} {target}!"
             : $"{CrewName(attackerId)}'s {result.Verb} misses {target}!";
         RouteVisibleMessage("COMBAT", CrewPosition(victimId), text, attackerId, victimId);
+    }
+
+    /// <summary>A shoved crew member can enter a tile with no wall, closed door, object or standing person.</summary>
+    private bool CanCrewEnterTile(System.Numerics.Vector2 tile)
+    {
+        int x = Mathf.RoundToInt(tile.X);
+        int y = Mathf.RoundToInt(tile.Y);
+        return collisionMap.IsPassable(x, y, new PlayerMovementState()) && collisionMap.GetObject(x, y) == null;
+    }
+
+    private void OnCrewShoved(int shoverId, int targetId, ShoveResult result)
+    {
+        GD.Print($"PLAYTEST_CREW_SHOVED shover={shoverId} target={targetId} moved={result.Moved} knocked_down={result.KnockedDown} dropped={result.DroppedItem}");
+        string text = $"{CrewName(shoverId)} shoves {CrewName(targetId)}{(result.KnockedDown ? ", knocking them down" : string.Empty)}!";
+        RouteVisibleMessage("COMBAT", CrewPosition(targetId), text, shoverId, targetId);
+        if (result.DroppedItem.Length > 0)
+            RouteVisibleMessage("COMBAT", CrewPosition(targetId),
+                $"{CrewName(targetId)} drops the {result.DroppedItem}!", shoverId, targetId);
+        SendActiveHand(targetId);
+    }
+
+    private static readonly Vector2 SmokeShoveTarget = new(-2, -2);
+    private static readonly Vector2 SmokeShoveShover = new(-2, -1);
+
+    /// <summary>
+    /// Two-client shove smoke: the remote Assistant shoves the Engineer host one tile toward a wall,
+    /// steps up, and shoves again. The second shove is blocked, so the host is knocked down and then
+    /// stands back up two seconds later. Both peers must see each state.
+    /// </summary>
+    private void DriveSmokeShove()
+    {
+        if (!PlaytestLaunchOptions.SmokeShove || !localRoundStarted || players.Count < 2) return;
+        int remote = players.Keys.First(peer => peer != localPeerId);
+        if (GetMultiplayer().IsServer())
+        {
+            PlayerRuntime host = players[localPeerId];
+            bool down = sharedInteractionWorld.IsLyingDown(localPeerId);
+            if (smokeShoveStage == 0)
+            {
+                smokeShoveStage = 1;
+                StageSmokePlayer(localPeerId, SmokeShoveTarget);
+                StageSmokePlayer(remote, SmokeShoveShover);
+            }
+            else if (smokeShoveStage == 1 && host.Position.DistanceTo(SmokeShoveTarget + Vector2.Up) < 0.1f)
+            {
+                // First shove landed: bring the shover back into reach for the second one.
+                smokeShoveStage = 2;
+                StageSmokePlayer(remote, SmokeShoveTarget);
+                GD.Print($"PLAYTEST_SHOVE_HOST_MOVED x={host.Position.X:0} y={host.Position.Y:0}");
+            }
+            else if (smokeShoveStage == 2 && down)
+            {
+                smokeShoveStage = 3;
+                smokeShoveHostWasDown = true;
+                GD.Print($"PLAYTEST_SHOVE_HOST_DOWN x={host.Position.X:0} y={host.Position.Y:0}");
+            }
+            else if (smokeShoveStage == 3 && !down)
+            {
+                smokeShoveStage = 4;
+                GD.Print($"PLAYTEST_SHOVE_HOST_OK moved=true knocked_down={smokeShoveHostWasDown} stood_up=true");
+            }
+            return;
+        }
+
+        if (!replicatedEntities.TryGet(localPeerId, out StationEntityState? self) ||
+            !replicatedEntities.TryGet(remote, out StationEntityState? target)) return;
+        Vector2 selfPosition = new(self.Position.X, self.Position.Y);
+        Vector2 targetPosition = new(target.Position.X, target.Position.Y);
+        bool targetLying = target.Flag(StationEntityField.Lying);
+        switch (smokeShoveStage)
+        {
+            case 0 when selfPosition.DistanceTo(SmokeShoveShover) < 0.1f &&
+                        targetPosition.DistanceTo(SmokeShoveTarget) < 0.1f:
+                smokeShoveStage = 1;
+                SetSelectedIntent(Intent.Disarm);
+                RpcId(1, nameof(RequestSharedInteraction), localRoundId, remote, (int)selectedIntent, false);
+                smokeShoveNextMsec = Time.GetTicksMsec() + 1000;
+                break;
+            case 1 when targetLying:
+                smokeShoveStage = 3;
+                GD.Print("PLAYTEST_SHOVE_CLIENT_SAW_DOWN replicated=true");
+                break;
+            // Retries once a second, in case a request lands inside the server's melee cooldown.
+            case 1 when selfPosition.DistanceTo(SmokeShoveTarget) < 0.1f &&
+                        targetPosition.DistanceTo(SmokeShoveTarget + Vector2.Up) < 0.1f &&
+                        Time.GetTicksMsec() >= smokeShoveNextMsec:
+                smokeShoveNextMsec = Time.GetTicksMsec() + 1000;
+                RpcId(1, nameof(RequestSharedInteraction), localRoundId, remote, (int)selectedIntent, false);
+                break;
+            case 3 when !targetLying:
+                smokeShoveStage = 4;
+                GD.Print($"PLAYTEST_SHOVE_CLIENT_OK moved=true knocked_down=true stood_up=true stat={(CrewStat)target.Count(StationEntityField.Stat)}");
+                break;
+        }
     }
 
     private void OnCprStarted(int rescuerId, int patientId)
@@ -1838,7 +1942,7 @@ public partial class StationPlaytestController : Node2D
     {
         var stat = (CrewStat)state.Count(StationEntityField.Stat);
         if (players.TryGetValue(state.Id, out PlayerRuntime? player) && player.Avatar is StationCrewAvatar avatar)
-            avatar.SetCondition(stat, state.Get(StationEntityField.Health));
+            avatar.SetCondition(stat, state.Get(StationEntityField.Health), state.Flag(StationEntityField.Lying));
         PresentGhost(state);
         UpdatePullLabel();
         if (state.Id != localPeerId) return;
@@ -1986,7 +2090,7 @@ public partial class StationPlaytestController : Node2D
         });
         content.AddChild(new Label
         {
-            Text = "Shift-click anything in view to examine it. Ctrl-click a crew member or loose cart to pull it; H lets go.",
+            Text = "Disarm intent (2) with an empty hand shoves: back a tile, or down if they are against something. Shift-click anything in view to examine it. Ctrl-click a crew member or loose cart to pull it; H lets go.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         });
         content.AddChild(new Label

@@ -56,7 +56,7 @@ public sealed partial class SharedStationInventoryWorld
     /// <summary>True while this crew member drags someone who is lying down.</summary>
     public bool IsDraggingProne(int pullerPeerId) =>
         crew.TryGetValue(pullerPeerId, out CrewMember? member) && member.Pulling is CrewBody body &&
-        body.Member.Health.Stat.IsFloored();
+        IsLying(body.Member);
 
     /// <summary>
     /// Ctrl-click. Drops the current pull if there is one; otherwise starts pulling the target.

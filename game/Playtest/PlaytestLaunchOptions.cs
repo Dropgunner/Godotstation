@@ -20,6 +20,7 @@ public static class PlaytestLaunchOptions
     public static bool SmokeGhost { get; private set; }
     public static bool SmokeExamine { get; private set; }
     public static bool SmokePull { get; private set; }
+    public static bool SmokeShove { get; private set; }
 
     public static bool TryReadCommandLine()
     {
@@ -90,6 +91,10 @@ public static class PlaytestLaunchOptions
             else if (arg == "--playtest-smoke-pull")
             {
                 SmokePull = true;
+            }
+            else if (arg == "--playtest-smoke-shove")
+            {
+                SmokeShove = true;
             }
         }
 

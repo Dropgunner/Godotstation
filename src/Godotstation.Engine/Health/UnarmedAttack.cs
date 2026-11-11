@@ -27,13 +27,15 @@ public static class UnarmedAttack
         Math.Clamp(MissChanceBase - PunchEffectiveness + Math.Max(0, attackerBrute) / 2, 0, MissChanceMax);
 
     /// <summary>Rolls one swing. Damage is rolled before the miss check, as in the source.</summary>
-    public static UnarmedAttackResult Roll(double attackerBrute, bool targetLyingDown, Random random)
+    public static UnarmedAttackResult Roll(double attackerBrute, bool targetLyingDown, Random random,
+        bool targetStaggered = false)
     {
         ArgumentNullException.ThrowIfNull(random);
         if (targetLyingDown)
             return new UnarmedAttackResult(true, random.Next(KickDamageLow, KickDamageHigh + 1), "kick", "kicks");
         int damage = random.Next(PunchDamageLow, PunchDamageHigh + 1);
-        bool missed = random.NextDouble() * 100 < PunchMissChance(attackerBrute);
+        // A target staggered by a recent shove is never missed.
+        bool missed = !targetStaggered && random.NextDouble() * 100 < PunchMissChance(attackerBrute);
         return new UnarmedAttackResult(!missed, missed ? 0 : damage, "punch", "punches");
     }
 }
