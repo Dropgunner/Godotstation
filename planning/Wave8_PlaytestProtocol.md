@@ -6,6 +6,13 @@ Use this protocol to gather evidence for the Wave 9 gameplay decision. The curre
 
 Record the game commit, operating system, Godot version, whether this is an editor run or exported build, display resolution, and whether the player has used Godotstation before. Use a fresh launch and do not explain the objective beyond the task prompts below. The observer should avoid coaching; note any hint that was needed.
 
+### Launch from the Godot editor
+
+1. Install Godot 4.4.1 **.NET** and the .NET 8 runtime. The game project targets .NET 8.
+2. Open Godot’s Project Manager, choose **Import**, and select this repository’s `game/project.godot` file. Wait for the project scan and C# build to finish.
+3. Open the project and click **Run Project** (the play button). The configured entry scene opens at job selection. Use this editor-run path for playtesting; an exported build is not required.
+4. If the project does not start, record the exact error and stop the session rather than changing project settings or coaching around it.
+
 ## Run A: complete and restart
 
 1. Ask the player: “Start a round and restore the station.”
