@@ -11,6 +11,7 @@ using Godotstation.Engine.Health;
 using Godotstation.Engine.Interactions;
 using Godotstation.Engine.Movement;
 using Godotstation.Engine.Rounds;
+using Godotstation.Engine.Simulation;
 
 namespace Godotstation.Game.Playtest;
 
@@ -23,12 +24,11 @@ public partial class StationPlaytestController : Node2D
     private readonly Dictionary<int, PlayerRuntime> players = new();
     private CrewRoster crewRoster = StationCrewJobCatalog.CreateRoster();
     private readonly SharedRoundLifecycle roundLifecycle = new();
+    private StationSimulation simulation = null!;
     private CollisionMap collisionMap = null!;
-    private MovementProcessor movementProcessor = null!;
     private SharedStationInventoryWorld sharedInteractionWorld = null!;
     private ReplicatedStationEntities replicatedEntities = new();
     private StationMapView stationMapView = null!;
-    private readonly Dictionary<int, DynamicObject> entityObstacles = new();
     private Label statusLabel = null!;
     private Label activeHandLabel = null!;
     private Label loadoutLabel = null!;
@@ -118,8 +118,9 @@ public partial class StationPlaytestController : Node2D
     private void InitializeWorld()
     {
         collisionMap = StationPlaytestLayout.CreateCollisionMap();
-        movementProcessor = new MovementProcessor(collisionMap);
         sharedInteractionWorld = new SharedStationInventoryWorld(new StationReachabilityMap(collisionMap));
+        simulation = new StationSimulation(collisionMap, sharedInteractionWorld);
+        collisionMap = simulation.Map;
         sharedInteractionWorld.EntitiesChanged += OnEntitiesChanged;
         sharedInteractionWorld.CrewAttacked += OnCrewAttacked;
         sharedInteractionWorld.CrewTreated += OnCrewTreated;
@@ -129,15 +130,14 @@ public partial class StationPlaytestController : Node2D
         sharedInteractionWorld.CprStarted += OnCprStarted;
         sharedInteractionWorld.CrewStruckUnarmed += OnCrewStruckUnarmed;
         sharedInteractionWorld.CrewShoved += OnCrewShoved;
-        sharedInteractionWorld.CrewDisplaced += MovePulledEntity;
-        sharedInteractionWorld.CanCrewEnterTile = CanCrewEnterTile;
+        sharedInteractionWorld.CrewDisplaced += OnCrewDisplaced;
+        sharedInteractionWorld.CanCrewEnterTile = simulation.CanCrewEnterTile;
         sharedInteractionWorld.CprPerformed += OnCprPerformed;
         sharedInteractionWorld.PullStopped += OnPullStopped;
         foreach ((int x, int y, IPassable passable) in sharedInteractionWorld.PassableTiles)
             collisionMap.SetTile(x, y, passable);
-        entityObstacles.Clear();
         replicatedEntities = new ReplicatedStationEntities(sharedInteractionWorld.CaptureAll());
-        SyncEntityObstacles(replicatedEntities.All);
+        simulation.SyncEntityObstacles(replicatedEntities.All);
         stationMapView?.SetEntities(replicatedEntities);
         snapshotTime = 0;
         entitySnapshotTime = 0;
@@ -157,7 +157,7 @@ public partial class StationPlaytestController : Node2D
         sharedInteractionWorld.CprStarted -= OnCprStarted;
         sharedInteractionWorld.CrewStruckUnarmed -= OnCrewStruckUnarmed;
         sharedInteractionWorld.CrewShoved -= OnCrewShoved;
-        sharedInteractionWorld.CrewDisplaced -= MovePulledEntity;
+        sharedInteractionWorld.CrewDisplaced -= OnCrewDisplaced;
         sharedInteractionWorld.CprPerformed -= OnCprPerformed;
         sharedInteractionWorld.PullStopped -= OnPullStopped;
         crewRoster = StationCrewJobCatalog.CreateRoster();
@@ -202,65 +202,20 @@ public partial class StationPlaytestController : Node2D
             if (players.ContainsKey(localPeerId))
                 SetMovementInput(localPeerId, localPeerId, direction.X, direction.Y);
 
-            float step = (float)Math.Min(delta, 0.1);
-            sharedInteractionWorld.AdvancePower(step);
-            sharedInteractionWorld.AdvanceHealth(step);
+            simulation.Tick(delta, Time.GetTicksMsec() / 1000.0, GhostMinimum, GhostMaximum);
+            float step = (float)Math.Min(delta, StationSimulation.MaxStepSeconds);
             foreach (PlayerRuntime player in players.Values)
             {
-                CrewStat stat = sharedInteractionWorld.GetCrewStat(player.PeerId) ?? CrewStat.Stable;
-                int moveX = player.DeltaX;
-                int moveY = player.DeltaY;
-                if (stat == CrewStat.Dead)
-                    sharedInteractionWorld.TryMoveGhost(player.PeerId, moveX, moveY, step, GhostMinimum, GhostMaximum);
-                if (!stat.CanMove() || sharedInteractionWorld.IsImmobilizedByPull(player.PeerId))
-                {
-                    moveX = 0;
-                    moveY = 0;
-                }
-                player.Movement.SpeedModifier = sharedInteractionWorld.IsDraggingProne(player.PeerId)
-                    ? SharedStationInventoryWorld.ProneDragSpeedFactor
-                    : 1f;
-                bool lying = sharedInteractionWorld.IsLyingDown(player.PeerId);
-                player.Movement.CurrentType = lying ? MovementType.Crawling : MovementType.Running;
-                SyncCrewDensity(player, lying);
-                float x = player.Position.X;
-                float y = player.Position.Y;
-                var intent = new MoveIntent
-                {
-                    DeltaX = moveX,
-                    DeltaY = moveY,
-                    Timestamp = Time.GetTicksMsec() / 1000.0
-                };
-
-                if (intent.DeltaX != 0 || intent.DeltaY != 0)
-                    movementProcessor.TryMove(player.Movement, ref x, ref y, intent, step);
-                else
-                    movementProcessor.ApplyMomentum(player.Movement, ref x, ref y, step);
-
-                if (player.ObstacleActive && (Mathf.RoundToInt(x) != Mathf.RoundToInt(player.Position.X) ||
-                    Mathf.RoundToInt(y) != Mathf.RoundToInt(player.Position.Y)))
-                    collisionMap.MoveObject(player.Obstacle, Mathf.RoundToInt(x), Mathf.RoundToInt(y));
-
-                var vacatedTile = new System.Numerics.Vector2(Mathf.RoundToInt(player.Position.X),
-                    Mathf.RoundToInt(player.Position.Y));
-                player.Position = new Vector2(x, y);
-                sharedInteractionWorld.SetActorPosition(player.PeerId, new System.Numerics.Vector2(x, y));
-                if (sharedInteractionWorld.TryGetPullFollow(player.PeerId, vacatedTile, out int pulledId,
-                        out System.Numerics.Vector2 pullDestination))
-                    MovePulledEntity(pulledId, pullDestination);
-                sharedInteractionWorld.AdvanceConstruction(player.PeerId, step);
-                SyncPushedEntities();
                 player.Avatar.Position = player.Position;
                 if (!player.HasLoggedMovement && player.Position.DistanceSquaredTo(player.SpawnPosition) > 0.08f)
                 {
                     player.HasLoggedMovement = true;
-                    GD.Print($"PLAYTEST_POSITION peer={player.PeerId} x={x:0.00} y={y:0.00}");
+                    GD.Print($"PLAYTEST_POSITION peer={player.PeerId} x={player.Position.X:0.00} y={player.Position.Y:0.00}");
                     if (player.PeerId != 1)
                         GD.Print($"PLAYTEST_CLIENT_POSITION peer={player.PeerId}");
                 }
             }
 
-            sharedInteractionWorld.ValidatePulls();
             entitySnapshotTime += step;
             if (entitySnapshotTime >= SnapshotInterval)
             {
@@ -354,7 +309,7 @@ public partial class StationPlaytestController : Node2D
             replicatedEntities.Remove(peerId);
             stationMapView?.RefreshEntities();
             crewRoster.Release(peerId);
-            collisionMap.RemoveObject(player.Obstacle);
+            simulation.RemovePlayer(peerId);
             player.Avatar.QueueFree();
             Rpc(nameof(RemovePlayer), peerId);
         }
@@ -703,29 +658,6 @@ public partial class StationPlaytestController : Node2D
         GD.Print($"PLAYTEST_ACTION_MESSAGE channel={channel}");
     }
 
-    /// <summary>
-    /// Lying bodies do not block movement (tgstation adds TRAIT_UNDENSE when lying down), so a casualty
-    /// cannot seal a doorway. A crew member who stands back up blocks again once their tile is free.
-    /// </summary>
-    private void SyncCrewDensity(PlayerRuntime player, bool lying)
-    {
-        bool dense = !lying;
-        if (dense == player.ObstacleActive) return;
-        if (!dense)
-        {
-            collisionMap.RemoveObject(player.Obstacle);
-            player.ObstacleActive = false;
-            return;
-        }
-        int x = Mathf.RoundToInt(player.Position.X);
-        int y = Mathf.RoundToInt(player.Position.Y);
-        if (collisionMap.GetObject(x, y) != null) return;
-        player.Obstacle.X = x;
-        player.Obstacle.Y = y;
-        collisionMap.AddObject(player.Obstacle);
-        player.ObstacleActive = true;
-    }
-
     private static readonly System.Numerics.Vector2 GhostMinimum = new(StationPlaytestLayout.MinX, StationPlaytestLayout.MinY);
     private static readonly System.Numerics.Vector2 GhostMaximum = new(StationPlaytestLayout.MaxX, StationPlaytestLayout.MaxY);
 
@@ -734,23 +666,12 @@ public partial class StationPlaytestController : Node2D
         sharedInteractionWorld.GetPerceptionPosition(player.PeerId)
         ?? new System.Numerics.Vector2(player.Position.X, player.Position.Y);
 
-    /// <summary>Moves a pulled crew member or fixture into the tile its puller just left.</summary>
-    private void MovePulledEntity(int entityId, System.Numerics.Vector2 destination)
+    /// <summary>A shove moved a body: move its collision and avatar with it.</summary>
+    private void OnCrewDisplaced(int peerId, System.Numerics.Vector2 destination)
     {
-        int x = Mathf.RoundToInt(destination.X);
-        int y = Mathf.RoundToInt(destination.Y);
-        if (players.TryGetValue(entityId, out PlayerRuntime? pulled))
-        {
-            pulled.Position = new Vector2(x, y);
-            pulled.Avatar.Position = pulled.Position;
-            if (pulled.ObstacleActive) collisionMap.MoveObject(pulled.Obstacle, x, y);
-            sharedInteractionWorld.SetActorPosition(entityId, destination);
-        }
-        else if (entityObstacles.TryGetValue(entityId, out DynamicObject? obstacle))
-        {
-            collisionMap.MoveObject(obstacle, x, y);
-            sharedInteractionWorld.SetEntityPosition(entityId, destination);
-        }
+        simulation.MoveEntity(peerId, destination);
+        if (players.TryGetValue(peerId, out PlayerRuntime? moved) && simulation.GetPlayer(peerId) is { } body)
+            moved.Avatar.Position = new Vector2(body.Position.X, body.Position.Y);
     }
 
     private void OnCrewStruckUnarmed(int attackerId, int victimId, UnarmedAttackResult result)
@@ -761,14 +682,6 @@ public partial class StationPlaytestController : Node2D
             ? $"{CrewName(attackerId)} {result.VerbContinuous} {target}!"
             : $"{CrewName(attackerId)}'s {result.Verb} misses {target}!";
         RouteVisibleMessage("COMBAT", CrewPosition(victimId), text, attackerId, victimId);
-    }
-
-    /// <summary>A shoved crew member can enter a tile with no wall, closed door, object or standing person.</summary>
-    private bool CanCrewEnterTile(System.Numerics.Vector2 tile)
-    {
-        int x = Mathf.RoundToInt(tile.X);
-        int y = Mathf.RoundToInt(tile.Y);
-        return collisionMap.IsPassable(x, y, new PlayerMovementState()) && collisionMap.GetObject(x, y) == null;
     }
 
     private void OnCrewShoved(int shoverId, int targetId, ShoveResult result)
@@ -1097,7 +1010,7 @@ public partial class StationPlaytestController : Node2D
         if (!players.Remove(peerId, out PlayerRuntime? player)) return;
         replicatedEntities.Remove(peerId);
         stationMapView?.RefreshEntities();
-        collisionMap.RemoveObject(player.Obstacle);
+        simulation.RemovePlayer(peerId);
         player.Avatar.QueueFree();
         RefreshStatus();
     }
@@ -1126,10 +1039,8 @@ public partial class StationPlaytestController : Node2D
             peerId == 1 ? "CREW · HOST" : $"CREW · {players.Count + 1}", job.Name);
         AddChild(avatar);
 
-        var obstacle = new DynamicObject(Mathf.RoundToInt(position.X), Mathf.RoundToInt(position.Y),
-            isPushable: false, tag: "player");
-        collisionMap.AddObject(obstacle);
-        players.Add(peerId, new PlayerRuntime(peerId, job, avatar, position, obstacle));
+        SimulatedPlayer body = simulation.AddPlayer(peerId, new System.Numerics.Vector2(position.X, position.Y));
+        players.Add(peerId, new PlayerRuntime(peerId, job, avatar, body, position));
         sharedInteractionWorld.AddActor(peerId, new System.Numerics.Vector2(position.X, position.Y), job.Id);
         if (peerId == GetMultiplayer().GetUniqueId())
             UpdateLoadoutLabel(sharedInteractionWorld.GetCrewLoadoutSummary(peerId));
@@ -1140,9 +1051,8 @@ public partial class StationPlaytestController : Node2D
         if (!roundLifecycle.CanRequestJob) return;
         if (!MovementCommandAuthorization.IsValid(ownerPeerId, senderPeerId, deltaX, deltaY))
             return;
-        if (!players.TryGetValue(ownerPeerId, out PlayerRuntime? player)) return;
-        player.DeltaX = deltaX;
-        player.DeltaY = deltaY;
+        if (!players.ContainsKey(ownerPeerId)) return;
+        simulation.SetInput(ownerPeerId, deltaX, deltaY);
     }
 
     private Vector2I ReadLocalInput()
@@ -1800,12 +1710,8 @@ public partial class StationPlaytestController : Node2D
     private void StageSmokePlayer(int peerId, Vector2 position)
     {
         if (!players.TryGetValue(peerId, out PlayerRuntime? player)) return;
-        player.DeltaX = 0;
-        player.DeltaY = 0;
-        player.Position = position;
+        simulation.SetPosition(peerId, new System.Numerics.Vector2(position.X, position.Y));
         player.Avatar.Position = position;
-        if (player.ObstacleActive)
-            collisionMap.MoveObject(player.Obstacle, Mathf.RoundToInt(position.X), Mathf.RoundToInt(position.Y));
         sharedInteractionWorld.SetActorPosition(peerId, new System.Numerics.Vector2(position.X, position.Y));
         sharedInteractionWorld.PublishChanges();
     }
@@ -1930,7 +1836,7 @@ public partial class StationPlaytestController : Node2D
             }
         }
         replicatedEntities.Apply(states);
-        SyncEntityObstacles(states);
+        simulation.SyncEntityObstacles(states);
         foreach (StationEntityState state in states)
             if (state.Kind == StationEntityKind.Crew) PresentCrew(state);
         stationMapView?.RefreshEntities();
@@ -1980,38 +1886,6 @@ public partial class StationPlaytestController : Node2D
             ? new Vector2((float)state.Get(StationEntityField.GhostX), (float)state.Get(StationEntityField.GhostY))
             : null;
         avatar.SetGhost(ghost, state.Id == localPeerId || GhostObserver.IsVisibleTo(localStat));
-    }
-
-    /// <summary>Keeps one collision object per solid entity, pushable when the entity allows it.</summary>
-    private void SyncEntityObstacles(IEnumerable<StationEntityState> states)
-    {
-        foreach (StationEntityState state in states)
-        {
-            if (!state.IsSolid) continue;
-            int x = Mathf.RoundToInt(state.Position.X);
-            int y = Mathf.RoundToInt(state.Position.Y);
-            if (!entityObstacles.TryGetValue(state.Id, out DynamicObject? obstacle))
-            {
-                obstacle = new DynamicObject(x, y, isPushable: state.IsPushable, tag: state.Kind);
-                entityObstacles.Add(state.Id, obstacle);
-                collisionMap.AddObject(obstacle);
-                continue;
-            }
-            obstacle.IsPushable = state.IsPushable;
-            obstacle.X = x;
-            obstacle.Y = y;
-        }
-    }
-
-    /// <summary>Hands physics-driven displacement (a pushed cart) back to the authoritative world.</summary>
-    private void SyncPushedEntities()
-    {
-        foreach ((int id, DynamicObject obstacle) in entityObstacles)
-        {
-            System.Numerics.Vector2 known = Entity(id).Position;
-            if (obstacle.X != Mathf.RoundToInt(known.X) || obstacle.Y != Mathf.RoundToInt(known.Y))
-                sharedInteractionWorld.SetEntityPosition(id, new System.Numerics.Vector2(obstacle.X, obstacle.Y));
-        }
     }
 
     private void ObserveSmokePowerOnHost()
@@ -2176,20 +2050,17 @@ public partial class StationPlaytestController : Node2D
         if (IsInstanceValid(statusLabel)) statusLabel.Text = connectionStatus;
     }
 
-    private sealed class PlayerRuntime(int peerId, CrewJob job, Node2D avatar, Vector2 spawnPosition, DynamicObject obstacle)
+    /// <summary>A player's presentation and network state. Position and input live in the simulation.</summary>
+    private sealed class PlayerRuntime(int peerId, CrewJob job, Node2D avatar, SimulatedPlayer body, Vector2 spawnPosition)
     {
         public int PeerId { get; } = peerId;
         public CrewJob Job { get; } = job;
         public Node2D Avatar { get; } = avatar;
         public Vector2 SpawnPosition { get; } = spawnPosition;
-        public Vector2 Position { get; set; } = spawnPosition;
         public Vector2 TargetPosition { get; set; } = spawnPosition;
-        public DynamicObject Obstacle { get; } = obstacle;
-        /// <summary>False while the body lies on the floor and others may walk over it.</summary>
-        public bool ObstacleActive { get; set; } = true;
-        public PlayerMovementState Movement { get; } = new();
-        public int DeltaX { get; set; }
-        public int DeltaY { get; set; }
+        public Vector2 Position => new(body.Position.X, body.Position.Y);
+        public int DeltaX => body.DeltaX;
+        public int DeltaY => body.DeltaY;
         public bool HasLoggedMovement { get; set; }
         public bool HasLoggedRemoteMovement { get; set; }
     }
